@@ -1,0 +1,24 @@
+node_modules/
+.next/
+.next-*/
+out/
+artifacts/
+cache/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local secrets and generated local state. Never commit.
+.env
+.env.local
+.env.*.local
+.data/
+.demo/
+.test-data/
+deployments/
+config/trusted-issuers.local.json
+*.sqlite
+*.sqlite-*
+
+.DS_Store
+npm-debug.log*
