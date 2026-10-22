@@ -29,7 +29,7 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Get a session with an edited SIWE message (e.g. no expiry) | The server stores the SHA-256 of the exact message it issued with the nonce and requires an identical message | — |
 | Concurrent issuer transactions racing for one nonce | Issuer-key transactions are serialized in-process | Single server process assumed |
 | Unauthorized issuer actions | Server-side role check on every issuer route; operator allowlist re-checked per request; on-chain `onlyRole` for admin | Operator wallet compromise grants approval/revocation until removed from the allowlist |
-| CSRF / cross-site requests | `Origin` must equal `APP_ORIGIN`; JSON-only bodies; `SameSite=Strict` HttpOnly cookie; CSP (`default-src 'self'`, `connect-src` limited to the app and the local RPC, `frame-ancestors 'none'`) | CSP still allows `'unsafe-inline'` scripts (no nonce setup) |
+| CSRF / cross-site requests | `Origin` must equal `APP_ORIGIN`; JSON-only bodies; `SameSite=Strict` HttpOnly cookie; per-request nonce CSP (`script-src 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'`; `connect-src` limited to the app and the local RPC; `frame-ancestors 'none'`; deny-all CSP on JSON API routes) | `'strict-dynamic'` trusts scripts created by already-trusted scripts, by design; dev mode adds `'unsafe-eval'` |
 | Session theft | Random 256-bit id, only its hash stored, 1 h expiry, dropped on wallet/chain change in the UI | Local HTTP (no `Secure` flag unless `APP_ORIGIN` is https) |
 | Brute force / spam | Per-client fixed-window rate limits on auth, requests, challenges, presentations; body size limit | Client key is `X-Forwarded-For` or a single local bucket. Adequate for a local prototype only |
 | Holder's backup file stolen | AES-256-GCM, PBKDF2-SHA-256 600k iterations, AAD-bound header, ≥12-char password | Offline guessing of weak passwords remains possible |
@@ -72,7 +72,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: did:web or another updatable DID method so verifiers can learn rotations without a local policy file.
 4. **Account recovery:** re-issuance bound to a new wallet after out-of-band re-verification, revoking the old commitment. Optionally smart-account (EIP-1271) holders, which SIWE verification would then need to support.
 5. **Real issuer onboarding:** governed trust lists, issuer accreditation, audit logging, HSM-held keys, real identity proofing. All of this is out of scope for this prototype.
-6. **Hardening:** nonce-based CSP (dropping `'unsafe-inline'`), HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
+6. **Hardening:** HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
 
 ## Implemented vs future (summary)
 
@@ -81,7 +81,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 | VC 2.0 + vc+jwt, Ed25519 allowlist, trust policy pinning, did:key resolution cross-check | Selective disclosure, ZK predicates |
 | Salted commitment over exact token bytes | Privacy-preserving status |
 | EIP-712 registration with holder binding, deadline, epoch, one-time commitments | Relayers / gasless registration |
-| SIWE sessions, origin checks, rate limits, server-side roles, CSP + security headers | Nonce-based CSP, production session infrastructure |
+| SIWE sessions, origin checks, rate limits, server-side roles, nonce CSP + security headers | Production session infrastructure |
 | Single-use, audience-bound challenges with atomic consumption | Standard presentation protocol (e.g. OpenID4VP) |
 | Encrypted holder export (PBKDF2 + AES-GCM) | Secure wallet storage, recovery |
 | Issuer removal epochs, admin override revocation, key rotation with retired/compromised lifecycles | Published key history (did:web), governance |

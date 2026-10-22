@@ -24,7 +24,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Deployment binding:** a random `deploymentId` is signed into every registration authorization, because a restarted local chain redeploys at the same address (finding from an independent review).
 - **SIWE message binding:** the server stores a hash of the exact message it issued and rejects edited variants.
 - **Key rotation:** trust policy v2 (keys and EVM signers with active/retired/compromised lifecycles), `npm run rotate-keys`, retired EVM keys kept only for revocation. `npm run setup` migrates a v1 policy.
-- **CSP** is set in `next.config.ts`. It allows `'unsafe-inline'` scripts because Next.js injects inline bootstrap scripts; nonce-based CSP is roadmap.
+- **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
 

@@ -89,10 +89,32 @@ async function run(stack: LocalStack) {
   const BASE = stack.origin;
   const browser = await chromium.launch();
   try {
+    // Strict CSP: a fresh nonce per response, no 'unsafe-inline', and injected inline handlers must not run.
+    const csp1 = (await fetch(`${BASE}/holder`)).headers.get("content-security-policy") ?? "";
+    const csp2 = (await fetch(`${BASE}/holder`)).headers.get("content-security-policy") ?? "";
+    const nonceOf = (c: string) => /'nonce-([^']+)'/.exec(c)?.[1];
+    if (!nonceOf(csp1) || nonceOf(csp1) === nonceOf(csp2) || csp1.includes("'unsafe-inline'")) {
+      throw new Error(`unexpected page CSP: ${csp1}`);
+    }
+    step("pages carry a per-request nonce CSP without 'unsafe-inline'");
+
     const plain = await browser.newPage();
     await plain.goto(`${BASE}/holder`);
     await plain.getByText("No browser wallet detected").waitFor();
     await plain.screenshot({ path: `${SHOTS}/00-no-wallet.png`, fullPage: true });
+    const injected = await plain.evaluate(async () => {
+      const w = window as unknown as { __injected?: boolean };
+      // Classic HTML-injection XSS: markup with an inline event handler. Without 'unsafe-inline'
+      // the handler must not run. (Scripts created by page JS via createElement are allowed by
+      // 'strict-dynamic' by design, so they are not the threat this CSP addresses.)
+      const div = document.createElement("div");
+      div.innerHTML = '<img src="data:," onerror="window.__injected = true">';
+      document.body.appendChild(div);
+      await new Promise((r) => setTimeout(r, 300));
+      return w.__injected === true;
+    });
+    if (injected) throw new Error("an injected inline event handler executed despite the CSP");
+    step("an injected inline event handler is blocked by the CSP");
     step("without a wallet the UI says so instead of simulating one");
 
     const holder = await (await walletContext(browser, DEV_ROLES.holder, stack.rpc, stack.provider)).newPage();
