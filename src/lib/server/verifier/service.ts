@@ -13,7 +13,7 @@ import { loadDeployment, readRecord, registryContract } from "../chain";
 import { db, nowSeconds } from "../db";
 import { ApiError } from "../http";
 import { verifyCredentialJwt } from "../credential/verify";
-import { loadTrustedIssuers } from "../trust";
+import { loadTrustedIssuers, trustedEvmSigner } from "../trust";
 
 /**
  * Verifier service. It needs only public inputs: the trusted issuer policy
@@ -186,7 +186,9 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
     if (!rec.exists) problems.push("no registry record for this commitment");
     else {
       if (!sameAddress(rec.holder, proof.holder)) problems.push("registered holder differs");
-      if (!sameAddress(rec.issuer, cred.issuer.evmAttestationSigner)) problems.push("registered issuer is not the trusted attestation signer for this issuer DID");
+      if (!trustedEvmSigner(cred.issuer, rec.issuer, fromUtcSeconds(vc.validFrom))) {
+        problems.push("registered issuer is not a trusted attestation signer of this issuer (or was not active at issuance)");
+      }
       if (rec.schemaId.toLowerCase() !== SCHEMA_ID.toLowerCase()) problems.push("registered schema differs");
       if (rec.validFrom !== fromUtcSeconds(vc.validFrom) || rec.expiresAt !== fromUtcSeconds(vc.validUntil)) problems.push("registered validity window differs from credential");
       if (rec.status !== "Active") problems.push(`registry status is ${rec.status}`);

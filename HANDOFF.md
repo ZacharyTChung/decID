@@ -23,6 +23,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Holder bundle storage:** memory only plus encrypted export. The server deletes its copy at pickup.
 - **Deployment binding:** a random `deploymentId` is signed into every registration authorization, because a restarted local chain redeploys at the same address (finding from an independent review).
 - **SIWE message binding:** the server stores a hash of the exact message it issued and rejects edited variants.
+- **Key rotation:** trust policy v2 (keys and EVM signers with active/retired/compromised lifecycles), `npm run rotate-keys`, retired EVM keys kept only for revocation. `npm run setup` migrates a v1 policy.
 - **CSP** is set in `next.config.ts`. It allows `'unsafe-inline'` scripts because Next.js injects inline bootstrap scripts; nonce-based CSP is roadmap.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -33,7 +34,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run compile` | 2 contracts compiled with solc 0.8.37 (upstream OpenZeppelin “`error` will become a keyword” warnings only) |
 | `npm run typecheck` | clean (app, scripts, contract tests, ABI freshness) |
 | `npm run test:contracts` | 33 passing |
-| `npm run test:app` | 53 passed (4 files; includes API integration against a real Hardhat node) |
+| `npm run test:app` | 61 passed (5 files; includes API integration and key rotation against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused |

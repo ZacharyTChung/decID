@@ -15,6 +15,7 @@ import { db, nowSeconds } from "../db";
 import { ApiError } from "../http";
 import { signCredentialJwt } from "../credential/sign";
 import { deriveDidKeyFromJwk } from "../did/did-key";
+import { loadTrustedIssuers } from "../trust";
 import type { Session } from "../auth/session";
 
 /**
@@ -34,7 +35,22 @@ async function issuerKeys() {
   const { d: _d, ...publicJwk } = secrets.credentialPrivateJwk;
   const { did, kid } = await deriveDidKeyFromJwk(publicJwk);
   const evmWallet = new Wallet(secrets.evmPrivateKey, provider());
-  return { secrets, did, kid, evmWallet };
+  const retiredEvmWallets = secrets.retiredEvmPrivateKeys.map((k) => new Wallet(k, provider()));
+  return { secrets, did, kid, evmWallet, retiredEvmWallets };
+}
+
+/**
+ * Refuses to issue unless the configured signing keys are the ACTIVE ones in the public
+ * trust policy. Otherwise verifiers would reject what we issue (or, after a rotation that
+ * was not applied to this server, we would keep signing with a retired key).
+ */
+function assertKeysActiveInPolicy(did: string, evmAddress: string): void {
+  const issuer = loadTrustedIssuers().find((i) => i.credentialKeys.some((k) => k.did === did));
+  const key = issuer?.credentialKeys.find((k) => k.did === did);
+  const signer = issuer?.evmAttestationSigners.find((s) => s.address.toLowerCase() === evmAddress.toLowerCase());
+  if (!issuer || key?.status !== "active" || signer?.status !== "active") {
+    throw new ApiError(409, "ISSUER_KEY_NOT_ACTIVE", "the server's issuer keys are not the active keys in the trust policy (restart the app after a key rotation)");
+  }
 }
 
 // ---------------------------------------------------------------- holder side
@@ -144,6 +160,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     if (claimed.chain_id !== deployment.chainId) throw new ApiError(409, "WRONG_CHAIN", "request was made on another chain");
     const keys = await issuerKeys();
     const issuerAddress = getAddress(keys.evmWallet.address);
+    assertKeysActiveInPolicy(keys.did, issuerAddress);
     const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, provider());
     await assertLiveDeployment(deployment);
     const [active, epoch] = (await onChain(() => registry.getFunction("issuerState")(issuerAddress))) as [boolean, bigint];
@@ -299,7 +316,12 @@ async function revokeCredentialLocked(issuer: Session, commitment: string): Prom
   if (!rec.exists) throw new ApiError(409, "NOT_REGISTERED", "the holder has not registered this credential on-chain yet");
   if (rec.revoked) throw new ApiError(409, "ALREADY_REVOKED", "credential is already revoked");
   const keys = await issuerKeys();
-  const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, keys.evmWallet);
+  // Only the address that authorized a record may revoke it, so after a rotation the retired key is used.
+  const signer = [keys.evmWallet, ...keys.retiredEvmWallets].find((w) => w.address.toLowerCase() === rec.issuer.toLowerCase());
+  if (!signer) {
+    throw new ApiError(409, "ISSUER_KEY_UNAVAILABLE", "this server no longer holds the key that authorized the record; use the admin override (npm run admin -- revoke)");
+  }
+  const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, signer);
   // Concurrent revocations: the loser's transaction reverts (AlreadyRevoked) and surfaces as TX_REVERTED.
   const receipt = await onChain(async () => {
     const tx = await registry.getFunction("revoke")(commitment);

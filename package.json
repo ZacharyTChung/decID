@@ -21,7 +21,8 @@
     "demo": "tsx scripts/demo.ts",
     "reset": "tsx scripts/reset.ts",
     "test:ui": "NEXT_DIST_DIR=.next-uitest next build && tsx scripts/ui-test.ts",
-    "admin": "tsx scripts/admin.ts"
+    "admin": "tsx scripts/admin.ts",
+    "rotate-keys": "tsx scripts/rotate-keys.ts"
   },
   "dependencies": {
     "@digitalbazaar/did-method-key": "5.3.0",

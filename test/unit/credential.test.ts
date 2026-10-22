@@ -6,7 +6,7 @@ import { deriveHolderDid } from "@/lib/shared/did-pkh";
 import { signCredentialJwt } from "@/lib/server/credential/sign";
 import { verifyCredentialJwt } from "@/lib/server/credential/verify";
 import { deriveDidKeyFromJwk } from "@/lib/server/did/did-key";
-import type { TrustedIssuerT } from "@/lib/server/trust";
+import { trustedEvmSigner, type TrustedIssuerT } from "@/lib/server/trust";
 
 const CHAIN_ID = 31337;
 const REGISTRY = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
@@ -30,11 +30,10 @@ async function makeIssuer(name: string): Promise<Issuer> {
     did,
     kid,
     trust: {
+      id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60),
       name,
-      did,
-      kid,
-      publicKeyJwk: { kty: "OKP", crv: "Ed25519", x: jwk.x },
-      evmAttestationSigner: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      credentialKeys: [{ did, kid, publicKeyJwk: { kty: "OKP", crv: "Ed25519", x: jwk.x }, status: "active", activatedAt: 0 }],
+      evmAttestationSigners: [{ address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", status: "active", activatedAt: 0 }],
       credentialTypes: [CREDENTIAL_TYPE],
       schemaIds: [SCHEMA_ID],
     },
@@ -131,7 +130,7 @@ describe("vc+jwt verification", () => {
     const vc = vcFor(issuer);
     expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, vc, { typ: "JWT" }), ctx()))?.code).toBe("BAD_TYP");
     expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, vc, { cty: "json" }), ctx()))?.code).toBe("BAD_CTY");
-    const withJwk = await signRaw(stranger, vc, { kid: issuer.kid, jwk: stranger.trust.publicKeyJwk });
+    const withJwk = await signRaw(stranger, vc, { kid: issuer.kid, jwk: stranger.trust.credentialKeys[0]!.publicKeyJwk });
     expect(failureOf(await verifyCredentialJwt(withJwk, ctx()))?.code).toBe("FORBIDDEN_HEADER");
   });
 
@@ -149,9 +148,10 @@ describe("vc+jwt verification", () => {
 
   it("rejects issuer DID / key binding mismatches in the trust policy", async () => {
     const token = await signCredentialJwt(vcFor(issuer), issuer.privateJwk, issuer.kid);
-    const wrongKey = { ...issuer.trust, publicKeyJwk: stranger.trust.publicKeyJwk };
+    const key = issuer.trust.credentialKeys[0]!;
+    const wrongKey = { ...issuer.trust, credentialKeys: [{ ...key, publicKeyJwk: stranger.trust.credentialKeys[0]!.publicKeyJwk }] };
     expect(failureOf(await verifyCredentialJwt(token, { ...ctx(), issuers: [wrongKey] }))?.code).toBe("KEY_MISMATCH");
-    const wrongKid = { ...issuer.trust, kid: `${issuer.did}#other` };
+    const wrongKid = { ...issuer.trust, credentialKeys: [{ ...key, kid: `${issuer.did}#other` }] };
     expect(failureOf(await verifyCredentialJwt(token, { ...ctx(), issuers: [wrongKid] }))?.code).toBe("KID_MISMATCH");
     const notForType = { ...issuer.trust, credentialTypes: ["SomethingElse"] };
     expect(failureOf(await verifyCredentialJwt(token, { ...ctx(), issuers: [notForType] }))?.code).toBe("TYPE_NOT_AUTHORIZED");
@@ -212,5 +212,57 @@ describe("vc+jwt verification", () => {
   it("rejects oversized tokens before parsing", async () => {
     const big = "a".repeat(9000) + ".b.c";
     expect(failureOf(await verifyCredentialJwt(big, ctx()))?.code).toBe("MALFORMED_TOKEN");
+  });
+
+  describe("key rotation (trust policy lifecycle)", () => {
+    const withKeyState = (state: { status: "active" | "retired" | "compromised"; activatedAt: number; retiredAt?: number }) => ({
+      ...ctx(),
+      issuers: [{ ...issuer.trust, credentialKeys: [{ ...issuer.trust.credentialKeys[0]!, ...state }] }],
+    });
+
+    it("keeps credentials issued before retirement valid, and rejects ones issued after", async () => {
+      const issuedBefore = await signCredentialJwt(vcFor(issuer, { from: NOW - 600 }), issuer.privateJwk, issuer.kid);
+      expect((await verifyCredentialJwt(issuedBefore, withKeyState({ status: "retired", activatedAt: 0, retiredAt: NOW - 300 }))).ok).toBe(true);
+
+      const issuedAfter = await signCredentialJwt(vcFor(issuer, { from: NOW - 60 }), issuer.privateJwk, issuer.kid);
+      const r = await verifyCredentialJwt(issuedAfter, withKeyState({ status: "retired", activatedAt: 0, retiredAt: NOW - 300 }));
+      expect(failureOf(r)).toMatchObject({ id: "issuerTrust", code: "KEY_NOT_VALID_AT_ISSUANCE" });
+    });
+
+    it("rejects everything signed by a compromised key, whatever its claimed issuance date", async () => {
+      const old = await signCredentialJwt(vcFor(issuer, { from: NOW - 600 }), issuer.privateJwk, issuer.kid);
+      const r = await verifyCredentialJwt(old, withKeyState({ status: "compromised", activatedAt: 0, retiredAt: NOW - 300 }));
+      expect(failureOf(r)).toMatchObject({ id: "issuerTrust", code: "KEY_COMPROMISED" });
+    });
+
+    it("rejects credentials dated before the key was activated", async () => {
+      const backdated = await signCredentialJwt(vcFor(issuer, { from: NOW - 600 }), issuer.privateJwk, issuer.kid);
+      const r = await verifyCredentialJwt(backdated, withKeyState({ status: "active", activatedAt: NOW - 300 }));
+      expect(failureOf(r)?.code).toBe("KEY_NOT_VALID_AT_ISSUANCE");
+    });
+
+    it("trusts both the retired and the new key of one logical issuer", async () => {
+      const next = await makeIssuer("Test Issuer");
+      const policy = {
+        ...issuer.trust,
+        credentialKeys: [
+          { ...issuer.trust.credentialKeys[0]!, status: "retired" as const, activatedAt: 0, retiredAt: NOW - 300 },
+          { ...next.trust.credentialKeys[0]!, status: "active" as const, activatedAt: NOW - 300 },
+        ],
+      };
+      const c = { ...ctx(), issuers: [policy] };
+      const oldCred = await signCredentialJwt(vcFor(issuer, { from: NOW - 600 }), issuer.privateJwk, issuer.kid);
+      const newCred = await signCredentialJwt(vcFor(next, { from: NOW - 60 }), next.privateJwk, next.kid);
+      expect((await verifyCredentialJwt(oldCred, c)).ok).toBe(true);
+      expect((await verifyCredentialJwt(newCred, c)).ok).toBe(true);
+    });
+
+    it("evaluates EVM attestation signers by the same lifecycle", () => {
+      const signer = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+      const policy = { ...issuer.trust, evmAttestationSigners: [{ address: signer, status: "retired" as const, activatedAt: 0, retiredAt: 1000 }] };
+      expect(trustedEvmSigner(policy, signer.toLowerCase(), 999)).toBeDefined();
+      expect(trustedEvmSigner(policy, signer, 1000)).toBeUndefined();
+      expect(trustedEvmSigner({ ...policy, evmAttestationSigners: [{ address: signer, status: "compromised" as const, activatedAt: 0, retiredAt: 1000 }] }, signer, 10)).toBeUndefined();
+    });
   });
 });

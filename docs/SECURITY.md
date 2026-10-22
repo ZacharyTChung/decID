@@ -34,7 +34,8 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Brute force / spam | Per-client fixed-window rate limits on auth, requests, challenges, presentations; body size limit | Client key is `X-Forwarded-For` or a single local bucket. Adequate for a local prototype only |
 | Holder's backup file stolen | AES-256-GCM, PBKDF2-SHA-256 600k iterations, AAD-bound header, ≥12-char password | Offline guessing of weak passwords remains possible |
 | Malicious credential content (huge, odd JSON, remote contexts) | 8 KiB token cap, 32 KiB body cap, strict schema, contexts never fetched | — |
-| Issuer key compromise | Admin `removeIssuer` invalidates all its records (epoch); `adminRevoke` | No key rotation workflow yet (credentials must be reissued) |
+| Issuer key compromise | `npm run rotate-keys -- --compromised`: the trust policy marks the key compromised (all its credentials rejected); a compromised EVM signer is removed on-chain (epoch); `adminRevoke` | Holders of affected credentials must be reissued; trust-policy distribution to other verifiers is out of scope |
+| Routine key rotation breaking existing credentials | Trust policy v2: retired keys keep credentials issued while active valid; retired EVM keys are kept only for revocation | Rotation is a local file + registry operation, not a published key history (e.g. did:web) |
 | Learning private data from the chain | Only a salted commitment and status are on-chain; a regression scan checks calldata/events/records for sentinel values, token and salt | See *Disclosure* below |
 
 ## Privacy: what is disclosed
@@ -68,7 +69,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 
 1. **Stronger disclosure privacy:** SD-JWT VC or BBS selective disclosure, and ZK predicates.
 2. **Unlinkability:** pairwise or rotating holder identifiers, privacy-preserving status (Bitstring Status List or ZK non-revocation), no per-credential public record.
-3. **Issuer key rotation:** multiple keys per issuer in the trust policy with validity periods, did:web or another updatable DID method for the issuer, and a rotation runbook that preserves old credentials until expiry.
+3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: did:web or another updatable DID method so verifiers can learn rotations without a local policy file.
 4. **Account recovery:** re-issuance bound to a new wallet after out-of-band re-verification, revoking the old commitment. Optionally smart-account (EIP-1271) holders, which SIWE verification would then need to support.
 5. **Real issuer onboarding:** governed trust lists, issuer accreditation, audit logging, HSM-held keys, real identity proofing. All of this is out of scope for this prototype.
 6. **Hardening:** nonce-based CSP (dropping `'unsafe-inline'`), HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
@@ -83,4 +84,4 @@ The same pieces would apply with a different type and schema: a new `credentialT
 | SIWE sessions, origin checks, rate limits, server-side roles, CSP + security headers | Nonce-based CSP, production session infrastructure |
 | Single-use, audience-bound challenges with atomic consumption | Standard presentation protocol (e.g. OpenID4VP) |
 | Encrypted holder export (PBKDF2 + AES-GCM) | Secure wallet storage, recovery |
-| Issuer removal epochs, admin override revocation | Key rotation, governance |
+| Issuer removal epochs, admin override revocation, key rotation with retired/compromised lifecycles | Published key history (did:web), governance |

@@ -67,6 +67,8 @@ export interface ChallengeResponse {
   statement: string;
 }
 
+export type PublicKeyStatus<T> = T & { status: "active" | "retired" | "compromised"; activatedAt: number; retiredAt?: number };
+
 export interface PublicConfigResponse {
   chainId: number;
   registry: string;
@@ -75,7 +77,12 @@ export interface PublicConfigResponse {
   schemaId: string;
   rpcUrl: string;
   origin: string;
-  issuers: { name: string; did: string; evmAttestationSigner: string }[];
+  issuers: {
+    id: string;
+    name: string;
+    credentialKeys: PublicKeyStatus<{ did: string }>[];
+    evmAttestationSigners: PublicKeyStatus<{ address: string }>[];
+  }[];
 }
 
 export type RequestStatus = "pending" | "approved" | "rejected";

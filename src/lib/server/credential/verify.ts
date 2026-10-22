@@ -10,7 +10,7 @@ import {
 } from "../../shared/credential-profile";
 import { parseHolderDid, sameAddress, type PkhAccount } from "../../shared/did-pkh";
 import type { CheckResult } from "../../shared/verification";
-import { trustedKeyFor, type TrustedIssuerT } from "../trust";
+import { trustedKeyFor, validAt, type CredentialKeyT, type TrustedIssuerT } from "../trust";
 
 /**
  * Verifies an application/vc+jwt credential.
@@ -36,6 +36,7 @@ export interface CredentialVerification {
   checks: CheckResult[];
   credential?: IdentityVerifiedCredential;
   issuer?: TrustedIssuerT;
+  key?: CredentialKeyT;
   subject?: PkhAccount;
 }
 
@@ -108,6 +109,14 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
   if (mismatches.length) return fail("credentialSemantics", "JWT_CLAIM_MISMATCH", mismatches.join("; "));
   checks.push({ id: "credentialSemantics", status: "pass" });
 
+  // Key lifecycle: the signing key must have been active when the credential was issued (iat).
+  // Checked only now because iat is inside the payload; the result is reported under issuerTrust.
+  if (!validAt(trusted.value.key, credential.iat)) {
+    const i = checks.findIndex((c) => c.id === "issuerTrust");
+    checks.splice(i, 1);
+    return fail("issuerTrust", "KEY_NOT_VALID_AT_ISSUANCE", "the signing key was not active in the trust policy when this credential was issued");
+  }
+
   // 5. Validity window: validFrom <= now < validUntil.
   if (until <= from) return fail("validityWindow", "BAD_VALIDITY_WINDOW", "validUntil is not after validFrom");
   if (ctx.now < from) return fail("validityWindow", "NOT_YET_VALID", `valid from ${credential.validFrom}`);
@@ -132,5 +141,5 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
   }
   checks.push({ id: "deploymentBinding", status: "pass" });
 
-  return { ok: true, checks, credential, issuer: trusted.value.issuer, subject };
+  return { ok: true, checks, credential, issuer: trusted.value.issuer, key: trusted.value.key, subject };
 }

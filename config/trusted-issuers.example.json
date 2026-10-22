@@ -1,12 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "issuers": [
     {
+      "id": "simulated-identity-office",
       "name": "Simulated Identity Office (local development only)",
-      "did": "did:key:z6Mk...generated-by-npm-run-setup",
-      "kid": "did:key:z6Mk...#z6Mk...",
-      "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "<base64url public key>" },
-      "evmAttestationSigner": "0x0000000000000000000000000000000000000000",
+      "credentialKeys": [
+        {
+          "did": "did:key:z6Mk...previous-key",
+          "kid": "did:key:z6Mk...previous-key#z6Mk...previous-key",
+          "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "<base64url public key>" },
+          "status": "retired",
+          "activatedAt": 1792600000,
+          "retiredAt": 1792640001
+        },
+        {
+          "did": "did:key:z6Mk...current-key",
+          "kid": "did:key:z6Mk...current-key#z6Mk...current-key",
+          "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "<base64url public key>" },
+          "status": "active",
+          "activatedAt": 1792640000
+        }
+      ],
+      "evmAttestationSigners": [
+        { "address": "0x0000000000000000000000000000000000000000", "status": "active", "activatedAt": 1792600000 }
+      ],
       "credentialTypes": ["IdentityVerifiedCredential"],
       "schemaIds": ["0x85879d7d1c3284670dfb12c110f22f58f78d24870630e6747af5bccf086f84c6"]
     }

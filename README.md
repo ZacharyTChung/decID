@@ -46,7 +46,7 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 
 ```bash
 npm run test:contracts   # 33 Hardhat tests (registry + gate security properties)
-npm run test:app         # 53 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 61 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -80,6 +80,18 @@ npm run admin -- record 0x<commitment>     # public on-chain record and status
 ```
 
 The CLI signs as Hardhat dev account #0, the registry admin set by `npm run deploy`, and refuses to run on any chain other than 31337.
+
+## Issuer key rotation
+
+```bash
+npm run rotate-keys                      # retire both keys: past credentials stay valid, new ones use new keys
+npm run rotate-keys -- --credential      # only the Ed25519 credential key (new did:key)
+npm run rotate-keys -- --evm             # only the EVM attestation key (new signer authorized on-chain)
+npm run rotate-keys -- --compromised     # old key(s) compromised: everything they signed is rejected;
+                                         # a compromised EVM signer is removed from the registry
+```
+
+The trust policy (format v2) lists every key of the issuer with its lifecycle (`active`, `retired`, `compromised`). Retired EVM keys stay in `.env.local` only to revoke the records they authorized. Restart the app after rotating. The issuer refuses to issue with keys that are no longer active in the policy (`ISSUER_KEY_NOT_ACTIVE`). The issuer page shows every key and its status.
 
 ## Reset
 

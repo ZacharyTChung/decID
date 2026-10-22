@@ -176,6 +176,11 @@ function IssuedList({ version }: { version: number }) {
   );
 }
 
+function KeyStatusBadge({ status, retiredAt }: { status: "active" | "retired" | "compromised"; retiredAt?: number }) {
+  const when = retiredAt ? ` since ${new Date(retiredAt * 1000).toLocaleString()}` : "";
+  return <Badge tone={status === "active" ? "green" : status === "retired" ? "slate" : "red"}>{status}{status !== "active" ? when : ""}</Badge>;
+}
+
 export default function IssuerPage() {
   const app = useApp();
   const [version, setVersion] = useState(0);
@@ -193,15 +198,25 @@ export default function IssuerPage() {
         <Card tone="muted">
           <div className="space-y-1 text-xs text-slate-600">
             {app.config.issuers.map((i) => (
-              <div key={i.did}>
-                <div>
-                  Trusted issuer DID <Mono>{i.did}</Mono>
-                </div>
-                <div>
-                  EVM attestation signer <Mono>{i.evmAttestationSigner}</Mono>
-                </div>
+              <div key={i.id} className="space-y-1">
+                <div className="font-medium text-slate-800">{i.name}: trust policy keys</div>
+                {i.credentialKeys.map((k) => (
+                  <div key={k.did} className="flex flex-wrap items-center gap-2">
+                    <span>Credential key</span>
+                    <Mono>{k.did}</Mono>
+                    <KeyStatusBadge status={k.status} retiredAt={k.retiredAt} />
+                  </div>
+                ))}
+                {i.evmAttestationSigners.map((e) => (
+                  <div key={e.address} className="flex flex-wrap items-center gap-2">
+                    <span>EVM attestation signer</span>
+                    <Mono>{e.address}</Mono>
+                    <KeyStatusBadge status={e.status} retiredAt={e.retiredAt} />
+                  </div>
+                ))}
               </div>
             ))}
+            <p>Rotate keys with <Mono>npm run rotate-keys</Mono> (see README). Retired keys keep their past credentials valid; compromised keys invalidate them.</p>
             <p>Only wallets on the server’s operator allowlist can sign in here. Hiding this page would not be a security control; the server checks every request.</p>
           </div>
         </Card>

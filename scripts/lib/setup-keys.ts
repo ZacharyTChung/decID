@@ -5,6 +5,7 @@ import { Wallet } from "ethers";
 import { CREDENTIAL_TYPE, SCHEMA_ID } from "../../src/lib/shared/constants";
 import { deriveDidKeyFromJwk, type Ed25519PublicJwk } from "../../src/lib/server/did/did-key";
 import { DEV_ROLES, devWallet } from "./dev-accounts";
+import { TrustFileSchema, type TrustFileT } from "../../src/lib/server/trust-schema";
 
 export interface SetupOptions {
   envFile: string;
@@ -63,22 +64,31 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
   const { did, kid } = await deriveDidKeyFromJwk(publicJwk);
   const issuerEvmAddress = new Wallet(env.ISSUER_EVM_PRIVATE_KEY!).address;
 
-  const trust = {
-    version: 1,
+  // Keep an existing v2 policy that already lists these keys (it may hold rotation history);
+  // otherwise write a fresh single-key policy.
+  const now = Math.floor(Date.now() / 1000);
+  let trust: TrustFileT | undefined;
+  if (!created && existsSync(opts.trustFile)) {
+    const parsed = TrustFileSchema.safeParse(JSON.parse(readFileSync(opts.trustFile, "utf8")));
+    const issuer = parsed.success ? parsed.data.issuers[0] : undefined;
+    if (issuer?.credentialKeys.some((k) => k.did === did) && issuer.evmAttestationSigners.some((e) => e.address.toLowerCase() === issuerEvmAddress.toLowerCase())) {
+      trust = parsed.data;
+    }
+  }
+  trust ??= {
+    version: 2,
     issuers: [
       {
+        id: "simulated-identity-office",
         name: "Simulated Identity Office (local development only)",
-        did,
-        kid,
-        publicKeyJwk: publicJwk,
-        evmAttestationSigner: issuerEvmAddress,
+        credentialKeys: [{ did, kid, publicKeyJwk: publicJwk, status: "active", activatedAt: now }],
+        evmAttestationSigners: [{ address: issuerEvmAddress, status: "active", activatedAt: now }],
         credentialTypes: [CREDENTIAL_TYPE],
         schemaIds: [SCHEMA_ID],
       },
     ],
   };
-  mkdirSync(path.dirname(opts.trustFile), { recursive: true });
-  writeFileSync(opts.trustFile, JSON.stringify(trust, null, 2) + "\n");
+  writeTrustFile(opts.trustFile, trust);
   return { issuerDid: did, issuerKid: kid, issuerEvmAddress, created };
 }
 
@@ -89,4 +99,21 @@ export function parseEnvFile(file: string): Record<string, string> {
     if (m) out[m[1]!] = m[2]!;
   }
   return out;
+}
+
+export function writeTrustFile(file: string, trust: TrustFileT): void {
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(TrustFileSchema.parse(trust), null, 2) + "\n");
+}
+
+/** Replaces (or appends) KEY=value lines in an env file, keeping its 0600 mode. */
+export function updateEnvFile(file: string, updates: Record<string, string>): void {
+  const lines = readFileSync(file, "utf8").split("\n");
+  for (const [k, v] of Object.entries(updates)) {
+    const i = lines.findIndex((l) => l.startsWith(`${k}=`));
+    if (i >= 0) lines[i] = `${k}=${v}`;
+    else lines.splice(lines.length - 1, 0, `${k}=${v}`);
+  }
+  writeFileSync(file, lines.join("\n"), { mode: 0o600 });
+  chmodSync(file, 0o600);
 }

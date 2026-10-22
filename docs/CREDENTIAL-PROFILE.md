@@ -33,11 +33,20 @@ VC-JOSE-COSE asks that verification material from controlled identifier document
 }
 ```
 
-It binds three otherwise independent things out of band:
+(Format version 2; see `config/trusted-issuers.example.json` for a rotated issuer.) For each logical issuer (`id`), it binds out of band:
 
-1. the **issuer DID** that appears in credentials,
-2. the **credential verification key** (kid + JWK), which must also match did:key resolution,
-3. the **EVM attestation signer**, which must be the `issuer` recorded on-chain for the commitment.
+1. its **credential keys**: each a `did:key` DID, `kid` and public JWK. With did:key the DID *is* the key, so rotation produces a new DID under the same logical issuer. The JWK must also match did:key resolution;
+2. its **EVM attestation signers**: one of them must be the `issuer` recorded on-chain for the commitment.
+
+Every key and signer has a lifecycle used by the verifier:
+
+| status | meaning | credential accepted when |
+| --- | --- | --- |
+| `active` | in use | `iat >= activatedAt` |
+| `retired` | rotated out normally | `activatedAt <= iat < retiredAt` |
+| `compromised` | key may be in an attacker's hands, who could backdate `iat` | never (`KEY_COMPROMISED`) |
+
+The on-chain signer is judged by the credential's `validFrom` (its issuance time). `npm run rotate-keys` maintains the file, the env keys and the registry together.
 
 A self-issued `did:key` that is not listed fails with `ISSUER_NOT_TRUSTED`. Keys in token headers (`jwk`, `jku`, `x5u`, `x5c`, …) are rejected outright. The verifier never uses a key supplied by the presenter.
 

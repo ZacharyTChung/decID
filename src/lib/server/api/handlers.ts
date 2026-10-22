@@ -50,7 +50,12 @@ export const getConfig = route(async () => {
     schemaId: d.schemaId,
     rpcUrl: appConfig().rpcUrl,
     origin: appConfig().origin,
-    issuers: loadTrustedIssuers().map((i) => ({ name: i.name, did: i.did, evmAttestationSigner: i.evmAttestationSigner })),
+    issuers: loadTrustedIssuers().map((i) => ({
+      id: i.id,
+      name: i.name,
+      credentialKeys: i.credentialKeys.map((k) => ({ did: k.did, status: k.status, activatedAt: k.activatedAt, retiredAt: k.retiredAt })),
+      evmAttestationSigners: i.evmAttestationSigners.map((e) => ({ address: e.address, status: e.status, activatedAt: e.activatedAt, retiredAt: e.retiredAt })),
+    })),
   };
   return json(body);
 });

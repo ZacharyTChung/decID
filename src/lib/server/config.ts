@@ -54,6 +54,8 @@ export function issuerOperatorAddresses(): string[] {
 const IssuerSecrets = z.object({
   credentialPrivateJwk: z.object({ kty: z.literal("OKP"), crv: z.literal("Ed25519"), x: z.string(), d: z.string() }),
   evmPrivateKey: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  // Retired attestation keys, kept only to revoke records they authorized (only a record's own issuer may revoke).
+  retiredEvmPrivateKeys: z.array(z.string().regex(/^0x[0-9a-fA-F]{64}$/)),
 });
 export type IssuerSecretsT = z.infer<typeof IssuerSecrets>;
 
@@ -64,7 +66,8 @@ export function issuerSecrets(): IssuerSecretsT {
   if (!jwk || !evm) {
     throw new Error("issuer keys are not configured: run `npm run setup` to generate .env.local");
   }
-  return IssuerSecrets.parse({ credentialPrivateJwk: JSON.parse(jwk), evmPrivateKey: evm });
+  const retired = (env("ISSUER_EVM_RETIRED_PRIVATE_KEYS") ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+  return IssuerSecrets.parse({ credentialPrivateJwk: JSON.parse(jwk), evmPrivateKey: evm, retiredEvmPrivateKeys: retired });
 }
 
 export function credentialLifetimeSeconds(): number {

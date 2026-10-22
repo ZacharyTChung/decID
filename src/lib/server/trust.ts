@@ -5,32 +5,11 @@ import { CREDENTIAL_TYPE, SCHEMA_ID } from "../shared/constants";
 import { appConfig, readJsonFile } from "./config";
 import { ApiError } from "./http";
 import { resolveDidKeyAssertionKey, type Ed25519PublicJwk } from "./did/did-key";
+import { TrustFileSchema, validAt, type CredentialKeyT, type TrustedIssuerT } from "./trust-schema";
 
-/**
- * Explicit trust policy for credential issuers.
- *
- * Each entry binds, out of band, three things that are otherwise unrelated:
- *   - the issuer DID (did:key) that appears in credentials,
- *   - the exact credential verification key (kid + public JWK),
- *   - the EVM address that signs on-chain registration authorizations.
- *
- * A credential is only accepted if its issuer DID is listed here. The key used
- * to verify it comes from this file cross-checked against did:key resolution,
- * never from the token or the presenter. Self-issued DIDs are therefore
- * rejected unless an operator adds them to this file.
- */
-const TrustedIssuer = z.strictObject({
-  name: z.string().min(1),
-  did: z.string().startsWith("did:key:"),
-  kid: z.string(),
-  publicKeyJwk: z.strictObject({ kty: z.literal("OKP"), crv: z.literal("Ed25519"), x: z.string() }),
-  evmAttestationSigner: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  credentialTypes: z.array(z.string()).min(1),
-  schemaIds: z.array(z.string().regex(/^0x[0-9a-fA-F]{64}$/)).min(1),
-});
-const TrustFile = z.strictObject({ version: z.literal(1), issuers: z.array(TrustedIssuer) });
-
-export type TrustedIssuerT = z.infer<typeof TrustedIssuer>;
+// The schema and lifecycle rules live in trust-schema.ts (no server-only import) so that the
+// setup/rotation scripts can share them; they are re-exported here for the app.
+export * from "./trust-schema";
 
 export function loadTrustedIssuers(file = appConfig().trustedIssuersFile): TrustedIssuerT[] {
   let raw: unknown;
@@ -39,16 +18,17 @@ export function loadTrustedIssuers(file = appConfig().trustedIssuersFile): Trust
   } catch {
     throw new ApiError(503, "TRUST_POLICY_MISSING", "trusted issuer policy not found: run `npm run setup`");
   }
-  const parsed = TrustFile.safeParse(raw);
-  if (!parsed.success) throw new ApiError(503, "TRUST_POLICY_INVALID", "trusted issuer policy is invalid: re-run `npm run setup`");
+  const parsed = TrustFileSchema.safeParse(raw);
+  if (!parsed.success) throw new ApiError(503, "TRUST_POLICY_INVALID", "trusted issuer policy is invalid or outdated: re-run `npm run setup`");
   return parsed.data.issuers.map((i) => ({
     ...i,
-    evmAttestationSigner: getAddress(i.evmAttestationSigner),
+    evmAttestationSigners: i.evmAttestationSigners.map((s) => ({ ...s, address: getAddress(s.address) })),
   }));
 }
 
 export interface TrustedKey {
   issuer: TrustedIssuerT;
+  key: CredentialKeyT;
   publicKeyJwk: Ed25519PublicJwk;
 }
 
@@ -57,31 +37,42 @@ export type TrustFailure =
   | "KID_MISMATCH"
   | "KEY_RESOLUTION_FAILED"
   | "KEY_MISMATCH"
+  | "KEY_COMPROMISED"
   | "TYPE_NOT_AUTHORIZED";
 
 /**
- * Looks up the issuer in the trust file and confirms that did:key resolution
+ * Finds the issuer and key for a signing DID and confirms that did:key resolution
  * (via the maintained library) yields exactly the pinned key and key id.
+ * The issuance-time window is checked by the caller after signature verification.
  */
 export async function trustedKeyFor(
   issuers: TrustedIssuerT[],
   issuerDid: string,
   headerKid: string,
 ): Promise<{ ok: true; value: TrustedKey } | { ok: false; reason: TrustFailure }> {
-  const issuer = issuers.find((i) => i.did === issuerDid);
-  if (!issuer) return { ok: false, reason: "ISSUER_NOT_TRUSTED" };
+  let issuer: TrustedIssuerT | undefined;
+  let key: CredentialKeyT | undefined;
+  for (const i of issuers) {
+    key = i.credentialKeys.find((k) => k.did === issuerDid);
+    if (key) {
+      issuer = i;
+      break;
+    }
+  }
+  if (!issuer || !key) return { ok: false, reason: "ISSUER_NOT_TRUSTED" };
   if (!issuer.credentialTypes.includes(CREDENTIAL_TYPE) || !issuer.schemaIds.includes(SCHEMA_ID)) {
     return { ok: false, reason: "TYPE_NOT_AUTHORIZED" };
   }
-  if (headerKid !== issuer.kid) return { ok: false, reason: "KID_MISMATCH" };
+  if (key.status === "compromised") return { ok: false, reason: "KEY_COMPROMISED" };
+  if (headerKid !== key.kid) return { ok: false, reason: "KID_MISMATCH" };
   let resolved;
   try {
     resolved = await resolveDidKeyAssertionKey(issuerDid);
   } catch {
     return { ok: false, reason: "KEY_RESOLUTION_FAILED" };
   }
-  if (resolved.kid !== issuer.kid || resolved.publicKeyJwk.x !== issuer.publicKeyJwk.x) {
+  if (resolved.kid !== key.kid || resolved.publicKeyJwk.x !== key.publicKeyJwk.x) {
     return { ok: false, reason: "KEY_MISMATCH" };
   }
-  return { ok: true, value: { issuer, publicKeyJwk: resolved.publicKeyJwk } };
+  return { ok: true, value: { issuer, key, publicKeyJwk: resolved.publicKeyJwk } };
 }
