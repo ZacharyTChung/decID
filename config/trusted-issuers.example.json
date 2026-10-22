@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "issuers": [
+    {
+      "name": "Simulated Identity Office (local development only)",
+      "did": "did:key:z6Mk...generated-by-npm-run-setup",
+      "kid": "did:key:z6Mk...#z6Mk...",
+      "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "<base64url public key>" },
+      "evmAttestationSigner": "0x0000000000000000000000000000000000000000",
+      "credentialTypes": ["IdentityVerifiedCredential"],
+      "schemaIds": ["0x85879d7d1c3284670dfb12c110f22f58f78d24870630e6747af5bccf086f84c6"]
+    }
+  ]
+}
