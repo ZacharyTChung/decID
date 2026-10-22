@@ -329,6 +329,22 @@ describe("revocation", () => {
   });
 });
 
+describe("verifier activity log", () => {
+  it("reports outcomes with stable codes and nothing about the presenter", async () => {
+    const res = await new Actor(5).call(h.getVerifierHistory, "GET");
+    expect(res.status).toBe(200);
+    const entries = res.body.entries as { status: string; code: string | null; action: string; ref: string }[];
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.some((e) => e.status === "verified")).toBe(true);
+    expect(entries.some((e) => e.status === "rejected" && e.code === "REVOKED")).toBe(true);
+    expect(entries.every((e) => e.action === "access-verified-member-area" && e.ref.length === 8)).toBe(true);
+    const text = JSON.stringify(res.body).toLowerCase();
+    for (const addr of [holder.address, other.address]) expect(text).not.toContain(addr.slice(2).toLowerCase());
+    expect(text).not.toContain(bundle.salt.slice(2).toLowerCase());
+    expect(text).not.toContain(bundle.commitment.slice(2).toLowerCase());
+  });
+});
+
 describe("privacy regression check", () => {
   it("keeps raw identity fields, tokens and salts out of the chain and verifier storage", async () => {
     const latest = await provider.getBlockNumber();

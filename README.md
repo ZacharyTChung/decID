@@ -49,7 +49,7 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 67 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 68 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build

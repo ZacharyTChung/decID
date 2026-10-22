@@ -168,6 +168,37 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
 
 // ---------------------------------------------------------------- credential
 
+const EXPIRY_WARNING_DAYS = 30;
+
+/** Time left on the credential, with a renewal hint when it is close to (or past) expiry. */
+function ExpiryNotice({ validUntil }: { validUntil?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const until = validUntil ? Date.parse(validUntil) : NaN;
+  if (!Number.isFinite(until)) return null;
+  const days = Math.floor((until - now) / 86_400_000);
+  if (until <= now) {
+    return (
+      <div className="mt-2">
+        <Notice tone="error">This credential has expired. Verifiers and the gate will reject it; submit a new request to be re-verified.</Notice>
+      </div>
+    );
+  }
+  if (days < EXPIRY_WARNING_DAYS) {
+    return (
+      <div className="mt-2">
+        <Notice tone="warn">
+          Expires in {days < 1 ? "less than a day" : `${days} day${days === 1 ? "" : "s"}`}. Submit a new request before then to stay verified.
+        </Notice>
+      </div>
+    );
+  }
+  return <p className="mt-2 text-xs text-slate-500">Valid for another {days} days.</p>;
+}
+
 function CredentialSection({ bundle }: { bundle: HolderBundle }) {
   const app = useApp();
   const [status, setStatus] = useState<ChainStatus>("Unknown");
@@ -258,6 +289,7 @@ function CredentialSection({ bundle }: { bundle: HolderBundle }) {
         <p className="mt-3 text-[11px] text-slate-300">No name, birth date, document number or photo is in this credential.</p>
       </div>
       {statusError && <div className="mt-2"><Notice tone="error">{statusError}</Notice></div>}
+      <ExpiryNotice validUntil={typeof payload?.validUntil === "string" ? payload.validUntil : undefined} />
 
       <div className="mt-4">
         <Button variant="secondary" onClick={() => setShowTech(!showTech)}>

@@ -223,3 +223,29 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
     },
   });
 }
+
+export interface VerificationLogEntry {
+  ref: string; // first 8 characters of the challenge id
+  action: string;
+  createdAt: number;
+  status: "verified" | "rejected" | "unused" | "expired";
+  code: string | null; // stable failure code for rejected attempts
+}
+
+/**
+ * The verifier's recent activity, from challenge rows only. They hold no holder address,
+ * credential, salt or proof, so this log cannot reveal who presented what.
+ */
+export function recentVerifications(limit = 20): VerificationLogEntry[] {
+  const now = nowSeconds();
+  const rows = db()
+    .prepare("SELECT id, action, created_at, expires_at, consumed_at, outcome FROM verifier_challenges ORDER BY created_at DESC, rowid DESC LIMIT ?")
+    .all(limit) as { id: string; action: string; created_at: number; expires_at: number; consumed_at: number | null; outcome: string | null }[];
+  return rows.map((r) => ({
+    ref: r.id.slice(0, 8),
+    action: r.action,
+    createdAt: r.created_at,
+    status: r.outcome === "verified" ? "verified" : r.outcome || r.consumed_at !== null ? "rejected" : r.expires_at <= now ? "expired" : "unused",
+    code: r.outcome && r.outcome !== "verified" ? r.outcome : null,
+  }));
+}

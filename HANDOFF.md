@@ -26,6 +26,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Key rotation:** trust policy v2 (keys and EVM signers with active/retired/compromised lifecycles), `npm run rotate-keys`, retired EVM keys kept only for revocation. `npm run setup` migrates a v1 policy.
 - **Account recovery:** a holder request can name a lost wallet. Approval revokes its registered credentials and cancels its unregistered authorizations (new `cancelAuthorization`, scoped per issuer) before issuing to the new wallet.
 - **Smart-account holders:** SIWE and presentation proofs fall back to EIP-1271 `isValidSignature`; signatures may exceed 65 bytes. `SimpleSmartWallet` is a test-only fixture.
+- **Verifier activity log** (`GET /api/verifier/history`): reference, action, time and outcome code only. **Holder expiry notice** within 30 days of expiry.
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -38,7 +39,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 67 passed (7 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 68 passed (7 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused |

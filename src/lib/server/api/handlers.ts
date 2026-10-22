@@ -160,3 +160,7 @@ export const postPresentation = route(
   },
   { rateLimit: { name: "verifier-presentation", perMinute: 30 } },
 );
+
+export const getVerifierHistory = route(async () => json({ entries: verifier.recentVerifications() }), {
+  rateLimit: { name: "verifier-history", perMinute: 60 },
+});

@@ -18,6 +18,56 @@ function Countdown({ until }: { until: number }) {
   return left > 0 ? <Badge tone="blue">expires in {left}s</Badge> : <Badge tone="red">expired</Badge>;
 }
 
+interface LogEntry {
+  ref: string;
+  action: string;
+  createdAt: number;
+  status: "verified" | "rejected" | "unused" | "expired";
+  code: string | null;
+}
+
+/** Recent outcomes at this verifier. Challenge rows hold no holder, credential or salt. */
+function ActivityLog({ version }: { version: number }) {
+  const [entries, setEntries] = useState<LogEntry[]>();
+  useEffect(() => {
+    void api<{ entries: LogEntry[] }>("GET", "/api/verifier/history")
+      .then((r) => setEntries(r.entries))
+      .catch(() => setEntries([]));
+  }, [version]);
+  return (
+    <Card title="Recent verification activity" subtitle="What this verifier keeps: request reference, action, time and outcome code. No wallet address, credential or salt is stored.">
+      {!entries || entries.length === 0 ? (
+        <p className="text-sm text-slate-500">No verification requests yet.</p>
+      ) : (
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs text-slate-500">
+            <tr>
+              <th className="py-1 font-medium">Request</th>
+              <th className="py-1 font-medium">Time</th>
+              <th className="py-1 font-medium">Outcome</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {entries.map((e) => (
+              <tr key={e.ref + e.createdAt}>
+                <td className="py-1.5">
+                  <Mono>{e.ref}</Mono>
+                </td>
+                <td className="py-1.5 text-slate-600">{new Date(e.createdAt * 1000).toLocaleTimeString()}</td>
+                <td className="py-1.5">
+                  <Badge tone={e.status === "verified" ? "green" : e.status === "rejected" ? "red" : "slate"}>
+                    {e.status === "rejected" && e.code ? `rejected: ${e.code}` : e.status}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
 function Results({ result }: { result: VerificationResult }) {
   return (
     <Card title="Verification result" subtitle={`Checked at ${new Date(result.verifiedAt).toLocaleTimeString()}. Every check is reported separately.`}>
@@ -69,6 +119,7 @@ export default function VerifierPage() {
   const [challenge, setChallenge] = useState<ChallengeResponse>();
   const [result, setResult] = useState<VerificationResult>();
   const [consent, setConsent] = useState(false);
+  const [logVersion, setLogVersion] = useState(0);
   const start = useAction();
   const present = useAction();
   const bundle = app.bundle;
@@ -100,6 +151,7 @@ export default function VerifierPage() {
               setResult(undefined);
               setConsent(false);
               setChallenge(await api<ChallengeResponse>("POST", "/api/verifier/challenges", { action: "access-verified-member-area" }));
+              setLogVersion((v) => v + 1);
             })
           }
         >
@@ -187,6 +239,7 @@ export default function VerifierPage() {
                     proof: { holder, commitment: bundle.commitment, expiresAt: c.expiresAt, signature },
                   });
                   setResult(r);
+                  setLogVersion((v) => v + 1);
                   setConsent(false);
                   setChallenge(undefined); // single-use: it was consumed by this submission
                 })
@@ -204,6 +257,7 @@ export default function VerifierPage() {
       </Card>
 
       {result && <Results result={result} />}
+      <ActivityLog version={logVersion} />
     </Shell>
   );
 }
