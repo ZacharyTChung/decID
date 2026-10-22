@@ -46,7 +46,8 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 
 ```bash
 npm run test:contracts   # 37 Hardhat example-based tests (registry + gate security properties)
-npm run test:fuzz        # 8 Solidity property tests, 1,000 random inputs each (forge-std)
+npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
+                         # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
 npm run test:app         # 67 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both

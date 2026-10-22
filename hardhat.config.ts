@@ -30,7 +30,11 @@ export default defineConfig({
   test: {
     mocha: { timeout: 60_000 },
     // Property-based tests in test/solidity: each fuzz test runs on this many random inputs.
-    solidity: { fuzz: { runs: 1000 } },
+    solidity: {
+      fuzz: { runs: 1000 },
+      // Stateful tests: random call sequences against RegistryHandler, invariants checked after each call.
+      invariant: { runs: 128, depth: 40, failOnRevert: false },
+    },
   },
   networks: {
     localhost: { type: "http", chainType: "l1", url: "http://127.0.0.1:8545" },
