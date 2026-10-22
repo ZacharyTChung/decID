@@ -188,7 +188,7 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
       if (rec.schemaId.toLowerCase() !== SCHEMA_ID.toLowerCase()) problems.push("registered schema differs");
       if (rec.validFrom !== fromUtcSeconds(vc.validFrom) || rec.expiresAt !== fromUtcSeconds(vc.validUntil)) problems.push("registered validity window differs from credential");
       if (rec.status !== "Active") problems.push(`registry status is ${rec.status}`);
-      const valid = (await registryContract(deployment).isCredentialValid(recomputed, proof.holder, SCHEMA_ID)) as boolean;
+      const valid = (await registryContract(deployment).getFunction("isCredentialValid")(recomputed, proof.holder, SCHEMA_ID)) as boolean;
       if (!valid && rec.status === "Active") problems.push("registry isCredentialValid returned false");
     }
     if (problems.length) {

@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import { Signature, keccak256, toUtf8Bytes, zeroPadValue, type Signer } from "ethers";
+import { Contract, Signature, keccak256, toUtf8Bytes, zeroPadValue, type Signer } from "ethers";
 import { COMMITMENT_DOMAIN, SCHEMA_ID } from "../../src/lib/shared/constants";
 import { REGISTRATION_TYPES, registryDomain, type RegistrationAuthorization } from "../../src/lib/shared/eip712";
 import { commitmentFor } from "../../src/lib/shared/commitment";
@@ -14,6 +14,11 @@ const DAY = 86_400;
 const OTHER_SCHEMA = keccak256(toUtf8Bytes("https://did-mvp.invalid/schemas/other/v1.json"));
 const SECP256K1_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
 
+/** Typed `connect`: ethers returns BaseContract, which hides the ABI methods from TypeScript. */
+function on(contract: Contract, signer: Signer): Contract {
+  return contract.connect(signer) as Contract;
+}
+
 let commitmentCounter = 0;
 function freshCommitment(): string {
   commitmentCounter += 1;
@@ -22,10 +27,10 @@ function freshCommitment(): string {
 
 async function fixture() {
   const [admin, issuer, holder, other, rogueIssuer, secondIssuer] = await ethers.getSigners();
-  const registry = await ethers.deployContract("CredentialRegistry", [admin!.address]);
-  const gate = await ethers.deployContract("DemoGate", [await registry.getAddress(), SCHEMA_ID]);
-  await registry.connect(admin!).addIssuer(issuer!.address);
-  await registry.connect(admin!).addIssuer(secondIssuer!.address);
+  const registry = (await ethers.deployContract("CredentialRegistry", [admin!.address])) as unknown as Contract;
+  const gate = (await ethers.deployContract("DemoGate", [await registry.getAddress(), SCHEMA_ID])) as unknown as Contract;
+  await on(registry, admin!).addIssuer(issuer!.address);
+  await on(registry, admin!).addIssuer(secondIssuer!.address);
   const chainId = (await ethers.provider.getNetwork()).chainId;
   return { registry, gate, admin: admin!, issuer: issuer!, holder: holder!, other: other!, rogueIssuer: rogueIssuer!, secondIssuer: secondIssuer!, chainId };
 }
@@ -57,7 +62,7 @@ async function registered(ctx: Ctx, overrides: Partial<RegistrationAuthorization
   const auth = await makeAuth(ctx, overrides);
   const sig = await sign(ctx, auth);
   const holderSigner = auth.holder === ctx.other.address ? ctx.other : ctx.holder;
-  await ctx.registry.connect(holderSigner).register(auth, sig);
+  await on(ctx.registry, holderSigner).register(auth, sig);
   return auth;
 }
 
@@ -83,13 +88,13 @@ describe("CredentialRegistry", () => {
     it("rejects issuer management and admin revocation by non-admins", async () => {
       const ctx = await loadFixture(fixture);
       const role = await ctx.registry.DEFAULT_ADMIN_ROLE();
-      await expect(ctx.registry.connect(ctx.other).addIssuer(ctx.rogueIssuer.address))
+      await expect(on(ctx.registry, ctx.other).addIssuer(ctx.rogueIssuer.address))
         .to.be.revertedWithCustomError(ctx.registry, "AccessControlUnauthorizedAccount")
         .withArgs(ctx.other.address, role);
-      await expect(ctx.registry.connect(ctx.issuer).removeIssuer(ctx.issuer.address))
+      await expect(on(ctx.registry, ctx.issuer).removeIssuer(ctx.issuer.address))
         .to.be.revertedWithCustomError(ctx.registry, "AccessControlUnauthorizedAccount");
       const auth = await registered(ctx);
-      await expect(ctx.registry.connect(ctx.issuer).adminRevoke(auth.commitment))
+      await expect(on(ctx.registry, ctx.issuer).adminRevoke(auth.commitment))
         .to.be.revertedWithCustomError(ctx.registry, "AccessControlUnauthorizedAccount");
     });
 
@@ -106,7 +111,7 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const sig = await sign(ctx, auth);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig))
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig))
         .to.emit(ctx.registry, "CredentialRegistered")
         .withArgs(auth.commitment, auth.holder, auth.issuer, auth.schemaId, auth.validFrom, auth.expiresAt);
 
@@ -117,7 +122,7 @@ describe("CredentialRegistry", () => {
       expect(rec.issuer).to.equal(ctx.issuer.address);
       expect(rec.revoked).to.equal(false);
 
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.emit(ctx.gate, "MemberCheckedIn")
         .withArgs(ctx.holder.address, auth.commitment, 1n);
       expect(await ctx.gate.checkIns(ctx.holder.address)).to.equal(1n);
@@ -127,7 +132,7 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const sig = await sign(ctx, auth);
-      await expect(ctx.registry.connect(ctx.other).register(auth, sig))
+      await expect(on(ctx.registry, ctx.other).register(auth, sig))
         .to.be.revertedWithCustomError(ctx.registry, "SenderNotHolder")
         .withArgs(ctx.other.address, ctx.holder.address);
     });
@@ -136,7 +141,7 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx, { issuer: ctx.rogueIssuer.address });
       const sig = await sign(ctx, auth, ctx.rogueIssuer);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig))
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig))
         .to.be.revertedWithCustomError(ctx.registry, "IssuerNotActive")
         .withArgs(ctx.rogueIssuer.address);
     });
@@ -145,7 +150,7 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const sig = await sign(ctx, auth, ctx.rogueIssuer);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig))
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig))
         .to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer")
         .withArgs(ctx.rogueIssuer.address, ctx.issuer.address);
     });
@@ -165,7 +170,7 @@ describe("CredentialRegistry", () => {
         const sig = await sign(ctx, auth);
         const altered = mutate(auth, ctx);
         const sender = altered.holder === ctx.other.address ? ctx.other : ctx.holder;
-        await expect(ctx.registry.connect(sender).register(altered, sig)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
+        await expect(on(ctx.registry, sender).register(altered, sig)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
       });
     }
 
@@ -173,10 +178,10 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const wrongChain = await sign(ctx, auth, ctx.issuer, { chainId: 1n });
-      await expect(ctx.registry.connect(ctx.holder).register(auth, wrongChain)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
+      await expect(on(ctx.registry, ctx.holder).register(auth, wrongChain)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
       const otherRegistry = await ethers.deployContract("CredentialRegistry", [ctx.admin.address]);
       const wrongContract = await sign(ctx, auth, ctx.issuer, { registry: await otherRegistry.getAddress() });
-      await expect(ctx.registry.connect(ctx.holder).register(auth, wrongContract)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
+      await expect(on(ctx.registry, ctx.holder).register(auth, wrongContract)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
     });
 
     it("rejects malformed and malleable (high-s) signatures via OpenZeppelin ECDSA", async () => {
@@ -186,18 +191,18 @@ describe("CredentialRegistry", () => {
 
       const highS = zeroPadValue(ethers.toBeHex(SECP256K1_N - BigInt(sig.s)), 32);
       const malleable = ethers.concat([sig.r, highS, ethers.toBeHex(sig.v === 27 ? 28 : 27)]);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, malleable)).to.be.revertedWithCustomError(ctx.registry, "ECDSAInvalidSignatureS");
+      await expect(on(ctx.registry, ctx.holder).register(auth, malleable)).to.be.revertedWithCustomError(ctx.registry, "ECDSAInvalidSignatureS");
 
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig.compactSerialized)).to.be.revertedWithCustomError(
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig.compactSerialized)).to.be.revertedWithCustomError(
         ctx.registry,
         "ECDSAInvalidSignatureLength",
       );
 
       const badV = ethers.concat([sig.r, sig.s, "0x05"]);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, badV)).to.be.revertedWithCustomError(ctx.registry, "ECDSAInvalidSignature");
+      await expect(on(ctx.registry, ctx.holder).register(auth, badV)).to.be.revertedWithCustomError(ctx.registry, "ECDSAInvalidSignature");
 
       // The canonical signature still works afterwards.
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig.serialized)).to.emit(ctx.registry, "CredentialRegistered");
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig.serialized)).to.emit(ctx.registry, "CredentialRegistered");
     });
 
     it("enforces the submission deadline, inclusive of the deadline second", async () => {
@@ -205,12 +210,12 @@ describe("CredentialRegistry", () => {
       const now = await time.latest();
       const onTime = await makeAuth(ctx, { deadline: now + 100 });
       await time.setNextBlockTimestamp(now + 100);
-      await expect(ctx.registry.connect(ctx.holder).register(onTime, await sign(ctx, onTime))).to.emit(ctx.registry, "CredentialRegistered");
+      await expect(on(ctx.registry, ctx.holder).register(onTime, await sign(ctx, onTime))).to.emit(ctx.registry, "CredentialRegistered");
 
       const late = await makeAuth(ctx, { deadline: now + 200 });
       const lateSig = await sign(ctx, late);
       await time.setNextBlockTimestamp(now + 201);
-      await expect(ctx.registry.connect(ctx.holder).register(late, lateSig))
+      await expect(on(ctx.registry, ctx.holder).register(late, lateSig))
         .to.be.revertedWithCustomError(ctx.registry, "AuthorizationExpired")
         .withArgs(now + 200);
     });
@@ -219,8 +224,8 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const sig = await sign(ctx, auth);
-      await ctx.registry.connect(ctx.holder).register(auth, sig);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig))
+      await on(ctx.registry, ctx.holder).register(auth, sig);
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig))
         .to.be.revertedWithCustomError(ctx.registry, "AlreadyRegistered")
         .withArgs(auth.commitment);
     });
@@ -229,15 +234,15 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const now = await time.latest();
       const inverted = await makeAuth(ctx, { validFrom: now + 10, expiresAt: now + 10 });
-      await expect(ctx.registry.connect(ctx.holder).register(inverted, await sign(ctx, inverted)))
+      await expect(on(ctx.registry, ctx.holder).register(inverted, await sign(ctx, inverted)))
         .to.be.revertedWithCustomError(ctx.registry, "InvalidValidityWindow");
 
       const expired = await makeAuth(ctx, { validFrom: now - 100, expiresAt: now - 10 });
-      await expect(ctx.registry.connect(ctx.holder).register(expired, await sign(ctx, expired)))
+      await expect(on(ctx.registry, ctx.holder).register(expired, await sign(ctx, expired)))
         .to.be.revertedWithCustomError(ctx.registry, "CredentialAlreadyExpired");
 
       const zero = await makeAuth(ctx, { commitment: ethers.ZeroHash });
-      await expect(ctx.registry.connect(ctx.holder).register(zero, await sign(ctx, zero))).to.be.revertedWithCustomError(ctx.registry, "ZeroCommitment");
+      await expect(on(ctx.registry, ctx.holder).register(zero, await sign(ctx, zero))).to.be.revertedWithCustomError(ctx.registry, "ZeroCommitment");
     });
   });
 
@@ -248,7 +253,7 @@ describe("CredentialRegistry", () => {
       expect(await ctx.registry.credentialStatus(missing)).to.equal(Status.None);
       expect(await ctx.registry.isCredentialValid(missing, ctx.holder.address, SCHEMA_ID)).to.equal(false);
       expect(await ctx.registry.isCredentialValid(missing, ethers.ZeroAddress, ethers.ZeroHash)).to.equal(false);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(missing))
+      await expect(on(ctx.gate, ctx.holder).checkIn(missing))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.None, false);
     });
@@ -257,7 +262,7 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await registered(ctx);
       expect(await ctx.registry.isCredentialValid(auth.commitment, ctx.other.address, SCHEMA_ID)).to.equal(false);
-      await expect(ctx.gate.connect(ctx.other).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.other).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.Active, true);
     });
@@ -267,7 +272,7 @@ describe("CredentialRegistry", () => {
       const auth = await registered(ctx, { schemaId: OTHER_SCHEMA });
       expect(await ctx.registry.isCredentialValid(auth.commitment, ctx.holder.address, OTHER_SCHEMA)).to.equal(true);
       expect(await ctx.registry.isCredentialValid(auth.commitment, ctx.holder.address, SCHEMA_ID)).to.equal(false);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.Active, true);
     });
@@ -281,18 +286,18 @@ describe("CredentialRegistry", () => {
       expect(await ctx.registry.credentialStatus(auth.commitment)).to.equal(Status.NotYetValid);
 
       await time.setNextBlockTimestamp(validFrom - 1);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.NotYetValid, false);
 
       await time.setNextBlockTimestamp(validFrom);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment)).to.emit(ctx.gate, "MemberCheckedIn");
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment)).to.emit(ctx.gate, "MemberCheckedIn");
 
       await time.setNextBlockTimestamp(expiresAt - 1);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment)).to.emit(ctx.gate, "MemberCheckedIn");
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment)).to.emit(ctx.gate, "MemberCheckedIn");
 
       await time.setNextBlockTimestamp(expiresAt);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.Expired, false);
       // The reverted call was never mined; mine the block at expiresAt so views see that timestamp.
@@ -307,31 +312,31 @@ describe("CredentialRegistry", () => {
     it("lets the issuing issuer revoke, after which status and the gate fail", async () => {
       const ctx = await loadFixture(fixture);
       const auth = await registered(ctx);
-      await expect(ctx.registry.connect(ctx.issuer).revoke(auth.commitment))
+      await expect(on(ctx.registry, ctx.issuer).revoke(auth.commitment))
         .to.emit(ctx.registry, "CredentialRevoked")
         .withArgs(auth.commitment, ctx.issuer.address, false);
       expect(await ctx.registry.credentialStatus(auth.commitment)).to.equal(Status.Revoked);
       expect(await ctx.registry.isCredentialValid(auth.commitment, ctx.holder.address, SCHEMA_ID)).to.equal(false);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.Revoked, false);
-      await expect(ctx.registry.connect(ctx.issuer).revoke(auth.commitment)).to.be.revertedWithCustomError(ctx.registry, "AlreadyRevoked");
+      await expect(on(ctx.registry, ctx.issuer).revoke(auth.commitment)).to.be.revertedWithCustomError(ctx.registry, "AlreadyRevoked");
     });
 
     it("rejects revocation by the holder, another trusted issuer, or for unknown records", async () => {
       const ctx = await loadFixture(fixture);
       const auth = await registered(ctx);
-      await expect(ctx.registry.connect(ctx.holder).revoke(auth.commitment))
+      await expect(on(ctx.registry, ctx.holder).revoke(auth.commitment))
         .to.be.revertedWithCustomError(ctx.registry, "NotCredentialIssuer")
         .withArgs(ctx.holder.address, ctx.issuer.address);
-      await expect(ctx.registry.connect(ctx.secondIssuer).revoke(auth.commitment)).to.be.revertedWithCustomError(ctx.registry, "NotCredentialIssuer");
-      await expect(ctx.registry.connect(ctx.issuer).revoke(freshCommitment())).to.be.revertedWithCustomError(ctx.registry, "UnknownCredential");
+      await expect(on(ctx.registry, ctx.secondIssuer).revoke(auth.commitment)).to.be.revertedWithCustomError(ctx.registry, "NotCredentialIssuer");
+      await expect(on(ctx.registry, ctx.issuer).revoke(freshCommitment())).to.be.revertedWithCustomError(ctx.registry, "UnknownCredential");
     });
 
     it("supports an explicit, evented admin override revocation", async () => {
       const ctx = await loadFixture(fixture);
       const auth = await registered(ctx);
-      await expect(ctx.registry.connect(ctx.admin).adminRevoke(auth.commitment))
+      await expect(on(ctx.registry, ctx.admin).adminRevoke(auth.commitment))
         .to.emit(ctx.registry, "CredentialRevoked")
         .withArgs(auth.commitment, ctx.admin.address, true);
       expect(await ctx.registry.credentialStatus(auth.commitment)).to.equal(Status.Revoked);
@@ -341,12 +346,12 @@ describe("CredentialRegistry", () => {
       const ctx = await loadFixture(fixture);
       const auth = await makeAuth(ctx);
       const sig = await sign(ctx, auth);
-      await ctx.registry.connect(ctx.holder).register(auth, sig);
-      await ctx.registry.connect(ctx.issuer).revoke(auth.commitment);
-      await expect(ctx.registry.connect(ctx.holder).register(auth, sig)).to.be.revertedWithCustomError(ctx.registry, "AlreadyRegistered");
+      await on(ctx.registry, ctx.holder).register(auth, sig);
+      await on(ctx.registry, ctx.issuer).revoke(auth.commitment);
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig)).to.be.revertedWithCustomError(ctx.registry, "AlreadyRegistered");
       // Even a freshly signed authorization for the same commitment cannot resurrect it.
       const again = { ...auth, deadline: auth.deadline + 1 };
-      await expect(ctx.registry.connect(ctx.holder).register(again, await sign(ctx, again))).to.be.revertedWithCustomError(
+      await expect(on(ctx.registry, ctx.holder).register(again, await sign(ctx, again))).to.be.revertedWithCustomError(
         ctx.registry,
         "AlreadyRegistered",
       );
@@ -361,36 +366,36 @@ describe("CredentialRegistry", () => {
       const pendingAuth = await makeAuth(ctx); // signed before removal, never submitted
       const pendingSig = await sign(ctx, pendingAuth);
 
-      await expect(ctx.registry.connect(ctx.admin).removeIssuer(ctx.issuer.address))
+      await expect(on(ctx.registry, ctx.admin).removeIssuer(ctx.issuer.address))
         .to.emit(ctx.registry, "IssuerRemoved")
         .withArgs(ctx.issuer.address, 1n);
       expect(await ctx.registry.credentialStatus(auth.commitment)).to.equal(Status.IssuerInactive);
-      await expect(ctx.gate.connect(ctx.holder).checkIn(auth.commitment))
+      await expect(on(ctx.gate, ctx.holder).checkIn(auth.commitment))
         .to.be.revertedWithCustomError(ctx.gate, "AccessDenied")
         .withArgs(Status.IssuerInactive, false);
-      await expect(ctx.registry.connect(ctx.holder).register(pendingAuth, pendingSig)).to.be.revertedWithCustomError(ctx.registry, "IssuerNotActive");
+      await expect(on(ctx.registry, ctx.holder).register(pendingAuth, pendingSig)).to.be.revertedWithCustomError(ctx.registry, "IssuerNotActive");
 
       // A removed issuer may still revoke its own records.
-      await expect(ctx.registry.connect(ctx.issuer).revoke(auth.commitment)).to.emit(ctx.registry, "CredentialRevoked");
+      await expect(on(ctx.registry, ctx.issuer).revoke(auth.commitment)).to.emit(ctx.registry, "CredentialRevoked");
 
-      await ctx.registry.connect(ctx.admin).addIssuer(ctx.issuer.address);
+      await on(ctx.registry, ctx.admin).addIssuer(ctx.issuer.address);
       expect(await ctx.registry.credentialStatus(auth.commitment)).to.equal(Status.Revoked);
-      await expect(ctx.registry.connect(ctx.holder).register(pendingAuth, pendingSig))
+      await expect(on(ctx.registry, ctx.holder).register(pendingAuth, pendingSig))
         .to.be.revertedWithCustomError(ctx.registry, "StaleIssuerEpoch")
         .withArgs(0n, 1n);
 
       // Unrevoked records from the old epoch stay invalid too.
       const ctx2 = await loadFixture(fixture);
       const old = await registered(ctx2);
-      await ctx2.registry.connect(ctx2.admin).removeIssuer(ctx2.issuer.address);
-      await ctx2.registry.connect(ctx2.admin).addIssuer(ctx2.issuer.address);
+      await on(ctx2.registry, ctx2.admin).removeIssuer(ctx2.issuer.address);
+      await on(ctx2.registry, ctx2.admin).addIssuer(ctx2.issuer.address);
       expect(await ctx2.registry.credentialStatus(old.commitment)).to.equal(Status.IssuerInactive);
       expect(await ctx2.registry.isCredentialValid(old.commitment, ctx2.holder.address, SCHEMA_ID)).to.equal(false);
 
       // New authorizations in the new epoch work.
       const fresh = await registered(ctx2);
       expect(fresh.issuerEpoch).to.equal(1);
-      await expect(ctx2.gate.connect(ctx2.holder).checkIn(fresh.commitment)).to.emit(ctx2.gate, "MemberCheckedIn");
+      await expect(on(ctx2.gate, ctx2.holder).checkIn(fresh.commitment)).to.emit(ctx2.gate, "MemberCheckedIn");
     });
   });
 
@@ -401,9 +406,9 @@ describe("CredentialRegistry", () => {
       const salt = "0x" + "ab".repeat(32);
       const commitment = commitmentFor(token, salt);
       const auth = await makeAuth(ctx, { commitment });
-      const tx = await ctx.registry.connect(ctx.holder).register(auth, await sign(ctx, auth));
+      const tx = await on(ctx.registry, ctx.holder).register(auth, await sign(ctx, auth));
       const receipt = await tx.wait();
-      const haystack = [tx.data, ...receipt!.logs.flatMap((l) => [l.data, ...l.topics])].join("").toLowerCase();
+      const haystack = [tx.data, ...receipt!.logs.flatMap((l: { data: string; topics: readonly string[] }) => [l.data, ...l.topics])].join("").toLowerCase();
       expect(haystack).to.not.include(Buffer.from(token).toString("hex"));
       expect(haystack).to.not.include(salt.slice(2));
       expect(haystack).to.include(commitment.slice(2).toLowerCase());

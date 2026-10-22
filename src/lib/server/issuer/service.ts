@@ -145,7 +145,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     const keys = await issuerKeys();
     const issuerAddress = getAddress(keys.evmWallet.address);
     const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, provider());
-    const [active, epoch] = (await registry.issuerState(issuerAddress)) as [boolean, bigint];
+    const [active, epoch] = (await registry.getFunction("issuerState")(issuerAddress)) as [boolean, bigint];
     if (!active) throw new ApiError(409, "ISSUER_NOT_ACTIVE_ON_CHAIN", "issuer attestation key is not authorized in the registry");
 
     const holderAddress = getAddress(claimed.holder_address);
@@ -281,7 +281,7 @@ export async function revokeCredential(issuer: Session, commitment: string): Pro
   if (rec.revoked) throw new ApiError(409, "ALREADY_REVOKED", "credential is already revoked");
   const keys = await issuerKeys();
   const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, keys.evmWallet);
-  const tx = await registry.revoke(commitment);
+  const tx = await registry.getFunction("revoke")(commitment);
   const receipt = await tx.wait();
   if (!receipt || receipt.status !== 1) throw new ApiError(502, "REVOKE_TX_FAILED", "revocation transaction failed");
   db()

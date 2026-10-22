@@ -65,8 +65,8 @@ export async function readRecord(commitment: string, d: Deployment = loadDeploym
   const registry = registryContract(d);
   const blockTag = await provider().getBlockNumber();
   const [r, status] = await Promise.all([
-    registry.getRecord(commitment, { blockTag }),
-    registry.credentialStatus(commitment, { blockTag }),
+    registry.getFunction("getRecord")(commitment, { blockTag }),
+    registry.getFunction("credentialStatus")(commitment, { blockTag }),
   ]);
   return {
     exists: r.holder !== "0x0000000000000000000000000000000000000000",

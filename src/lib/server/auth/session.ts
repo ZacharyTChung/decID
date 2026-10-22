@@ -52,6 +52,7 @@ export function createSignInMessage(address: string, chainId: number, role: Role
   const now = nowSeconds();
   db().prepare("INSERT INTO auth_nonces (nonce, expires_at) VALUES (?, ?)").run(nonce, now + NONCE_TTL);
   const message = new SiweMessage({
+    scheme: new URL(cfg.origin).protocol.replace(":", ""),
     domain: cfg.domain,
     address: getAddress(address),
     statement: `Sign in to the Decentralized Identity MVP as ${role}. This does not authorize any transaction or credential presentation.`,

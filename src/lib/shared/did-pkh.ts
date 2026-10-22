@@ -39,7 +39,7 @@ export function parseHolderDid(did: string): PkhAccount {
   if (!Number.isSafeInteger(chainId)) throw new Error("chain id out of range");
   let address: string;
   try {
-    address = getAddress(m[2]);
+    address = getAddress(m[2]!);
   } catch {
     throw new Error("invalid EIP-55 checksum in did:pkh address");
   }
