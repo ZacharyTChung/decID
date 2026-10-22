@@ -69,6 +69,18 @@ npm run test:ui          # browser test of all three views (Playwright + Chromiu
 
 Without an injected wallet, the UI says so and does not pretend to sign. Use `npm run demo` instead.
 
+## Registry administration (local)
+
+```bash
+npm run admin -- status                    # issuer signer, active flag, epoch
+npm run admin -- remove-issuer             # removeIssuer: all its credentials become IssuerInactive, permanently
+npm run admin -- add-issuer                # re-add: new epoch; old credentials stay invalid, new issuance works
+npm run admin -- revoke 0x<commitment>     # adminRevoke: explicit, evented admin override
+npm run admin -- record 0x<commitment>     # public on-chain record and status
+```
+
+The CLI signs as Hardhat dev account #0, the registry admin set by `npm run deploy`, and refuses to run on any chain other than 31337.
+
 ## Reset
 
 ```bash
