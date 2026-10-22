@@ -21,6 +21,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Issuer removal = epoch bump.** Re-adding an issuer never revives old records or authorizations.
 - **Presentation proof is a custom EIP-712 message**, not a W3C VP. It is bound to nonce, audience, action, chain, registry, holder, commitment and expiry.
 - **Holder bundle storage:** memory only plus encrypted export. The server deletes its copy at pickup.
+- **CSP** is set in `next.config.ts`. It allows `'unsafe-inline'` scripts because Next.js injects inline bootstrap scripts; nonce-based CSP is roadmap.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
 
@@ -33,7 +34,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:app` | 50 passed (4 files; includes API integration against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
-| Browser smoke (Playwright + Chromium, injected EIP-1193 provider signing with Hardhat dev keys; script kept outside the repo) | full holder → issuer → register → gate → verify → revoke → reject → import flow passed |
+| `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused |
 
 ## Blockers / unverified
 
@@ -42,4 +43,4 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 
 ## Next concrete step
 
-Push to the remote repository, then try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”).
+The owner creates the empty GitHub repo `ZacharyTChung/decid` (the GitHub integration cannot create repositories: 403). Then push `main`, confirm the CI workflow (`.github/workflows/ci.yml`) is green, and try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”).

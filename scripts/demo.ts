@@ -10,10 +10,8 @@
  * public dev accounts. It exits with status 1 if any expected condition fails.
  * Your normal dev chain (8545), app (3000) and .data/ are not touched.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { Contract, JsonRpcProvider, hexlify, toUtf8Bytes, type HDNodeWallet } from "ethers";
+import { Contract, hexlify, toUtf8Bytes, type HDNodeWallet } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contracts";
 import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../src/lib/shared/eip712";
 import { SCHEMA_ID } from "../src/lib/shared/constants";
@@ -22,18 +20,15 @@ import type { HolderBundle } from "../src/lib/shared/bundle";
 import type { ChallengeResponse } from "../src/lib/shared/api";
 import type { VerificationResult } from "../src/lib/shared/verification";
 import { DEV_ROLES, devWallet } from "./lib/dev-accounts";
-import { setupKeys, parseEnvFile } from "./lib/setup-keys";
-import { deployLocal } from "./lib/deploy";
+import { startLocalStack, type LocalStack } from "./lib/local-stack";
 
 const ROOT = process.cwd();
-const DEMO_DIR = path.join(ROOT, ".demo");
 const CHAIN_PORT = 8546;
 const APP_PORT = 3100;
-const RPC = `http://127.0.0.1:${CHAIN_PORT}`;
 const ORIGIN = `http://localhost:${APP_PORT}`;
 const SYNTHETIC = { fullName: "Demo Sentinel-Okapi", dateOfBirth: "1990-01-01", documentNumber: "SYN-DEMO0001", country: "ZZ", syntheticDataConfirmed: true };
 
-const children: ChildProcess[] = [];
+let stack: LocalStack | undefined;
 let failures = 0;
 
 function step(title: string) {
@@ -51,41 +46,8 @@ function must(condition: boolean, label: string, detail?: unknown) {
   if (!check(condition, label, detail)) throw new Error(`cannot continue: ${label}`);
 }
 
-function startProcess(cmd: string, args: string[], env: NodeJS.ProcessEnv, name: string): ChildProcess {
-  const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  let log = "";
-  child.stdout?.on("data", (d) => (log = (log + String(d)).slice(-4000)));
-  child.stderr?.on("data", (d) => (log = (log + String(d)).slice(-4000)));
-  child.on("exit", (code) => {
-    if (code && code !== 0 && !shuttingDown) console.error(`[${name}] exited with ${code}\n${log}`);
-  });
-  children.push(child);
-  return child;
-}
-
-async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: number) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      if (await probe()) return;
-    } catch {
-      // keep waiting
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-let shuttingDown = false;
 function shutdown() {
-  shuttingDown = true;
-  for (const c of children) {
-    try {
-      if (c.pid) process.kill(-c.pid, "SIGTERM");
-    } catch {
-      // already gone
-    }
-  }
+  stack?.stop();
 }
 process.on("SIGINT", () => {
   shutdown();
@@ -153,41 +115,15 @@ async function main() {
   console.log("Decentralized identity MVP: headless lifecycle demo (synthetic data, local chain only)");
 
   step("Prepare local infrastructure");
-  if (!existsSync(path.join(ROOT, "artifacts/contracts/CredentialRegistry.sol/CredentialRegistry.json"))) {
-    throw new Error("contracts are not compiled: run `npm run compile` first");
-  }
-  rmSync(DEMO_DIR, { recursive: true, force: true });
-  mkdirSync(DEMO_DIR, { recursive: true });
-  startProcess(process.execPath, ["node_modules/hardhat/dist/src/cli.js", "node", "--port", String(CHAIN_PORT)], process.env, "hardhat");
-  const provider = new JsonRpcProvider(RPC, undefined, { cacheTimeout: -1 });
-  await waitFor("Hardhat node", async () => (await provider.getNetwork()).chainId === 31337n, 90_000);
-  check(true, `Hardhat node on ${RPC} (chain 31337)`);
-
-  const envFile = path.join(DEMO_DIR, "issuer.env");
-  const trustFile = path.join(DEMO_DIR, "trusted-issuers.json");
-  const deploymentFile = path.join(DEMO_DIR, "deployment.json");
-  const keys = await setupKeys({ envFile, trustFile, appOrigin: ORIGIN, rpcUrl: RPC, force: true });
-  check(true, `Issuer keys generated: ${keys.issuerDid.slice(0, 28)}… / EVM ${keys.issuerEvmAddress}`);
-  const issuerEnv = parseEnvFile(envFile);
-  const deployment = await deployLocal({ rpcUrl: RPC, issuerEvmPrivateKey: issuerEnv.ISSUER_EVM_PRIVATE_KEY!, deploymentFile, projectRoot: ROOT });
-  check(true, `Contracts deployed: registry ${deployment.registry}, gate ${deployment.gate}`);
-
-  startProcess(
-    process.execPath,
-    ["node_modules/next/dist/bin/next", "dev", "--port", String(APP_PORT)],
-    {
-      ...process.env,
-      ...issuerEnv,
-      NEXT_DIST_DIR: ".next-demo",
-      DATA_DIR: path.join(DEMO_DIR, "data"),
-      TRUSTED_ISSUERS_FILE: trustFile,
-      DEPLOYMENT_FILE: deploymentFile,
-      NEXT_TELEMETRY_DISABLED: "1",
-    },
-    "next",
-  );
-  await waitFor("Next.js app", async () => (await fetch(`${ORIGIN}/api/config`)).status === 200, 180_000);
-  check(true, `App server on ${ORIGIN}`);
+  stack = await startLocalStack({
+    dir: path.join(ROOT, ".demo"),
+    chainPort: CHAIN_PORT,
+    appPort: APP_PORT,
+    mode: "dev",
+    distDir: ".next-demo",
+    log: (m) => check(true, m),
+  });
+  const { provider, deployment } = stack;
 
   const holder = new HttpActor("holder", devWallet(DEV_ROLES.holder, provider));
   const intruder = new HttpActor("intruder", devWallet(DEV_ROLES.otherHolder, provider));

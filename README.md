@@ -19,7 +19,7 @@ A working prototype of a privacy-conscious credential flow with three roles:
 | Credentials | W3C VC Data Model 2.0 secured as `application/vc+jwt` (VC-JOSE-COSE) with `jose`; issuer `did:key` (Ed25519) via `@digitalbazaar/did-method-key`; holder `did:pkh:eip155` |
 | Sign-in | ERC-4361 SIWE via `siwe`, server-side sessions |
 | Storage | SQLite via `better-sqlite3` |
-| Tests | Hardhat + Mocha/Chai (contracts), Vitest (credentials, API, integration), scripted headless demo |
+| Tests | Hardhat + Mocha/Chai (contracts), Vitest (credentials, API, integration), scripted headless demo, Playwright UI test |
 
 **Node.js 22.13 or newer** (tested on 22.22). Package manager: npm (lockfile committed, exact versions pinned).
 
@@ -50,7 +50,10 @@ npm run test:app         # 50 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
+npm run test:ui          # browser test of all three views (Playwright + Chromium; production build, isolated stack)
 ```
+
+`test:ui` needs a Chromium for Playwright (`npx playwright install chromium` once). The page's wallet in that test is an injected EIP-1193 provider that signs with Hardhat's public dev keys, so its signatures and transactions are real. It is test tooling, not part of the app. CI (`.github/workflows/ci.yml`) runs every command above.
 
 ## Using the UI with a browser wallet
 

@@ -26,7 +26,7 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Alter authorization fields / cross-chain or cross-deployment replay | EIP-712 struct + domain with chainId and registry; OZ ECDSA (rejects malleable sig) | — |
 | Re-register a revoked credential | Commitments are permanently consumed | — |
 | Unauthorized issuer actions | Server-side role check on every issuer route; operator allowlist re-checked per request; on-chain `onlyRole` for admin | Operator wallet compromise grants approval/revocation until removed from the allowlist |
-| CSRF / cross-site requests | `Origin` must equal `APP_ORIGIN`; JSON-only bodies; `SameSite=Strict` HttpOnly cookie | No CSP header yet |
+| CSRF / cross-site requests | `Origin` must equal `APP_ORIGIN`; JSON-only bodies; `SameSite=Strict` HttpOnly cookie; CSP (`default-src 'self'`, `connect-src` limited to the app and the local RPC, `frame-ancestors 'none'`) | CSP still allows `'unsafe-inline'` scripts (no nonce setup) |
 | Session theft | Random 256-bit id, only its hash stored, 1 h expiry, dropped on wallet/chain change in the UI | Local HTTP (no `Secure` flag unless `APP_ORIGIN` is https) |
 | Brute force / spam | Per-client fixed-window rate limits on auth, requests, challenges, presentations; body size limit | Client key is `X-Forwarded-For` or a single local bucket. Adequate for a local prototype only |
 | Holder's backup file stolen | AES-256-GCM, PBKDF2-SHA-256 600k iterations, AAD-bound header, ≥12-char password | Offline guessing of weak passwords remains possible |
@@ -68,7 +68,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 3. **Issuer key rotation:** multiple keys per issuer in the trust policy with validity periods, did:web or another updatable DID method for the issuer, and a rotation runbook that preserves old credentials until expiry.
 4. **Account recovery:** re-issuance bound to a new wallet after out-of-band re-verification, revoking the old commitment. Optionally smart-account (EIP-1271) holders, which SIWE verification would then need to support.
 5. **Real issuer onboarding:** governed trust lists, issuer accreditation, audit logging, HSM-held keys, real identity proofing. All of this is out of scope for this prototype.
-6. **Hardening:** CSP, HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
+6. **Hardening:** nonce-based CSP (dropping `'unsafe-inline'`), HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
 
 ## Implemented vs future (summary)
 
@@ -77,7 +77,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 | VC 2.0 + vc+jwt, Ed25519 allowlist, trust policy pinning, did:key resolution cross-check | Selective disclosure, ZK predicates |
 | Salted commitment over exact token bytes | Privacy-preserving status |
 | EIP-712 registration with holder binding, deadline, epoch, one-time commitments | Relayers / gasless registration |
-| SIWE sessions, origin checks, rate limits, server-side roles | CSP, production session infrastructure |
+| SIWE sessions, origin checks, rate limits, server-side roles, CSP + security headers | Nonce-based CSP, production session infrastructure |
 | Single-use, audience-bound challenges with atomic consumption | Standard presentation protocol (e.g. OpenID4VP) |
 | Encrypted holder export (PBKDF2 + AES-GCM) | Secure wallet storage, recovery |
 | Issuer removal epochs, admin override revocation | Key rotation, governance |

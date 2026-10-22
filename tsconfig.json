@@ -39,7 +39,9 @@
     "scripts/**/*.ts",
     "vitest.config.ts",
     ".next-demo/types/**/*.ts",
-    ".next-demo/dev/types/**/*.ts"
+    ".next-demo/dev/types/**/*.ts",
+    ".next-uitest/types/**/*.ts",
+    ".next-uitest/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

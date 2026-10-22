@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - run: npm run typecheck
+      - run: npm run test:contracts
+      - run: npm run test:app
+      - run: npm run build
+      - name: Headless lifecycle demo (local chain + app, synthetic data)
+        run: npm run demo
+      - run: npx playwright install --with-deps chromium
+      - name: Browser UI test
+        run: npm run test:ui
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: .uitest/screenshots/
+          if-no-files-found: ignore

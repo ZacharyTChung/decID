@@ -22,3 +22,4 @@ config/trusted-issuers.local.json
 
 .DS_Store
 npm-debug.log*
+.uitest/
