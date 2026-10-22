@@ -11,6 +11,7 @@ interface PendingRequest {
   holderDid: string;
   createdAt: number;
   application: Omit<SyntheticApplicationT, "syntheticDataConfirmed">;
+  recovery: { previousHolder: string; liveCredentials: number } | null;
 }
 
 interface IssuedCredential {
@@ -54,6 +55,15 @@ function ReviewQueue({ onIssued }: { onIssued: () => void }) {
                 <Mono>{r.holderDid}</Mono>
                 <span className="text-xs text-slate-500">{new Date(r.createdAt * 1000).toLocaleString()}</span>
               </div>
+              {r.recovery && (
+                <div className="mt-3">
+                  <Notice tone="warn">
+                    Account recovery: the applicant says they lost wallet <Mono>{r.recovery.previousHolder}</Mono>. Approving first shuts down its{" "}
+                    {r.recovery.liveCredentials} live credential(s) (revoked on-chain, or their unused authorization cancelled), then issues to the new wallet. Only
+                    approve after re-verifying the applicant: the lost wallet cannot sign anything.
+                  </Notice>
+                </div>
+              )}
               <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {Object.entries(r.application).map(([k, v]) => (
                   <div key={k}>

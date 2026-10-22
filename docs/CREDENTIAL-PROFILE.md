@@ -170,6 +170,7 @@ Checks after the first failure are reported as `skipped` (“not reached”).
 - Only the issuer address recorded for a commitment can `revoke` it, even after that issuer is removed. Revocation is permanent.
 - The admin can `adminRevoke` any record, and the event records `adminOverride = true`.
 - A revoked commitment can never be registered again.
+- Before registration, the issuer that signed an authorization can withdraw it with `cancelAuthorization(commitment)` (used by account recovery). The cancellation is scoped to that issuer: it blocks only authorizations whose `issuer` is the caller (`AuthorizationWasCancelled`).
 - Removing an issuer immediately makes all its records `IssuerInactive`. Re-adding it starts a new epoch, so old records stay invalid and old authorizations are rejected (`StaleIssuerEpoch`).
 - Expiry is `block.timestamp >= expiresAt` on-chain and `now >= validUntil` off-chain. Validity starts at `validFrom` inclusive.
-- Credentials that are issued but never registered cannot pass verification, because the registry check fails, and they cannot be revoked on-chain. They simply expire.
+- Credentials that are issued but never registered cannot pass verification, because the registry check fails. Their authorization can be cancelled, or it lapses at its submission deadline.

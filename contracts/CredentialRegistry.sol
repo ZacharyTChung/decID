@@ -73,6 +73,8 @@ contract CredentialRegistry is AccessControl, EIP712 {
 
     mapping(bytes32 commitment => Record) private _records;
     mapping(address issuer => IssuerState) private _issuers;
+    /// Unregistered authorizations an issuer has withdrawn (e.g. the holder's wallet was lost).
+    mapping(bytes32 commitment => address issuer) private _cancelledBy;
 
     event IssuerAdded(address indexed issuer, uint64 epoch);
     event IssuerRemoved(address indexed issuer, uint64 newEpoch);
@@ -85,6 +87,7 @@ contract CredentialRegistry is AccessControl, EIP712 {
         uint64 expiresAt
     );
     event CredentialRevoked(bytes32 indexed commitment, address indexed revokedBy, bool adminOverride);
+    event AuthorizationCancelled(bytes32 indexed commitment, address indexed issuer);
 
     error ZeroAddress();
     error ZeroDeploymentId();
@@ -102,6 +105,7 @@ contract CredentialRegistry is AccessControl, EIP712 {
     error UnknownCredential(bytes32 commitment);
     error NotCredentialIssuer(address sender, address issuer);
     error AlreadyRevoked(bytes32 commitment);
+    error AuthorizationWasCancelled(bytes32 commitment);
 
     /// @notice Random per-deployment value, signed into every authorization. A
     /// local chain restarts with the same deployer nonce, so the registry address
@@ -158,6 +162,9 @@ contract CredentialRegistry is AccessControl, EIP712 {
         if (!s.active) revert IssuerNotActive(auth.issuer);
         if (auth.issuerEpoch != s.epoch) revert StaleIssuerEpoch(auth.issuerEpoch, s.epoch);
 
+        // An issuer can withdraw an authorization before it is used (cancelAuthorization).
+        if (_cancelledBy[auth.commitment] == auth.issuer) revert AuthorizationWasCancelled(auth.commitment);
+
         // Replay protection: a commitment can be registered exactly once, ever.
         // Revoked records keep occupying their slot, so they cannot be re-registered.
         if (_records[auth.commitment].holder != address(0)) revert AlreadyRegistered(auth.commitment);
@@ -193,7 +200,22 @@ contract CredentialRegistry is AccessControl, EIP712 {
         _revoke(commitment, false);
     }
 
+    /// @notice Withdraws an authorization this issuer signed but the holder has not registered
+    /// yet, e.g. when the holder lost the wallet and the credential is reissued elsewhere.
+    /// Scoped to the caller: it blocks only authorizations whose `issuer` is msg.sender,
+    /// so one issuer cannot interfere with another's. Registered records use revoke().
+    function cancelAuthorization(bytes32 commitment) external {
+        if (!_issuers[msg.sender].active) revert IssuerNotActive(msg.sender);
+        if (_records[commitment].holder != address(0)) revert AlreadyRegistered(commitment);
+        _cancelledBy[commitment] = msg.sender;
+        emit AuthorizationCancelled(commitment, msg.sender);
+    }
+
     // ---------------------------------------------------------------- views
+
+    function isAuthorizationCancelled(bytes32 commitment, address issuer) external view returns (bool) {
+        return issuer != address(0) && _cancelledBy[commitment] == issuer;
+    }
 
     function hashAuthorization(RegistrationAuthorization calldata auth) public pure returns (bytes32) {
         return keccak256(

@@ -51,6 +51,8 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
   const [requests, setRequests] = useState<HolderRequestView[]>();
   const [form, setForm] = useState(randomSyntheticApplication);
   const [confirmed, setConfirmed] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryOf, setRecoveryOf] = useState("");
   const submit = useAction();
   const pickup = useAction();
   const load = useCallback(async () => {
@@ -76,7 +78,7 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           void submit.run(async () => {
-            await api("POST", "/api/holder/requests", { ...form, syntheticDataConfirmed: confirmed });
+            await api("POST", "/api/holder/requests", { ...form, syntheticDataConfirmed: confirmed, ...(recovering ? { recoveryOf: recoveryOf.trim() } : {}) });
             setConfirmed(false);
             await load();
           });
@@ -94,6 +96,19 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
         <Field label="Country code" hint="Use ZZ (user-assigned code) for synthetic data.">
           <input className={inputClass} value={form.country} maxLength={2} onChange={(e) => setForm({ ...form, country: e.target.value.toUpperCase() })} required />
         </Field>
+        <div className="rounded-lg border border-slate-200 p-3 text-sm sm:col-span-2">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-1" checked={recovering} onChange={(e) => setRecovering(e.target.checked)} />
+            <span>This replaces a credential held by a wallet I lost (account recovery).</span>
+          </label>
+          {recovering && (
+            <div className="mt-2 space-y-1">
+              <Field label="Lost wallet address" hint="The issuer re-verifies you, shuts down that wallet's credentials (so a thief cannot use them), then issues to this wallet.">
+                <input className={inputClass} value={recoveryOf} placeholder="0x…" onChange={(e) => setRecoveryOf(e.target.value)} />
+              </Field>
+            </div>
+          )}
+        </div>
         <label className="flex items-start gap-2 text-sm sm:col-span-2">
           <input type="checkbox" className="mt-1" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
           <span>I confirm this is synthetic test data and not anyone’s real identity information.</span>
@@ -120,6 +135,7 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
               <span className="flex items-center gap-2">
                 <Badge tone={r.status === "approved" ? "green" : r.status === "rejected" ? "red" : "amber"}>{r.status === "approved" ? "issued" : r.status}</Badge>
                 <span className="text-slate-500">{new Date(r.createdAt * 1000).toLocaleString()}</span>
+                {r.recoveryOf && <Badge tone="blue">recovery of {r.recoveryOf.slice(0, 8)}…</Badge>}
                 {r.rejectReason && <span className="text-rose-700">Reason: {r.rejectReason}</span>}
               </span>
               {r.bundleAvailable && (

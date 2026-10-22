@@ -101,9 +101,25 @@ export function db(): Database.Database {
     mkdirSync(path.dirname(file), { recursive: true });
     const d = new Database(file);
     d.exec(SCHEMA);
+    migrate(d);
     instance = { file, db: d };
   }
   return instance.db;
+}
+
+/** Additive migrations for local databases created by earlier versions of this prototype. */
+function migrate(d: Database.Database): void {
+  const addColumn = (table: string, column: string, decl: string) => {
+    const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  };
+  // Account recovery: a request may replace the credentials of a lost wallet.
+  addColumn("issuer_requests", "recovery_of", "TEXT");
+  // Which EVM attestation key authorized a credential (needed to cancel or revoke it later).
+  addColumn("issuer_credentials", "issuer_signer", "TEXT");
+  // Set when a recovery replaced this credential (revoked or authorization cancelled).
+  addColumn("issuer_credentials", "superseded_at", "INTEGER");
+  addColumn("issuer_credentials", "superseded_by", "TEXT");
 }
 
 export function closeDb(): void {

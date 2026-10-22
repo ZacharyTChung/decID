@@ -34,6 +34,16 @@ export const SyntheticApplication = z.strictObject({
 });
 export type SyntheticApplicationT = z.infer<typeof SyntheticApplication>;
 
+/**
+ * A holder request. With `recoveryOf`, it asks the issuer to re-verify the applicant and
+ * replace the credentials of a wallet they lost: those are revoked (or their unregistered
+ * authorizations cancelled) before a credential is issued to the new wallet.
+ */
+export const HolderRequestBody = z.strictObject({
+  ...SyntheticApplication.shape,
+  recoveryOf: Address.optional(),
+});
+
 export const ReviewDecisionRequest = z.discriminatedUnion("decision", [
   z.strictObject({ decision: z.literal("approve") }),
   z.strictObject({ decision: z.literal("reject"), reason: z.string().trim().min(3).max(200) }),
@@ -94,4 +104,5 @@ export interface HolderRequestView {
   reviewedAt: number | null;
   rejectReason: string | null;
   bundleAvailable: boolean;
+  recoveryOf: string | null;
 }

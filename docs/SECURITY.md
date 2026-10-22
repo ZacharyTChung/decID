@@ -25,6 +25,7 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Register someone else's authorization | `msg.sender == holder`; holder signed into the EIP-712 struct | — |
 | Alter authorization fields / cross-chain or cross-deployment replay | EIP-712 struct + domain with chainId and registry; OZ ECDSA (rejects malleable sig) | — |
 | Re-register a revoked credential | Commitments are permanently consumed | — |
+| Holder loses a wallet (thief holds the key and bundle) | Account recovery: the issuer revokes the lost wallet's registered credentials and cancels its unregistered authorizations before issuing to the new wallet | Relies on the issuer re-verifying the person; the lost wallet cannot co-sign. A recovery request by an impostor is only as strong as that re-verification |
 | Replay an old authorization after a local chain restart/reset (same registry address, issuer key and epoch) | Random `deploymentId` fixed at construction is signed into every authorization (`WrongDeployment`) | — |
 | Get a session with an edited SIWE message (e.g. no expiry) | The server stores the SHA-256 of the exact message it issued with the nonce and requires an identical message | — |
 | Concurrent issuer transactions racing for one nonce | Issuer-key transactions are serialized in-process | Single server process assumed |
@@ -70,7 +71,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 1. **Stronger disclosure privacy:** SD-JWT VC or BBS selective disclosure, and ZK predicates.
 2. **Unlinkability:** pairwise or rotating holder identifiers, privacy-preserving status (Bitstring Status List or ZK non-revocation), no per-credential public record.
 3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: did:web or another updatable DID method so verifiers can learn rotations without a local policy file.
-4. **Account recovery:** re-issuance bound to a new wallet after out-of-band re-verification, revoking the old commitment. Optionally smart-account (EIP-1271) holders, which SIWE verification would then need to support.
+4. **Account recovery (implemented for the simulated issuer):** reissue to a new wallet after re-verification, revoking or cancelling the old wallet's credentials first. Still to do: smart-account (EIP-1271) or social-recovery holders, which SIWE and presentation verification would need to support.
 5. **Real issuer onboarding:** governed trust lists, issuer accreditation, audit logging, HSM-held keys, real identity proofing. All of this is out of scope for this prototype.
 6. **Hardening:** HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
 

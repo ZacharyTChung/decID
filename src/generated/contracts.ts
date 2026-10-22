@@ -73,6 +73,17 @@ export const CREDENTIAL_REGISTRY_ABI = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AuthorizationWasCancelled",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint64",
         "name": "expiresAt",
         "type": "uint64"
@@ -267,6 +278,25 @@ export const CREDENTIAL_REGISTRY_ABI = [
     "inputs": [],
     "name": "ZeroDeploymentId",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "issuer",
+        "type": "address"
+      }
+    ],
+    "name": "AuthorizationCancelled",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -516,6 +546,19 @@ export const CREDENTIAL_REGISTRY_ABI = [
       }
     ],
     "name": "adminRevoke",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancelAuthorization",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -794,6 +837,30 @@ export const CREDENTIAL_REGISTRY_ABI = [
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "issuer",
+        "type": "address"
+      }
+    ],
+    "name": "isAuthorizationCancelled",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

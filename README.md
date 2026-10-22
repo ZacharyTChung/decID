@@ -45,8 +45,8 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 ### All checks
 
 ```bash
-npm run test:contracts   # 33 Hardhat tests (registry + gate security properties)
-npm run test:app         # 61 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:contracts   # 35 Hardhat tests (registry + gate security properties)
+npm run test:app         # 64 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -80,6 +80,12 @@ npm run admin -- record 0x<commitment>     # public on-chain record and status
 ```
 
 The CLI signs as Hardhat dev account #0, the registry admin set by `npm run deploy`, and refuses to run on any chain other than 31337.
+
+## Account recovery (lost wallet)
+
+On the **Holder** page, from the new wallet, tick *This replaces a credential held by a wallet I lost* and enter the lost wallet's address. The issuer sees a recovery warning, re-verifies the applicant, and approves. Approval first shuts down every live credential of the lost wallet: registered ones are revoked on-chain; issued-but-unregistered ones have their authorization cancelled (`cancelAuthorization`), so a thief holding the old bundle can never register it. Only then is a credential issued to the new wallet. If any step fails, nothing new is issued and the request stays pending.
+
+The lost wallet cannot sign anything, so recovery rests entirely on the issuer re-verifying the person. In this prototype that means the simulated operator's judgement.
 
 ## Issuer key rotation
 

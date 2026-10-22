@@ -55,24 +55,29 @@ function assertKeysActiveInPolicy(did: string, evmAddress: string): void {
 
 // ---------------------------------------------------------------- holder side
 
-export function submitRequest(session: Session, application: SyntheticApplicationT): { id: string } {
+export function submitRequest(session: Session, application: SyntheticApplicationT, recoveryOf?: string): { id: string } {
   const d = db();
   const pending = d
     .prepare("SELECT 1 FROM issuer_requests WHERE holder_address = ? AND status = 'pending'")
     .get(session.address);
   if (pending) throw new ApiError(409, "REQUEST_PENDING", "you already have a pending request");
+  let previous: string | null = null;
+  if (recoveryOf) {
+    previous = getAddress(recoveryOf.toLowerCase());
+    if (previous === session.address) throw new ApiError(400, "BAD_RECOVERY", "recovery must name a different (lost) wallet");
+  }
   const id = randomUUID();
   d.prepare(
-    `INSERT INTO issuer_requests (id, holder_address, holder_did, chain_id, status, synthetic_json, created_at)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
-  ).run(id, session.address, deriveHolderDid(session.chainId, session.address), session.chainId, JSON.stringify(application), nowSeconds());
+    `INSERT INTO issuer_requests (id, holder_address, holder_did, chain_id, status, synthetic_json, created_at, recovery_of)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+  ).run(id, session.address, deriveHolderDid(session.chainId, session.address), session.chainId, JSON.stringify(application), nowSeconds(), previous);
   return { id };
 }
 
 export function listHolderRequests(session: Session): HolderRequestView[] {
   const rows = db()
     .prepare(
-      `SELECT r.id, r.status, r.created_at, r.reviewed_at, r.reject_reason,
+      `SELECT r.id, r.status, r.created_at, r.reviewed_at, r.reject_reason, r.recovery_of,
               EXISTS(SELECT 1 FROM issuer_bundle_pickup b WHERE b.request_id = r.id AND b.expires_at > ?) AS bundle
        FROM issuer_requests r WHERE r.holder_address = ? ORDER BY r.created_at DESC`,
     )
@@ -82,6 +87,7 @@ export function listHolderRequests(session: Session): HolderRequestView[] {
     created_at: number;
     reviewed_at: number | null;
     reject_reason: string | null;
+    recovery_of: string | null;
     bundle: number;
   }[];
   return rows.map((r) => ({
@@ -91,6 +97,7 @@ export function listHolderRequests(session: Session): HolderRequestView[] {
     reviewedAt: r.reviewed_at,
     rejectReason: r.reject_reason,
     bundleAvailable: r.bundle === 1,
+    recoveryOf: r.recovery_of,
   }));
 }
 
@@ -113,18 +120,76 @@ export interface PendingRequestView {
   holderDid: string;
   createdAt: number;
   application: SyntheticApplicationT;
+  /** For a recovery request: the lost wallet and how many of its credentials will be shut down. */
+  recovery: { previousHolder: string; liveCredentials: number } | null;
+}
+
+function liveCredentialsOf(holder: string) {
+  return db()
+    .prepare(
+      `SELECT commitment, issuer_signer FROM issuer_credentials
+       WHERE holder_address = ? AND revoked_at IS NULL AND superseded_at IS NULL ORDER BY issued_at`,
+    )
+    .all(holder) as { commitment: string; issuer_signer: string | null }[];
 }
 
 export function listPendingRequests(_issuer: Session): PendingRequestView[] {
   const rows = db()
-    .prepare("SELECT id, holder_did, created_at, synthetic_json FROM issuer_requests WHERE status = 'pending' ORDER BY created_at")
-    .all() as { id: string; holder_did: string; created_at: number; synthetic_json: string }[];
+    .prepare("SELECT id, holder_did, created_at, synthetic_json, recovery_of FROM issuer_requests WHERE status = 'pending' ORDER BY created_at")
+    .all() as { id: string; holder_did: string; created_at: number; synthetic_json: string; recovery_of: string | null }[];
   return rows.map((r) => ({
     id: r.id,
     holderDid: r.holder_did,
     createdAt: r.created_at,
     application: JSON.parse(r.synthetic_json),
+    recovery: r.recovery_of ? { previousHolder: r.recovery_of, liveCredentials: liveCredentialsOf(r.recovery_of).length } : null,
   }));
+}
+
+export interface SupersedeResult {
+  revoked: string[];
+  cancelled: string[];
+}
+
+/**
+ * Account recovery: shuts down every live credential of a lost wallet before anything is
+ * issued to the new one, so there are never two usable credentials for one person.
+ *  - registered and active → revoke() with the key that authorized it;
+ *  - not registered yet    → cancelAuthorization() so the old bundle can never be registered.
+ * Rows are marked superseded one by one, so a retry after a failure skips finished work.
+ */
+async function supersedeCredentials(previousHolder: string, requestId: string, deployment: ReturnType<typeof loadDeployment>): Promise<SupersedeResult> {
+  return withIssuerTxLock(async () => {
+    const keys = await issuerKeys();
+    const wallets = [keys.evmWallet, ...keys.retiredEvmWallets];
+    const result: SupersedeResult = { revoked: [], cancelled: [] };
+    for (const row of liveCredentialsOf(previousHolder)) {
+      const rec = await onChain(() => readRecord(row.commitment, deployment));
+      const signerAddress = rec.exists ? rec.issuer : (row.issuer_signer ?? keys.evmWallet.address);
+      const signer = wallets.find((w) => w.address.toLowerCase() === signerAddress.toLowerCase());
+      if (!signer) {
+        throw new ApiError(409, "ISSUER_KEY_UNAVAILABLE", "a credential of the lost wallet was authorized by a key this server no longer holds; use npm run admin -- revoke");
+      }
+      const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, signer);
+      let txHash: string | null = null;
+      if (rec.exists && !rec.revoked) {
+        const receipt = await onChain(async () => (await registry.getFunction("revoke")(row.commitment)).wait());
+        txHash = receipt?.hash ?? null;
+        result.revoked.push(row.commitment);
+      } else if (!rec.exists) {
+        await onChain(async () => (await registry.getFunction("cancelAuthorization")(row.commitment)).wait());
+        result.cancelled.push(row.commitment);
+      }
+      db()
+        .prepare(
+          `UPDATE issuer_credentials SET superseded_at = ?, superseded_by = ?,
+             revoked_at = COALESCE(revoked_at, CASE WHEN ? IS NOT NULL THEN ? END), revoke_tx = COALESCE(revoke_tx, ?)
+           WHERE commitment = ?`,
+        )
+        .run(nowSeconds(), requestId, txHash, nowSeconds(), txHash, row.commitment);
+    }
+    return result;
+  });
 }
 
 export function rejectRequest(issuer: Session, requestId: string, reason: string): void {
@@ -141,6 +206,7 @@ export interface IssuanceResult {
   requestId: string;
   commitment: string;
   credentialId: string;
+  superseded?: SupersedeResult;
 }
 
 export async function approveRequest(issuer: Session, requestId: string): Promise<IssuanceResult> {
@@ -150,9 +216,9 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
   const claimed = d
     .prepare(
       `UPDATE issuer_requests SET status = 'approved', reviewed_at = ?, reviewed_by = ?
-       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id`,
+       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id, recovery_of`,
     )
-    .get(now, issuer.address, requestId) as { holder_address: string; chain_id: number } | undefined;
+    .get(now, issuer.address, requestId) as { holder_address: string; chain_id: number; recovery_of: string | null } | undefined;
   if (!claimed) throw new ApiError(409, "NOT_PENDING", "request is not pending");
 
   try {
@@ -165,6 +231,9 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     await assertLiveDeployment(deployment);
     const [active, epoch] = (await onChain(() => registry.getFunction("issuerState")(issuerAddress))) as [boolean, bigint];
     if (!active) throw new ApiError(409, "ISSUER_NOT_ACTIVE_ON_CHAIN", "issuer attestation key is not authorized in the registry");
+
+    // Recovery: shut down the lost wallet's credentials first; if that fails, nothing new is issued.
+    const superseded = claimed.recovery_of ? await supersedeCredentials(claimed.recovery_of, requestId, deployment) : undefined;
 
     const holderAddress = getAddress(claimed.holder_address);
     const holderDid = deriveHolderDid(deployment.chainId, holderAddress);
@@ -221,16 +290,16 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     //    and stage the private bundle for one-time pickup by the holder.
     d.transaction(() => {
       d.prepare(
-        `INSERT INTO issuer_credentials (commitment, request_id, credential_id, holder_address, holder_did, valid_from, expires_at, issued_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(commitment, requestId, credentialId, holderAddress, holderDid, validFrom, validUntil, now);
+        `INSERT INTO issuer_credentials (commitment, request_id, credential_id, holder_address, holder_did, valid_from, expires_at, issued_at, issuer_signer)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(commitment, requestId, credentialId, holderAddress, holderDid, validFrom, validUntil, now, issuerAddress);
       d.prepare("UPDATE issuer_requests SET synthetic_json = NULL WHERE id = ?").run(requestId);
       d.prepare(
         "INSERT INTO issuer_bundle_pickup (request_id, holder_address, bundle_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
       ).run(requestId, holderAddress, JSON.stringify(bundle), now, now + BUNDLE_PICKUP_TTL);
     })();
 
-    return { requestId, commitment, credentialId };
+    return { requestId, commitment, credentialId, superseded };
   } catch (err) {
     // Roll the claim back so the request can be retried.
     d.prepare("UPDATE issuer_requests SET status = 'pending', reviewed_at = NULL, reviewed_by = NULL WHERE id = ? AND status = 'approved'").run(requestId);

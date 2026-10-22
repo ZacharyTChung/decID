@@ -7,7 +7,7 @@ import {
   RevokeRequest,
   SignInChallengeRequest,
   SignInVerifyRequest,
-  SyntheticApplication,
+  HolderRequestBody,
   type PublicConfigResponse,
 } from "../../shared/api";
 import { appConfig } from "../config";
@@ -92,8 +92,8 @@ export const postHolderRequest = route(
   async (req) => {
     const session = requireSession(req, "holder");
     // The holder address comes from the authenticated session, never from the form.
-    const application = await readJson(req, SyntheticApplication);
-    return json(issuer.submitRequest(session, application), { status: 201 });
+    const { recoveryOf, ...application } = await readJson(req, HolderRequestBody);
+    return json(issuer.submitRequest(session, application, recoveryOf), { status: 201 });
   },
   { rateLimit: { name: "holder-request", perMinute: 10 } },
 );

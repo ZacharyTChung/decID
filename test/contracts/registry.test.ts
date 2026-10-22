@@ -400,6 +400,37 @@ describe("CredentialRegistry", () => {
     });
   });
 
+  describe("authorization cancellation (account recovery)", () => {
+    it("lets the issuer withdraw an unregistered authorization, permanently", async () => {
+      const ctx = await loadFixture(fixture);
+      const auth = await makeAuth(ctx);
+      const sig = await sign(ctx, auth);
+      await expect(on(ctx.registry, ctx.issuer).cancelAuthorization(auth.commitment))
+        .to.emit(ctx.registry, "AuthorizationCancelled")
+        .withArgs(auth.commitment, ctx.issuer.address);
+      expect(await ctx.registry.getFunction("isAuthorizationCancelled")(auth.commitment, ctx.issuer.address)).to.equal(true);
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig))
+        .to.be.revertedWithCustomError(ctx.registry, "AuthorizationWasCancelled")
+        .withArgs(auth.commitment);
+    });
+
+    it("is scoped to the cancelling issuer and refused for non-issuers and registered records", async () => {
+      const ctx = await loadFixture(fixture);
+      // Another trusted issuer's cancellation does not block this issuer's authorization.
+      const auth = await makeAuth(ctx);
+      await on(ctx.registry, ctx.secondIssuer).cancelAuthorization(auth.commitment);
+      expect(await ctx.registry.getFunction("isAuthorizationCancelled")(auth.commitment, ctx.issuer.address)).to.equal(false);
+      await expect(on(ctx.registry, ctx.holder).register(auth, await sign(ctx, auth))).to.emit(ctx.registry, "CredentialRegistered");
+
+      await expect(on(ctx.registry, ctx.rogueIssuer).cancelAuthorization(freshCommitment()))
+        .to.be.revertedWithCustomError(ctx.registry, "IssuerNotActive")
+        .withArgs(ctx.rogueIssuer.address);
+      await expect(on(ctx.registry, ctx.issuer).cancelAuthorization(auth.commitment))
+        .to.be.revertedWithCustomError(ctx.registry, "AlreadyRegistered")
+        .withArgs(auth.commitment);
+    });
+  });
+
   describe("deployment binding", () => {
     it("rejects a zero deploymentId at construction", async () => {
       const [admin] = await ethers.getSigners();

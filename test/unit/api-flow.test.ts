@@ -21,6 +21,10 @@ const SENTINEL = {
   country: "ZZ",
 };
 
+// Values long enough that finding one in output means a leak, not a coincidence: the 2-letter
+// country code can occur by chance inside random base58/hex identifiers.
+const DISTINCTIVE = Object.values(SENTINEL).filter((v) => v.length >= 8);
+
 let provider: JsonRpcProvider;
 let deployment: { registry: string; gate: string; chainId: number };
 let holder: Actor;
@@ -192,7 +196,7 @@ describe("presentation and verification", () => {
     expect(res.body.checks.every((x: { status: string }) => x.status === "pass")).toBe(true);
     expect(res.body.disclosed).toMatchObject({ identityVerified: true, holderDid: `did:pkh:eip155:31337:${holder.address}` });
     const text = JSON.stringify(res.body);
-    for (const v of Object.values(SENTINEL)) expect(text).not.toContain(v);
+    for (const v of DISTINCTIVE) expect(text).not.toContain(v);
     expect(text).not.toContain(bundle.salt.slice(2));
     expect(text).not.toContain(bundle.credentialJwt);
   });
@@ -340,7 +344,7 @@ describe("privacy regression check", () => {
     const { registry } = contracts(provider, deployment);
     chunks.push(JSON.stringify((await registry.getFunction("getRecord")(bundle.commitment)).toArray(), (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
     const haystack = chunks.join("|").toLowerCase();
-    const needles = [...Object.values(SENTINEL), bundle.credentialJwt, bundle.credentialJwt.split(".")[1]!];
+    const needles = [...DISTINCTIVE, bundle.credentialJwt, bundle.credentialJwt.split(".")[1]!];
     for (const n of needles) {
       expect(haystack).not.toContain(n.toLowerCase());
       // Hex-encoded form too (skipping very short values, which could match random hex by chance).
@@ -357,7 +361,7 @@ describe("privacy regression check", () => {
       db().prepare("SELECT * FROM issuer_bundle_pickup").all(),
       db().prepare("SELECT * FROM verifier_challenges").all(),
     ]);
-    for (const v of Object.values(SENTINEL)) expect(dump).not.toContain(v);
+    for (const v of DISTINCTIVE) expect(dump).not.toContain(v);
     expect(dump).not.toContain(bundle.salt.slice(2));
     expect(dump).not.toContain(bundle.credentialJwt.split(".")[2]);
   });

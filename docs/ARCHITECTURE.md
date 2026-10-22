@@ -117,6 +117,7 @@ A valid-looking registry entry never makes an invalid token acceptable: the veri
 - `DEFAULT_ADMIN_ROLE` (OpenZeppelin AccessControl): `addIssuer`, `removeIssuer`, `adminRevoke` (explicit override, evented with `adminOverride=true`).
 - `register(auth, sig)`: requires `auth.deploymentId` to equal this deployment's random id, `msg.sender == auth.holder`, deadline not passed, `validFrom < expiresAt`, not already expired, issuer active, `auth.issuerEpoch ==` current epoch, commitment never registered before, and an OpenZeppelin `ECDSA` signature (rejects high-s and bad length/v) from `auth.issuer` over the EIP-712 digest.
 - `revoke(commitment)`: only the record's issuer (even if since removed).
+- `cancelAuthorization(commitment)`: an active issuer withdraws an unregistered authorization it signed (scoped to `msg.sender`); used by account recovery.
 - Views: `credentialStatus` (None / Active / Revoked / IssuerInactive / NotYetValid / Expired), `isCredentialValid(commitment, holder, schemaId)`, `getRecord`, `issuerState`, `hashAuthorization`, `domainSeparator`.
 - Issuer removal increments the issuer's epoch. Older records and unsubmitted authorizations become permanently invalid, re-adding the issuer restores neither, and individual revocations are never cleared.
 
@@ -145,8 +146,8 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Data item | Where it lives | Who can read it | Retention |
 | --- | --- | --- | --- |
 | Synthetic application (name, DOB, document no., country) | SQLite `issuer_requests.synthetic_json` | Issuer operators | Erased (set NULL) when the request is approved or rejected |
-| Request status, holder address/DID, timestamps, reject reason | SQLite `issuer_requests` | Issuer; the holder sees their own | Until `npm run reset` |
-| Issuance log: commitment, credential id, holder DID, validity | SQLite `issuer_credentials` | Issuer | Until reset |
+| Request status, holder address/DID, timestamps, reject reason, recovery link (lost wallet address) | SQLite `issuer_requests` | Issuer; the holder sees their own | Until `npm run reset` |
+| Issuance log: commitment, credential id, holder DID, validity, authorizing signer, superseded-by-recovery | SQLite `issuer_credentials` | Issuer | Until reset |
 | Holder bundle (token, salt, authorization) awaiting pickup | SQLite `issuer_bundle_pickup` | That holder only | Deleted at pickup, or after 24 h |
 | Holder bundle after pickup | Browser tab memory | The holder | Until reload or wallet switch |
 | Encrypted backup file | Wherever the holder saves it | Anyone with the password | Holder-controlled |
