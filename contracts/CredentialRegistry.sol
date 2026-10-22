@@ -30,7 +30,7 @@ contract CredentialRegistry is AccessControl, EIP712 {
     bytes32 public constant COMMITMENT_DOMAIN = keccak256("did-mvp:credential-commitment:v1");
 
     bytes32 public constant REGISTRATION_TYPEHASH = keccak256(
-        "RegistrationAuthorization(bytes32 commitment,address holder,address issuer,bytes32 schemaId,uint64 validFrom,uint64 expiresAt,uint64 issuerEpoch,uint64 deadline)"
+        "RegistrationAuthorization(bytes32 commitment,address holder,address issuer,bytes32 schemaId,uint64 validFrom,uint64 expiresAt,uint64 issuerEpoch,uint64 deadline,bytes32 deploymentId)"
     );
 
     /// Status codes returned by credentialStatus. Ordered by check precedence.
@@ -52,6 +52,7 @@ contract CredentialRegistry is AccessControl, EIP712 {
         uint64 expiresAt;
         uint64 issuerEpoch;
         uint64 deadline;
+        bytes32 deploymentId;
     }
 
     struct Record {
@@ -86,6 +87,8 @@ contract CredentialRegistry is AccessControl, EIP712 {
     event CredentialRevoked(bytes32 indexed commitment, address indexed revokedBy, bool adminOverride);
 
     error ZeroAddress();
+    error ZeroDeploymentId();
+    error WrongDeployment(bytes32 signed, bytes32 actual);
     error ZeroCommitment();
     error IssuerAlreadyActive(address issuer);
     error IssuerNotActive(address issuer);
@@ -100,8 +103,16 @@ contract CredentialRegistry is AccessControl, EIP712 {
     error NotCredentialIssuer(address sender, address issuer);
     error AlreadyRevoked(bytes32 commitment);
 
-    constructor(address admin) EIP712("CredentialRegistry", "1") {
+    /// @notice Random per-deployment value, signed into every authorization. A
+    /// local chain restarts with the same deployer nonce, so the registry address
+    /// (and thus the EIP-712 domain) repeats across restarts; this value does not,
+    /// so authorizations from an earlier deployment can never be replayed here.
+    bytes32 public immutable deploymentId;
+
+    constructor(address admin, bytes32 deploymentId_) EIP712("CredentialRegistry", "1") {
         if (admin == address(0)) revert ZeroAddress();
+        if (deploymentId_ == bytes32(0)) revert ZeroDeploymentId();
+        deploymentId = deploymentId_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
@@ -138,6 +149,7 @@ contract CredentialRegistry is AccessControl, EIP712 {
         if (auth.commitment == bytes32(0)) revert ZeroCommitment();
         if (auth.holder == address(0) || auth.issuer == address(0)) revert ZeroAddress();
         if (msg.sender != auth.holder) revert SenderNotHolder(msg.sender, auth.holder);
+        if (auth.deploymentId != deploymentId) revert WrongDeployment(auth.deploymentId, deploymentId);
         if (block.timestamp > auth.deadline) revert AuthorizationExpired(auth.deadline);
         if (auth.validFrom >= auth.expiresAt) revert InvalidValidityWindow(auth.validFrom, auth.expiresAt);
         if (block.timestamp >= auth.expiresAt) revert CredentialAlreadyExpired(auth.expiresAt);
@@ -194,7 +206,8 @@ contract CredentialRegistry is AccessControl, EIP712 {
                 auth.validFrom,
                 auth.expiresAt,
                 auth.issuerEpoch,
-                auth.deadline
+                auth.deadline,
+                auth.deploymentId
             )
         );
     }

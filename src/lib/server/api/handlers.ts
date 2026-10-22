@@ -46,6 +46,7 @@ export const getConfig = route(async () => {
     chainId: d.chainId,
     registry: d.registry,
     gate: d.gate,
+    deploymentId: d.deploymentId,
     schemaId: d.schemaId,
     rpcUrl: appConfig().rpcUrl,
     origin: appConfig().origin,

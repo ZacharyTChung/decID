@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ContractFactory, JsonRpcProvider, Wallet, parseEther, type InterfaceAbi } from "ethers";
+import { ContractFactory, JsonRpcProvider, Wallet, hexlify, parseEther, randomBytes, type InterfaceAbi } from "ethers";
 import { SCHEMA_ID } from "../../src/lib/shared/constants";
 import { DEV_ROLES, devWallet } from "./dev-accounts";
 
@@ -33,7 +33,10 @@ export async function deployLocal(opts: DeployOptions) {
 
   const reg = artifact(root, "CredentialRegistry");
   const gate = artifact(root, "DemoGate");
-  const registry = await new ContractFactory(reg.abi, reg.bytecode, deployer).deploy(deployer.address);
+  // The local chain restarts at the same deployer nonce, so the registry address repeats.
+  // A fresh random deploymentId (signed into every authorization) keeps old authorizations from replaying.
+  const deploymentId = hexlify(randomBytes(32));
+  const registry = await new ContractFactory(reg.abi, reg.bytecode, deployer).deploy(deployer.address, deploymentId);
   await registry.waitForDeployment();
   const registryAddress = await registry.getAddress();
   const demoGate = await new ContractFactory(gate.abi, gate.bytecode, deployer).deploy(registryAddress, SCHEMA_ID);
@@ -46,6 +49,7 @@ export async function deployLocal(opts: DeployOptions) {
     chainId: Number(network.chainId),
     registry: registryAddress,
     gate: await demoGate.getAddress(),
+    deploymentId,
     admin: deployer.address,
     issuerSigner,
     schemaId: SCHEMA_ID,

@@ -118,7 +118,13 @@ export function readCookie(req: Request, name: string): string | undefined {
   if (!header) return undefined;
   for (const part of header.split(";")) {
     const [k, ...v] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(v.join("="));
+    if (k === name) {
+      try {
+        return decodeURIComponent(v.join("="));
+      } catch {
+        return undefined; // malformed cookie: treat as absent rather than failing every request
+      }
+    }
   }
   return undefined;
 }

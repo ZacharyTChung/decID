@@ -72,6 +72,27 @@ describe("authentication and authorization", () => {
     expect(replay.body.error.code).toBe("NONCE_INVALID");
   });
 
+  it("rejects a signed SIWE message that differs from the one the server issued", async () => {
+    const actor = new Actor(4);
+    const ch = await actor.call(h.postSignInChallenge, "POST", { address: actor.address, chainId: 31337, role: "holder" });
+    const edited = (ch.body.message as string).replace(/\nExpiration Time: .*/, "");
+    const res = await actor.call(h.postSignInVerify, "POST", { message: edited, signature: await actor.wallet.signMessage(edited) });
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("SIWE_MESSAGE_ALTERED");
+  });
+
+  it("returns stable 4xx codes for a bad address checksum and ignores malformed cookies", async () => {
+    const bad = holder.address.replace(/[a-f]/, (c) => c.toUpperCase());
+    const res = await holder.call(h.postSignInChallenge, "POST", { address: bad, chainId: 31337, role: "holder" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("BAD_ADDRESS");
+    const anon = new Actor(5);
+    anon.cookie = "did_mvp_sid=%E0%A4%A";
+    const session = await anon.call(h.getSession, "GET");
+    expect(session.status).toBe(200);
+    expect(session.body.session).toBeNull();
+  });
+
   it("rejects a SIWE signature from a different wallet and the wrong chain", async () => {
     const ch = await other.call(h.postSignInChallenge, "POST", { address: other.address, chainId: 31337, role: "holder" });
     const forged = await holder.wallet.signMessage(ch.body.message);
@@ -212,6 +233,21 @@ describe("presentation and verification", () => {
     expect(results.filter((r) => r.body.checks[0].code === "CHALLENGE_REUSED").length).toBe(7);
   });
 
+  it("does not burn a challenge when the verifier is misconfigured", async () => {
+    const c = await challenge();
+    const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
+    const saved = process.env.TRUSTED_ISSUERS_FILE;
+    process.env.TRUSTED_ISSUERS_FILE = path.join(process.cwd(), ".test-data", "missing-trust.json");
+    try {
+      const res = await holder.call(h.postPresentation, "POST", body);
+      expect(res.status).toBe(503);
+      expect(res.body.error.code).toBe("TRUST_POLICY_MISSING");
+    } finally {
+      process.env.TRUSTED_ISSUERS_FILE = saved;
+    }
+    expect((await holder.call(h.postPresentation, "POST", body)).body.verified).toBe(true);
+  });
+
   it("rejects an expired challenge", async () => {
     const c = await challenge();
     const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
@@ -259,8 +295,16 @@ describe("revocation", () => {
   });
 
   it("revokes via the issuer, after which verification and the gate fail", async () => {
-    const res = await issuer.call(h.postRevoke, "POST", { commitment: bundle.commitment });
+    // Two concurrent revocations: exactly one succeeds, the other gets a stable conflict code (never a 500).
+    const [r1, r2] = await Promise.all([
+      issuer.call(h.postRevoke, "POST", { commitment: bundle.commitment }),
+      issuer.call(h.postRevoke, "POST", { commitment: bundle.commitment }),
+    ]);
+    const res = r1.status === 200 ? r1 : r2;
+    const loser = r1.status === 200 ? r2 : r1;
     expect(res.status).toBe(200);
+    expect(loser.status).toBe(409);
+    expect(["ALREADY_REVOKED", "TX_REVERTED"]).toContain(loser.body.error.code);
     expect(res.body.txHash).toMatch(/^0x/);
     const issued = await issuer.call(h.getIssuedCredentials, "GET");
     expect(issued.body.credentials.find((x: { commitment: string }) => x.commitment === bundle.commitment).onChainStatus).toBe("Revoked");

@@ -27,7 +27,7 @@ function freshCommitment(): string {
 
 async function fixture() {
   const [admin, issuer, holder, other, rogueIssuer, secondIssuer] = await ethers.getSigners();
-  const registry = (await ethers.deployContract("CredentialRegistry", [admin!.address])) as unknown as Contract;
+  const registry = (await ethers.deployContract("CredentialRegistry", [admin!.address, ethers.hexlify(ethers.randomBytes(32))])) as unknown as Contract;
   const gate = (await ethers.deployContract("DemoGate", [await registry.getAddress(), SCHEMA_ID])) as unknown as Contract;
   await on(registry, admin!).addIssuer(issuer!.address);
   await on(registry, admin!).addIssuer(secondIssuer!.address);
@@ -49,6 +49,7 @@ async function makeAuth(ctx: Ctx, overrides: Partial<RegistrationAuthorization> 
     expiresAt: now + 365 * DAY,
     issuerEpoch: Number(epoch),
     deadline: now + DAY,
+    deploymentId: await ctx.registry.getFunction("deploymentId")(),
     ...overrides,
   };
 }
@@ -179,7 +180,7 @@ describe("CredentialRegistry", () => {
       const auth = await makeAuth(ctx);
       const wrongChain = await sign(ctx, auth, ctx.issuer, { chainId: 1n });
       await expect(on(ctx.registry, ctx.holder).register(auth, wrongChain)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
-      const otherRegistry = await ethers.deployContract("CredentialRegistry", [ctx.admin.address]);
+      const otherRegistry = await ethers.deployContract("CredentialRegistry", [ctx.admin.address, ethers.hexlify(ethers.randomBytes(32))]);
       const wrongContract = await sign(ctx, auth, ctx.issuer, { registry: await otherRegistry.getAddress() });
       await expect(on(ctx.registry, ctx.holder).register(auth, wrongContract)).to.be.revertedWithCustomError(ctx.registry, "SignerNotIssuer");
     });
@@ -396,6 +397,44 @@ describe("CredentialRegistry", () => {
       const fresh = await registered(ctx2);
       expect(fresh.issuerEpoch).to.equal(1);
       await expect(on(ctx2.gate, ctx2.holder).checkIn(fresh.commitment)).to.emit(ctx2.gate, "MemberCheckedIn");
+    });
+  });
+
+  describe("deployment binding", () => {
+    it("rejects a zero deploymentId at construction", async () => {
+      const [admin] = await ethers.getSigners();
+      const factory = await ethers.getContractFactory("CredentialRegistry");
+      await expect(factory.deploy(admin!.address, ethers.ZeroHash)).to.be.revertedWithCustomError(factory, "ZeroDeploymentId");
+    });
+
+    it("rejects an authorization naming another deploymentId", async () => {
+      const ctx = await loadFixture(fixture);
+      const auth = await makeAuth(ctx, { deploymentId: keccak256(toUtf8Bytes("some-other-deployment")) });
+      await expect(on(ctx.registry, ctx.holder).register(auth, await sign(ctx, auth)))
+        .to.be.revertedWithCustomError(ctx.registry, "WrongDeployment")
+        .withArgs(auth.deploymentId, await ctx.registry.getFunction("deploymentId")());
+    });
+
+    it("blocks replay into a fresh deployment at the same address (local chain restart)", async () => {
+      const [admin, issuer, holder] = await ethers.getSigners();
+      const snapshot = await networkHelpers.takeSnapshot();
+      const deployA = async (id: string) => {
+        const r = (await ethers.deployContract("CredentialRegistry", [admin!.address, id])) as unknown as Contract;
+        await on(r, admin!).addIssuer(issuer!.address);
+        return r;
+      };
+      // Deployment A: the issuer signs an authorization (and the holder never registers it there).
+      const a = await deployA(keccak256(toUtf8Bytes("deployment-A")));
+      const ctxA = { registry: a, issuer: issuer!, holder: holder!, chainId: (await ethers.provider.getNetwork()).chainId } as unknown as Ctx;
+      const auth = await makeAuth(ctxA);
+      const sig = await sign(ctxA, auth);
+      const addressA = await a.getAddress();
+
+      // Chain "restart": same deployer nonce, so deployment B lands at the same address with the same issuer and epoch.
+      await snapshot.restore();
+      const b = await deployA(keccak256(toUtf8Bytes("deployment-B")));
+      expect(await b.getAddress()).to.equal(addressA);
+      await expect(on(b, holder!).register(auth, sig)).to.be.revertedWithCustomError(b, "WrongDeployment");
     });
   });
 

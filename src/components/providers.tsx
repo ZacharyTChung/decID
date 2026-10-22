@@ -88,17 +88,26 @@ export function AppProviders({ children }: { children: ReactNode }) {
     void refreshSession();
   }, [refreshSession]);
 
-  // Any wallet account or chain change invalidates the server session (it was bound to the old identity).
+  // A change from one connected account/chain to another invalidates the server session (it was bound
+  // to the old identity). Going from "not connected" to connected is not a change of identity.
   const onIdentityChange = useCallback(
     (nextAddress?: string, nextChain?: number) => {
-      const key = `${nextAddress ?? ""}:${nextChain ?? ""}`;
+      const key = nextAddress ? `${nextAddress}:${nextChain ?? ""}` : "";
       if (identity.current && identity.current !== key) {
         void api("POST", "/api/auth/logout", {}).finally(() => setSession(null));
       }
-      identity.current = key;
+      if (key) identity.current = key;
+      else if (identity.current) identity.current = "";
     },
     [],
   );
+
+  // A session cookie left over from another wallet or chain (e.g. switched while the tab was closed) is ended.
+  useEffect(() => {
+    if (session && address && chainId !== undefined && (session.address !== address || session.chainId !== chainId)) {
+      void api("POST", "/api/auth/logout", {}).finally(() => setSession(null));
+    }
+  }, [session, address, chainId]);
 
   useEffect(() => {
     const eth = typeof window !== "undefined" ? window.ethereum : undefined;

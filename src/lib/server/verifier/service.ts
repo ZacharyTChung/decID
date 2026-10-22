@@ -91,7 +91,9 @@ function finalize(checks: CheckResult[], extra: Partial<VerificationResult> = {}
 export async function verifyPresentation(sub: PresentationSubmissionT): Promise<VerificationResult> {
   const now = nowSeconds();
   const cfg = appConfig();
+  // Load configuration before consuming the challenge, so a misconfigured verifier does not burn it.
   const deployment = loadDeployment();
+  const issuers = loadTrustedIssuers();
   const checks: CheckResult[] = [];
   const recordOutcome = (outcome: string) =>
     db().prepare("UPDATE verifier_challenges SET outcome = ? WHERE id = ?").run(outcome, sub.challengeId);
@@ -145,7 +147,7 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
 
   // 3-7. Credential: format, trust, signature, semantics, validity, deployment binding.
   const cred = await verifyCredentialJwt(sub.credentialJwt, {
-    issuers: loadTrustedIssuers(),
+    issuers,
     now,
     expectedChainId: deployment.chainId,
     expectedRegistry: deployment.registry,
@@ -188,7 +190,7 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
       if (rec.schemaId.toLowerCase() !== SCHEMA_ID.toLowerCase()) problems.push("registered schema differs");
       if (rec.validFrom !== fromUtcSeconds(vc.validFrom) || rec.expiresAt !== fromUtcSeconds(vc.validUntil)) problems.push("registered validity window differs from credential");
       if (rec.status !== "Active") problems.push(`registry status is ${rec.status}`);
-      const valid = (await registryContract(deployment).getFunction("isCredentialValid")(recomputed, proof.holder, SCHEMA_ID)) as boolean;
+      const valid = (await registryContract(deployment).getFunction("isCredentialValid")(recomputed, proof.holder, SCHEMA_ID, { blockTag: rec.blockTag })) as boolean;
       if (!valid && rec.status === "Active") problems.push("registry isCredentialValid returned false");
     }
     if (problems.length) {

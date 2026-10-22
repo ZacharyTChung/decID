@@ -95,14 +95,20 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
   } catch {
     return fail("credentialSemantics", "PAYLOAD_NOT_JSON", "payload is not JSON");
   }
+  let from: number;
+  let until: number;
+  try {
+    from = fromUtcSeconds(credential.validFrom);
+    until = fromUtcSeconds(credential.validUntil);
+  } catch {
+    return fail("credentialSemantics", "BAD_TIMESTAMP", "validFrom/validUntil is not a real calendar timestamp");
+  }
   if (credential.issuer !== issuerDid) return fail("credentialSemantics", "ISSUER_KID_MISMATCH", "issuer does not match the signing key's DID");
   const mismatches = jwtClaimMismatches(credential);
   if (mismatches.length) return fail("credentialSemantics", "JWT_CLAIM_MISMATCH", mismatches.join("; "));
   checks.push({ id: "credentialSemantics", status: "pass" });
 
   // 5. Validity window: validFrom <= now < validUntil.
-  const from = fromUtcSeconds(credential.validFrom);
-  const until = fromUtcSeconds(credential.validUntil);
   if (until <= from) return fail("validityWindow", "BAD_VALIDITY_WINDOW", "validUntil is not after validFrom");
   if (ctx.now < from) return fail("validityWindow", "NOT_YET_VALID", `valid from ${credential.validFrom}`);
   if (ctx.now >= until) return fail("validityWindow", "EXPIRED", `expired at ${credential.validUntil}`);

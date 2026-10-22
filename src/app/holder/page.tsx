@@ -165,7 +165,11 @@ function CredentialSection({ bundle }: { bundle: HolderBundle }) {
   const header = decodeHeader(bundle.credentialJwt);
   const subject = payload?.credentialSubject as { id?: string } | undefined;
   const ownsBundle = app.address?.toLowerCase() === bundle.authorization.holder.toLowerCase();
-  const wrongDeployment = !!app.config && (bundle.deployment.registry.toLowerCase() !== app.config.registry.toLowerCase() || bundle.deployment.chainId !== app.config.chainId);
+  const wrongDeployment =
+    !!app.config &&
+    (bundle.deployment.registry.toLowerCase() !== app.config.registry.toLowerCase() ||
+      bundle.deployment.chainId !== app.config.chainId ||
+      bundle.authorization.deploymentId.toLowerCase() !== app.config.deploymentId.toLowerCase());
 
   const refresh = useCallback(async () => {
     if (!app.config) return;
@@ -186,11 +190,27 @@ function CredentialSection({ bundle }: { bundle: HolderBundle }) {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // The bundle is private to its holder: while another wallet is connected, show nothing from it.
+  if (!ownsBundle) {
+    return (
+      <Card title="2. Your credential" tone="warn">
+        <Notice tone="warn">
+          The credential loaded in this tab belongs to {bundle.authorization.holder}. Its details are hidden while a different wallet is connected. Switch back to that account
+          to use it.
+        </Notice>
+        <div className="mt-3">
+          <Button variant="secondary" onClick={() => app.setBundle(undefined)}>
+            Forget it in this tab
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   const tone = status === "Valid" ? "green" : status === "Unregistered" || status === "Not yet valid" ? "amber" : status === "Unknown" ? "slate" : "red";
 
   return (
     <Card title="2. Your credential" subtitle="Held off-chain, by you. The chain only ever sees a random-looking commitment to it.">
-      {!ownsBundle && <Notice tone="warn">This credential belongs to {bundle.authorization.holder}. Switch your wallet to that account to use it.</Notice>}
       {wrongDeployment && <Notice tone="error">This credential was issued for a different chain or registry deployment (for example before a reset). It cannot be used here.</Notice>}
 
       <div className="mt-3 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 p-5 text-white shadow">

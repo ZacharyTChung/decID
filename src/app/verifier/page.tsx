@@ -72,7 +72,15 @@ export default function VerifierPage() {
   const start = useAction();
   const present = useAction();
   const bundle = app.bundle;
-  const canPresent = !!challenge && !!bundle && !!app.address && app.onExpectedChain && consent;
+  const ownsBundle = !!bundle && !!app.address && bundle.authorization.holder.toLowerCase() === app.address.toLowerCase();
+  const canPresent = !!challenge && ownsBundle && app.onExpectedChain && consent;
+
+  // A different wallet or chain is a different presenter: drop the request and any result shown for the old one.
+  useEffect(() => {
+    setChallenge(undefined);
+    setResult(undefined);
+    setConsent(false);
+  }, [app.address, app.chainId]);
 
   return (
     <Shell>
@@ -180,12 +188,16 @@ export default function VerifierPage() {
                   });
                   setResult(r);
                   setConsent(false);
+                  setChallenge(undefined); // single-use: it was consumed by this submission
                 })
               }
             >
               Sign and present
             </Button>
-            {!challenge && <p className="text-xs text-slate-500">Start a verification request first.</p>}
+            {!challenge && <p className="text-xs text-slate-500">Start a verification request first. Each request can be used once.</p>}
+            {bundle && app.address && !ownsBundle && (
+              <Notice tone="warn">The loaded credential belongs to {bundle.authorization.holder}; connect that wallet to present it.</Notice>
+            )}
             {present.error && <Notice tone="error">{present.error}</Notice>}
           </div>
         )}

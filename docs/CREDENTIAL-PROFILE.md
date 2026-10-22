@@ -113,14 +113,16 @@ A hash is not encryption. The commitment hides the token only because the 256-bi
 ```
 domain = { name: "CredentialRegistry", version: "1", chainId, verifyingContract: <registry address> }
 RegistrationAuthorization(bytes32 commitment, address holder, address issuer, bytes32 schemaId,
-                          uint64 validFrom, uint64 expiresAt, uint64 issuerEpoch, uint64 deadline)
+                          uint64 validFrom, uint64 expiresAt, uint64 issuerEpoch, uint64 deadline,
+                          bytes32 deploymentId)
 ```
 
 - `schemaId = keccak256("https://did-mvp.invalid/schemas/identity-verified/v1.json")` = `0x85879d7d…f84c6`.
 - `validFrom`/`expiresAt` equal the VC's `validFrom`/`validUntil` (unix seconds), and the verifier checks this equality.
 - `deadline` is the submission deadline: min(issuance + 24 h, expiresAt − 1). It is inclusive (`block.timestamp <= deadline`).
 - `issuerEpoch` must equal the issuer's current epoch, so authorizations signed before an issuer removal can never be used.
-- **Replay protection:** EIP-712 alone does not prevent replay. The registry permanently marks each commitment as used, including after revocation, so an authorization can succeed at most once. No nonces are needed because one authorization corresponds to exactly one commitment. Cross-chain and cross-deployment replay is prevented by the domain's `chainId` and `verifyingContract`.
+- `deploymentId` is a random 32-byte value fixed at construction (`CredentialRegistry.deploymentId`). A restarted local chain redeploys the registry at the **same address** (same deployer, same nonce), so chain id and address alone would not distinguish deployments. Authorizations from an earlier deployment fail with `WrongDeployment`, even if the issuer key and epoch are unchanged.
+- **Replay protection:** EIP-712 alone does not prevent replay. The registry permanently marks each commitment as used, including after revocation, so an authorization can succeed at most once. No nonces are needed because one authorization corresponds to exactly one commitment. Cross-chain and cross-deployment replay is prevented by the domain's `chainId` and `verifyingContract` plus the signed `deploymentId`.
 
 ## Presentation proof (application-specific, verified off-chain)
 

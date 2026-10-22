@@ -25,6 +25,9 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Register someone else's authorization | `msg.sender == holder`; holder signed into the EIP-712 struct | — |
 | Alter authorization fields / cross-chain or cross-deployment replay | EIP-712 struct + domain with chainId and registry; OZ ECDSA (rejects malleable sig) | — |
 | Re-register a revoked credential | Commitments are permanently consumed | — |
+| Replay an old authorization after a local chain restart/reset (same registry address, issuer key and epoch) | Random `deploymentId` fixed at construction is signed into every authorization (`WrongDeployment`) | — |
+| Get a session with an edited SIWE message (e.g. no expiry) | The server stores the SHA-256 of the exact message it issued with the nonce and requires an identical message | — |
+| Concurrent issuer transactions racing for one nonce | Issuer-key transactions are serialized in-process | Single server process assumed |
 | Unauthorized issuer actions | Server-side role check on every issuer route; operator allowlist re-checked per request; on-chain `onlyRole` for admin | Operator wallet compromise grants approval/revocation until removed from the allowlist |
 | CSRF / cross-site requests | `Origin` must equal `APP_ORIGIN`; JSON-only bodies; `SameSite=Strict` HttpOnly cookie; CSP (`default-src 'self'`, `connect-src` limited to the app and the local RPC, `frame-ancestors 'none'`) | CSP still allows `'unsafe-inline'` scripts (no nonce setup) |
 | Session theft | Random 256-bit id, only its hash stored, 1 h expiry, dropped on wallet/chain change in the UI | Local HTTP (no `Secure` flag unless `APP_ORIGIN` is https) |

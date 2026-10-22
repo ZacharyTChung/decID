@@ -21,6 +21,7 @@ const bundle: HolderBundle = {
     expiresAt: 1_800_000_000,
     issuerEpoch: 0,
     deadline: 1_700_086_400,
+    deploymentId: "0x" + "99".repeat(32),
   },
   authorizationSignature: "0x" + "12".repeat(65),
   deployment: { chainId: 31337, registry: "0x5FbDB2315678afecb367f032d93F642f64180aa3" },

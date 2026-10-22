@@ -3,6 +3,7 @@ import { getAddress } from "ethers";
 import { z } from "zod";
 import { CREDENTIAL_TYPE, SCHEMA_ID } from "../shared/constants";
 import { appConfig, readJsonFile } from "./config";
+import { ApiError } from "./http";
 import { resolveDidKeyAssertionKey, type Ed25519PublicJwk } from "./did/did-key";
 
 /**
@@ -32,7 +33,15 @@ const TrustFile = z.strictObject({ version: z.literal(1), issuers: z.array(Trust
 export type TrustedIssuerT = z.infer<typeof TrustedIssuer>;
 
 export function loadTrustedIssuers(file = appConfig().trustedIssuersFile): TrustedIssuerT[] {
-  return TrustFile.parse(readJsonFile(file, "trusted issuer configuration")).issuers.map((i) => ({
+  let raw: unknown;
+  try {
+    raw = readJsonFile(file, "trusted issuer configuration");
+  } catch {
+    throw new ApiError(503, "TRUST_POLICY_MISSING", "trusted issuer policy not found: run `npm run setup`");
+  }
+  const parsed = TrustFile.safeParse(raw);
+  if (!parsed.success) throw new ApiError(503, "TRUST_POLICY_INVALID", "trusted issuer policy is invalid: re-run `npm run setup`");
+  return parsed.data.issuers.map((i) => ({
     ...i,
     evmAttestationSigner: getAddress(i.evmAttestationSigner),
   }));

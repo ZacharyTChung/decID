@@ -25,6 +25,7 @@ export const HolderBundleV1 = z.strictObject({
     expiresAt: Uint64,
     issuerEpoch: Uint64,
     deadline: Uint64,
+    deploymentId: Hex32,
   }),
   authorizationSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
   deployment: z.strictObject({ chainId: z.number().int().positive(), registry: Address }),

@@ -115,7 +115,7 @@ A valid-looking registry entry never makes an invalid token acceptable: the veri
 
 **CredentialRegistry** (no proxy, no tokens)
 - `DEFAULT_ADMIN_ROLE` (OpenZeppelin AccessControl): `addIssuer`, `removeIssuer`, `adminRevoke` (explicit override, evented with `adminOverride=true`).
-- `register(auth, sig)`: requires `msg.sender == auth.holder`, deadline not passed, `validFrom < expiresAt`, not already expired, issuer active, `auth.issuerEpoch ==` current epoch, commitment never registered before, and an OpenZeppelin `ECDSA` signature (rejects high-s and bad length/v) from `auth.issuer` over the EIP-712 digest.
+- `register(auth, sig)`: requires `auth.deploymentId` to equal this deployment's random id, `msg.sender == auth.holder`, deadline not passed, `validFrom < expiresAt`, not already expired, issuer active, `auth.issuerEpoch ==` current epoch, commitment never registered before, and an OpenZeppelin `ECDSA` signature (rejects high-s and bad length/v) from `auth.issuer` over the EIP-712 digest.
 - `revoke(commitment)`: only the record's issuer (even if since removed).
 - Views: `credentialStatus` (None / Active / Revoked / IssuerInactive / NotYetValid / Expired), `isCredentialValid(commitment, holder, schemaId)`, `getRecord`, `issuerState`, `hashAuthorization`, `domainSeparator`.
 - Issuer removal increments the issuer's epoch. Older records and unsubmitted authorizations become permanently invalid, re-adding the issuer restores neither, and individual revocations are never cleared.

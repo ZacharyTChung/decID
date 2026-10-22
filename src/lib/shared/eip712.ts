@@ -29,6 +29,7 @@ export const REGISTRATION_TYPES: Record<string, TypedDataField[]> = {
     { name: "expiresAt", type: "uint64" },
     { name: "issuerEpoch", type: "uint64" },
     { name: "deadline", type: "uint64" },
+    { name: "deploymentId", type: "bytes32" },
   ],
 };
 
@@ -41,6 +42,7 @@ export interface RegistrationAuthorization {
   expiresAt: number;
   issuerEpoch: number;
   deadline: number;
+  deploymentId: string;
 }
 
 export function registryDomain(chainId: number | bigint, registry: string): TypedDataDomain {

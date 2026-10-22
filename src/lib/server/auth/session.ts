@@ -39,7 +39,16 @@ function hashId(id: string): string {
   return createHash("sha256").update(id).digest("hex");
 }
 
-export function createSignInMessage(address: string, chainId: number, role: Role): string {
+function checksummed(address: string): string {
+  try {
+    return getAddress(address);
+  } catch {
+    throw new ApiError(400, "BAD_ADDRESS", "address has an invalid EIP-55 checksum");
+  }
+}
+
+export function createSignInMessage(rawAddress: string, chainId: number, role: Role): string {
+  const address = checksummed(rawAddress);
   const cfg = appConfig();
   const deployment = loadDeployment();
   if (chainId !== deployment.chainId) {
@@ -50,11 +59,10 @@ export function createSignInMessage(address: string, chainId: number, role: Role
   }
   const nonce = randomBytes(16).toString("hex");
   const now = nowSeconds();
-  db().prepare("INSERT INTO auth_nonces (nonce, expires_at) VALUES (?, ?)").run(nonce, now + NONCE_TTL);
   const message = new SiweMessage({
     scheme: new URL(cfg.origin).protocol.replace(":", ""),
     domain: cfg.domain,
-    address: getAddress(address),
+    address,
     statement: `Sign in to the Decentralized Identity MVP as ${role}. This does not authorize any transaction or credential presentation.`,
     uri: cfg.origin,
     version: "1",
@@ -64,7 +72,13 @@ export function createSignInMessage(address: string, chainId: number, role: Role
     expirationTime: new Date((now + NONCE_TTL) * 1000).toISOString(),
     resources: [`${cfg.origin}/roles/${role}`],
   });
-  return message.prepareMessage();
+  const prepared = message.prepareMessage();
+  // Bind the nonce to the exact text, so the client cannot sign an edited variant
+  // (e.g. without the expiration time or with a different statement).
+  db()
+    .prepare("INSERT INTO auth_challenges (nonce, message_hash, expires_at) VALUES (?, ?, ?)")
+    .run(nonce, hashId(prepared), now + NONCE_TTL);
+  return prepared;
 }
 
 export async function verifySignIn(messageText: string, signature: string): Promise<{ session: Session; cookie: string }> {
@@ -77,9 +91,12 @@ export async function verifySignIn(messageText: string, signature: string): Prom
   }
   // Consume the nonce first, atomically: a nonce can back at most one verification attempt.
   const consumed = db()
-    .prepare("DELETE FROM auth_nonces WHERE nonce = ? AND expires_at > ? RETURNING nonce")
-    .get(message.nonce, nowSeconds());
+    .prepare("DELETE FROM auth_challenges WHERE nonce = ? AND expires_at > ? RETURNING message_hash")
+    .get(message.nonce, nowSeconds()) as { message_hash: string } | undefined;
   if (!consumed) throw new ApiError(401, "NONCE_INVALID", "sign-in nonce is unknown, used or expired");
+  if (consumed.message_hash !== hashId(messageText)) {
+    throw new ApiError(401, "SIWE_MESSAGE_ALTERED", "the signed message differs from the one this server issued");
+  }
 
   const result = await message.verify(
     { signature, domain: cfg.domain, nonce: message.nonce, scheme: new URL(cfg.origin).protocol.replace(":", "") },

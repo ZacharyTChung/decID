@@ -45,8 +45,8 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 ### All checks
 
 ```bash
-npm run test:contracts   # 30 Hardhat tests (registry + gate security properties)
-npm run test:app         # 50 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:contracts   # 33 Hardhat tests (registry + gate security properties)
+npm run test:app         # 53 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build

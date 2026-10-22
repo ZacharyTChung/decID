@@ -21,9 +21,11 @@ const SCHEMA = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS auth_nonces (
-  nonce       TEXT PRIMARY KEY,
-  expires_at  INTEGER NOT NULL
+DROP TABLE IF EXISTS auth_nonces;      -- replaced by auth_challenges (binds the exact message)
+CREATE TABLE IF NOT EXISTS auth_challenges (
+  nonce         TEXT PRIMARY KEY,
+  message_hash  TEXT NOT NULL,         -- sha256 of the exact SIWE message the server prepared
+  expires_at    INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -116,7 +118,7 @@ export function nowSeconds(): number {
 /** Deletes expired auth, challenge, pickup and rate-limit rows. Cheap; called opportunistically. */
 export function purgeExpired(now = nowSeconds()): void {
   const d = db();
-  d.prepare("DELETE FROM auth_nonces WHERE expires_at <= ?").run(now);
+  d.prepare("DELETE FROM auth_challenges WHERE expires_at <= ?").run(now);
   d.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").run(now);
   d.prepare("DELETE FROM issuer_bundle_pickup WHERE expires_at <= ?").run(now);
   // Keep consumed/expired challenge rows for one hour as an audit trail (no credential data in them).

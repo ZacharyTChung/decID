@@ -6,6 +6,11 @@ export const CREDENTIAL_REGISTRY_ABI = [
         "internalType": "address",
         "name": "admin",
         "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "deploymentId_",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "nonpayable",
@@ -233,6 +238,22 @@ export const CREDENTIAL_REGISTRY_ABI = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "signed",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "actual",
+        "type": "bytes32"
+      }
+    ],
+    "name": "WrongDeployment",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "ZeroAddress",
     "type": "error"
@@ -240,6 +261,11 @@ export const CREDENTIAL_REGISTRY_ABI = [
   {
     "inputs": [],
     "name": "ZeroCommitment",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroDeploymentId",
     "type": "error"
   },
   {
@@ -515,6 +541,19 @@ export const CREDENTIAL_REGISTRY_ABI = [
   },
   {
     "inputs": [],
+    "name": "deploymentId",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "domainSeparator",
     "outputs": [
       {
@@ -734,6 +773,11 @@ export const CREDENTIAL_REGISTRY_ABI = [
             "internalType": "uint64",
             "name": "deadline",
             "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "deploymentId",
+            "type": "bytes32"
           }
         ],
         "internalType": "struct CredentialRegistry.RegistrationAuthorization",
@@ -848,6 +892,11 @@ export const CREDENTIAL_REGISTRY_ABI = [
             "internalType": "uint64",
             "name": "deadline",
             "type": "uint64"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "deploymentId",
+            "type": "bytes32"
           }
         ],
         "internalType": "struct CredentialRegistry.RegistrationAuthorization",

@@ -10,7 +10,7 @@ import { registryDomain, REGISTRATION_TYPES, type RegistrationAuthorization } fr
 import { HolderBundleV1, type HolderBundle } from "../../shared/bundle";
 import type { HolderRequestView, SyntheticApplicationT } from "../../shared/api";
 import { credentialLifetimeSeconds, issuerSecrets } from "../config";
-import { loadDeployment, provider, readRecord } from "../chain";
+import { assertLiveDeployment, loadDeployment, onChain, provider, readRecord } from "../chain";
 import { db, nowSeconds } from "../db";
 import { ApiError } from "../http";
 import { signCredentialJwt } from "../credential/sign";
@@ -145,7 +145,8 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     const keys = await issuerKeys();
     const issuerAddress = getAddress(keys.evmWallet.address);
     const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, provider());
-    const [active, epoch] = (await registry.getFunction("issuerState")(issuerAddress)) as [boolean, bigint];
+    await assertLiveDeployment(deployment);
+    const [active, epoch] = (await onChain(() => registry.getFunction("issuerState")(issuerAddress))) as [boolean, bigint];
     if (!active) throw new ApiError(409, "ISSUER_NOT_ACTIVE_ON_CHAIN", "issuer attestation key is not authorized in the registry");
 
     const holderAddress = getAddress(claimed.holder_address);
@@ -180,6 +181,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       expiresAt: validUntil,
       issuerEpoch: Number(epoch),
       deadline: Math.min(now + REGISTRATION_WINDOW, validUntil - 1),
+      deploymentId: deployment.deploymentId,
     };
     const authorizationSignature = await keys.evmWallet.signTypedData(
       registryDomain(deployment.chainId, deployment.registry),
@@ -269,20 +271,40 @@ export async function listIssuedCredentials(_issuer: Session): Promise<IssuedCre
   );
 }
 
+/**
+ * Transactions from the issuer's single attestation key must not be sent concurrently: two in-flight
+ * sends would race for the same account nonce. This process-local queue serializes them, which is
+ * sufficient for this single-server prototype.
+ */
+let issuerTxQueue: Promise<unknown> = Promise.resolve();
+function withIssuerTxLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = issuerTxQueue.then(fn, fn);
+  issuerTxQueue = run.catch(() => undefined);
+  return run;
+}
+
 /** Revokes on-chain with the issuer's attestation key. Only for credentials this issuer issued. */
-export async function revokeCredential(issuer: Session, commitment: string): Promise<{ txHash: string }> {
+export function revokeCredential(issuer: Session, commitment: string): Promise<{ txHash: string }> {
+  return withIssuerTxLock(() => revokeCredentialLocked(issuer, commitment));
+}
+
+async function revokeCredentialLocked(issuer: Session, commitment: string): Promise<{ txHash: string }> {
   const row = db().prepare("SELECT revoked_at FROM issuer_credentials WHERE commitment = ?").get(commitment) as
     | { revoked_at: number | null }
     | undefined;
   if (!row) throw new ApiError(404, "UNKNOWN_CREDENTIAL", "this issuer has no credential with that commitment");
   const deployment = loadDeployment();
-  const rec = await readRecord(commitment, deployment);
+  await assertLiveDeployment(deployment);
+  const rec = await onChain(() => readRecord(commitment, deployment));
   if (!rec.exists) throw new ApiError(409, "NOT_REGISTERED", "the holder has not registered this credential on-chain yet");
   if (rec.revoked) throw new ApiError(409, "ALREADY_REVOKED", "credential is already revoked");
   const keys = await issuerKeys();
   const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, keys.evmWallet);
-  const tx = await registry.getFunction("revoke")(commitment);
-  const receipt = await tx.wait();
+  // Concurrent revocations: the loser's transaction reverts (AlreadyRevoked) and surfaces as TX_REVERTED.
+  const receipt = await onChain(async () => {
+    const tx = await registry.getFunction("revoke")(commitment);
+    return tx.wait();
+  });
   if (!receipt || receipt.status !== 1) throw new ApiError(502, "REVOKE_TX_FAILED", "revocation transaction failed");
   db()
     .prepare("UPDATE issuer_credentials SET revoked_at = ?, revoke_tx = ? WHERE commitment = ?")

@@ -71,6 +71,7 @@ export interface PublicConfigResponse {
   chainId: number;
   registry: string;
   gate: string;
+  deploymentId: string;
   schemaId: string;
   rpcUrl: string;
   origin: string;
