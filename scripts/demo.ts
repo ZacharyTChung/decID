@@ -10,6 +10,8 @@
  * public dev accounts. It exits with status 1 if any expected condition fails.
  * Your normal dev chain (8545), app (3000) and .data/ are not touched.
  */
+import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { Contract, hexlify, toUtf8Bytes, type HDNodeWallet } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contracts";
@@ -107,6 +109,26 @@ async function present(actor: HttpActor, bundle: HolderBundle): Promise<Verifica
   return res.body as VerificationResult;
 }
 
+/** Runs the standalone verifier CLI against the demo stack (public inputs only). */
+function cliVerify(bundleFile: string, extra: string[] = []): { code: number | null; out: string } {
+  const demo = path.join(ROOT, ".demo");
+  const r = spawnSync(
+    process.execPath,
+    [
+      "node_modules/tsx/dist/cli.mjs",
+      "--conditions=react-server",
+      "scripts/verify.ts",
+      bundleFile,
+      "--rpc", stack!.rpc,
+      "--deployment", path.join(demo, "deployment.json"),
+      "--trust", path.join(demo, "trusted-issuers.json"),
+      ...extra,
+    ],
+    { cwd: ROOT, encoding: "utf8", env: { ...process.env, BUNDLE_PASSWORD: "demo export password 123" } },
+  );
+  return { code: r.status, out: `${r.stdout}${r.stderr}` };
+}
+
 function summarize(r: VerificationResult) {
   return r.checks.map((c) => `${c.id}:${c.status}${c.code ? `(${c.code})` : ""}`).join(" ");
 }
@@ -177,6 +199,14 @@ async function main() {
   const stolen = await present(intruder, bundle);
   check(!stolen.verified && stolen.checks.some((c) => c.code === "SUBJECT_NOT_PRESENTER"), "a different wallet presenting the same bundle is rejected");
 
+  step("6b. Standalone verifier CLI (no issuer secrets, encrypted backup as input)");
+  const backupFile = path.join(ROOT, ".demo", "backup.json");
+  writeFileSync(backupFile, JSON.stringify(encrypted));
+  const cliOk = cliVerify(backupFile);
+  check(cliOk.code === 0 && cliOk.out.includes("VERIFIED"), "npm run verify accepts the holder's encrypted backup", cliOk.out.slice(-300));
+  const cliWrongKey = cliVerify(backupFile, ["--holder-index", "3"]);
+  check(cliWrongKey.code === 2 && cliWrongKey.out.includes("PROOF_SIGNER_MISMATCH"), "the CLI rejects a proof signed by a key that does not control the holder wallet");
+
   step("7. Gated on-chain action");
   check(
     await (gate.connect(intruder.wallet) as Contract).getFunction("checkIn").staticCall(bundle.commitment).then(() => false, () => true),
@@ -204,6 +234,9 @@ async function main() {
       .then(() => false, () => true),
     "the revoked commitment cannot be re-registered",
   );
+
+  const cliRevoked = cliVerify(path.join(ROOT, ".demo", "backup.json"));
+  check(cliRevoked.code === 2 && cliRevoked.out.includes("REVOKED"), "the standalone verifier also sees the revocation");
 
   step("10. Privacy regression scan of every transaction and event on the demo chain");
   const latest = await provider.getBlockNumber();

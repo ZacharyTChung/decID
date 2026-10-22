@@ -72,6 +72,16 @@ npm run test:ui          # browser test of all three views (Playwright + Chromiu
 
 Without an injected wallet, the UI says so and does not pretend to sign. Use `npm run demo` instead.
 
+## Standalone verification (relying parties)
+
+```bash
+npm run verify -- bundle.json                          # plain holder bundle
+npm run verify -- backup.json --password '…'           # encrypted backup from the Holder page
+npm run verify -- backup.json --json                   # full per-check result
+```
+
+This runs the same checks as the verifier API (`src/lib/server/verifier/core.ts`) with public inputs only: trust policy, deployment record and RPC. Issuer secrets are removed from the environment first. A Hardhat dev key stands in for the holder's wallet (`--holder-index`). See [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md).
+
 ## Registry administration (local)
 
 ```bash
@@ -132,5 +142,6 @@ docs/                      architecture, credential profile, security & privacy
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, diagrams, data placement, contract/API responsibilities, on-chain vs off-chain verification
 - [docs/CREDENTIAL-PROFILE.md](docs/CREDENTIAL-PROFILE.md): credential profile, DIDs, trust configuration, commitment encoding and test vector, EIP-712 structures, challenge format, revocation rules
+- [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md): what a relying party needs, the exchange, mandatory checks, privacy obligations
 - [docs/SECURITY.md](docs/SECURITY.md): trust assumptions, threat model, privacy limits, status-privacy tradeoff, roadmap, extension to other credential types
 - [HANDOFF.md](HANDOFF.md): current state, decisions, verified commands
