@@ -25,6 +25,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **SIWE message binding:** the server stores a hash of the exact message it issued and rejects edited variants.
 - **Key rotation:** trust policy v2 (keys and EVM signers with active/retired/compromised lifecycles), `npm run rotate-keys`, retired EVM keys kept only for revocation. `npm run setup` migrates a v1 policy.
 - **Account recovery:** a holder request can name a lost wallet. Approval revokes its registered credentials and cancels its unregistered authorizations (new `cancelAuthorization`, scoped per issuer) before issuing to the new wallet.
+- **Smart-account holders:** SIWE and presentation proofs fall back to EIP-1271 `isValidSignature`; signatures may exceed 65 bytes. `SimpleSmartWallet` is a test-only fixture.
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -34,8 +35,8 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm ci` | ok; `npm audit`: 0 vulnerabilities (after the `tmp` override) |
 | `npm run compile` | 2 contracts compiled with solc 0.8.37 (upstream OpenZeppelin “`error` will become a keyword” warnings only) |
 | `npm run typecheck` | clean (app, scripts, contract tests, ABI freshness) |
-| `npm run test:contracts` | 35 passing |
-| `npm run test:app` | 64 passed (6 files; includes API integration, key rotation and account recovery against a real Hardhat node) |
+| `npm run test:contracts` | 36 passing |
+| `npm run test:app` | 67 passed (7 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused |

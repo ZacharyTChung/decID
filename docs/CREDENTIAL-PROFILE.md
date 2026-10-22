@@ -147,7 +147,7 @@ statement = 'I consent to share my Identity Verified credential (holder DID, iss
 
 Submission: `POST /api/verifier/presentations` with `{ challengeId, credentialJwt, salt, proof: { holder, commitment, expiresAt, signature } }`.
 
-The verifier rebuilds the typed data from **its own stored challenge** (nonce, audience = `APP_ORIGIN`, action, chain, registry) and the recomputed statement. It recovers the signer and requires `signer == proof.holder`, with `now < expiresAt <= challenge.expiresAt`. A proof for another audience, action, nonce, chain or registry therefore recovers a different address and fails. SIWE is used only for app sessions. A login never counts as consent to a presentation.
+The verifier rebuilds the typed data from **its own stored challenge** (nonce, audience = `APP_ORIGIN`, action, chain, registry) and the recomputed statement. It recovers the signer and requires `signer == proof.holder`, with `now < expiresAt <= challenge.expiresAt`. If the holder is a **contract account** (EIP-1271), the verifier instead asks the holder contract `isValidSignature(eip712Digest, signature)` and requires the magic value `0x1626ba7e`. SIWE sign-in uses the same fallback on the EIP-191 hash. A proof for another audience, action, nonce, chain or registry therefore recovers a different address and fails. SIWE is used only for app sessions. A login never counts as consent to a presentation.
 
 ## Challenge format and lifecycle
 

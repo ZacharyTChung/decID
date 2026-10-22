@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
-import { hexlify, verifyTypedData } from "ethers";
+import { TypedDataEncoder, hexlify, verifyTypedData } from "ethers";
+import { isValidContractSignature } from "../auth/contract-signature";
 import { CREDENTIAL_TYPE, SCHEMA_ID, type VerifierAction } from "../../shared/constants";
 import { commitmentFor } from "../../shared/commitment";
 import { fromUtcSeconds } from "../../shared/credential-profile";
@@ -121,29 +122,33 @@ export async function verifyPresentation(sub: PresentationSubmissionT): Promise<
   if (proof.expiresAt > challenge.expires_at || proof.expiresAt <= now) {
     return fail({ id: "walletControl", status: "fail", code: "PROOF_EXPIRY_INVALID", detail: "proof expiry must be in the future and no later than the challenge expiry" });
   }
-  let recovered: string;
+  const domain = presentationDomain(challenge.chain_id, challenge.registry);
+  const proofMessage = {
+    statement: presentationStatement(challenge.audience, challenge.action),
+    audience: challenge.audience,
+    action: challenge.action,
+    challenge: challenge.nonce,
+    holder: proof.holder,
+    commitment: proof.commitment,
+    expiresAt: proof.expiresAt,
+  };
+  // EOA: the signature must recover to the holder. Contract account (EIP-1271): the holder
+  // contract must accept the signature for the EIP-712 digest of exactly this message.
+  let recovered: string | undefined;
   try {
-    recovered = verifyTypedData(
-      presentationDomain(challenge.chain_id, challenge.registry),
-      PRESENTATION_TYPES,
-      {
-        statement: presentationStatement(challenge.audience, challenge.action),
-        audience: challenge.audience,
-        action: challenge.action,
-        challenge: challenge.nonce,
-        holder: proof.holder,
-        commitment: proof.commitment,
-        expiresAt: proof.expiresAt,
-      },
-      proof.signature,
-    );
+    recovered = verifyTypedData(domain, PRESENTATION_TYPES, proofMessage, proof.signature);
   } catch {
-    return fail({ id: "walletControl", status: "fail", code: "PROOF_SIGNATURE_INVALID", detail: "presentation proof signature is malformed" });
+    recovered = undefined; // not a plain ECDSA signature; may still be a contract-wallet signature
   }
-  if (!sameAddress(recovered, proof.holder)) {
+  if (recovered && sameAddress(recovered, proof.holder)) {
+    checks.push({ id: "walletControl", status: "pass" });
+  } else if (await isValidContractSignature(proof.holder, TypedDataEncoder.hash(domain, PRESENTATION_TYPES, proofMessage), proof.signature)) {
+    checks.push({ id: "walletControl", status: "pass", detail: "EIP-1271 contract wallet" });
+  } else if (!recovered) {
+    return fail({ id: "walletControl", status: "fail", code: "PROOF_SIGNATURE_INVALID", detail: "presentation proof signature is malformed or not accepted by the holder contract" });
+  } else {
     return fail({ id: "walletControl", status: "fail", code: "PROOF_SIGNER_MISMATCH", detail: "proof was not signed by the claimed holder wallet for this challenge" });
   }
-  checks.push({ id: "walletControl", status: "pass" });
 
   // 3-7. Credential: format, trust, signature, semantics, validity, deployment binding.
   const cred = await verifyCredentialJwt(sub.credentialJwt, {

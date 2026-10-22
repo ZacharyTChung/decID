@@ -431,6 +431,34 @@ describe("CredentialRegistry", () => {
     });
   });
 
+  describe("smart-account holders (EIP-1271 wallet as msg.sender)", () => {
+    it("registers and uses the gate through a contract wallet; the wallet validates its owner's signatures", async () => {
+      const ctx = await loadFixture(fixture);
+      const wallet = (await ethers.deployContract("SimpleSmartWallet", [ctx.holder.address])) as unknown as Contract;
+      const walletAddress = await wallet.getAddress();
+
+      // EIP-191 (as in SIWE): the wallet is asked about hashMessage(text), which the owner signed.
+      const text = "sign in as the smart wallet";
+      const digest = ethers.hashMessage(text);
+      expect(await wallet.getFunction("isValidSignature")(digest, await ctx.holder.signMessage(text))).to.equal("0x1626ba7e");
+      const otherSig = await ctx.other.signMessage(text);
+      expect(await wallet.getFunction("isValidSignature")(digest, otherSig)).to.equal("0xffffffff");
+
+      const auth = await makeAuth(ctx, { holder: walletAddress });
+      const sig = await sign(ctx, auth);
+      // The owner EOA itself is not the holder.
+      await expect(on(ctx.registry, ctx.holder).register(auth, sig)).to.be.revertedWithCustomError(ctx.registry, "SenderNotHolder");
+      // Through the wallet, msg.sender is the wallet: registration and the gate succeed.
+      await on(wallet, ctx.holder).execute(await ctx.registry.getAddress(), ctx.registry.interface.encodeFunctionData("register", [auth, sig]));
+      expect(await ctx.registry.getFunction("isCredentialValid")(auth.commitment, walletAddress, SCHEMA_ID)).to.equal(true);
+      await expect(on(wallet, ctx.holder).execute(await ctx.gate.getAddress(), ctx.gate.interface.encodeFunctionData("checkIn", [auth.commitment])))
+        .to.emit(ctx.gate, "MemberCheckedIn")
+        .withArgs(walletAddress, auth.commitment, 1n);
+      // Only the owner can act through the wallet.
+      await expect(on(wallet, ctx.other).execute(await ctx.gate.getAddress(), "0x")).to.be.revertedWithCustomError(wallet, "NotOwner");
+    });
+  });
+
   describe("deployment binding", () => {
     it("rejects a zero deploymentId at construction", async () => {
       const [admin] = await ethers.getSigners();

@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { getAddress } from "ethers";
 import { SiweMessage } from "siwe";
 import { appConfig, issuerOperatorAddresses } from "../config";
-import { loadDeployment } from "../chain";
+import { loadDeployment, provider } from "../chain";
 import { db, nowSeconds } from "../db";
 import { ApiError, readCookie } from "../http";
 
@@ -100,7 +100,9 @@ export async function verifySignIn(messageText: string, signature: string): Prom
 
   const result = await message.verify(
     { signature, domain: cfg.domain, nonce: message.nonce, scheme: new URL(cfg.origin).protocol.replace(":", "") },
-    { suppressExceptions: true },
+    // With a provider, siwe falls back to EIP-1271 (isValidSignature on the EIP-191 hash) when the
+    // signature does not recover to the message address, so contract wallets can sign in.
+    { suppressExceptions: true, provider: provider() as never },
   );
   if (!result.success) throw new ApiError(401, "SIWE_INVALID", "sign-in signature or message did not verify");
   if (message.uri !== cfg.origin) throw new ApiError(401, "SIWE_INVALID", "sign-in URI mismatch");

@@ -45,8 +45,8 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 ### All checks
 
 ```bash
-npm run test:contracts   # 35 Hardhat tests (registry + gate security properties)
-npm run test:app         # 64 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:contracts   # 36 Hardhat tests (registry + gate security properties)
+npm run test:app         # 67 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -80,6 +80,10 @@ npm run admin -- record 0x<commitment>     # public on-chain record and status
 ```
 
 The CLI signs as Hardhat dev account #0, the registry admin set by `npm run deploy`, and refuses to run on any chain other than 31337.
+
+## Smart-account holders (EIP-1271)
+
+The holder can be a contract wallet (Safe, ERC-4337 account, passkey wallet). The SIWE sign-in and the presentation proof are accepted when the holder contract's `isValidSignature` approves them. Registration and the gated action are calls made *through* the wallet, so `msg.sender` is the contract. `contracts/testing/SimpleSmartWallet.sol` is a minimal test fixture, and `test/unit/smart-wallet.test.ts` runs the full flow with it.
 
 ## Account recovery (lost wallet)
 

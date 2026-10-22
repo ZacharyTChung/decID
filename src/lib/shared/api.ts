@@ -8,6 +8,8 @@ import { VERIFIER_ACTIONS } from "./constants";
 
 const Address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const Hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
+/** 65-byte ECDSA signatures from EOAs, or longer opaque signatures from EIP-1271 contract wallets (max 2 KiB). */
+const Signature = z.string().regex(/^0x(?:[0-9a-fA-F]{2}){65,2048}$/);
 
 export const SignInChallengeRequest = z.strictObject({
   address: Address,
@@ -17,7 +19,7 @@ export const SignInChallengeRequest = z.strictObject({
 
 export const SignInVerifyRequest = z.strictObject({
   message: z.string().min(1).max(4096),
-  signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
+  signature: Signature,
 });
 
 /**
@@ -61,7 +63,7 @@ export const PresentationSubmission = z.strictObject({
     holder: Address,
     commitment: Hex32,
     expiresAt: z.number().int().positive(),
-    signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
+    signature: Signature,
   }),
 });
 export type PresentationSubmissionT = z.infer<typeof PresentationSubmission>;
