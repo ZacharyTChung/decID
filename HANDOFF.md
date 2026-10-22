@@ -40,9 +40,10 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 68 passed (7 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 70 passed (8 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
+| `npm run redteam` | 43/43 defenses held (report: docs/REDTEAM-REPORT.md); harness mutation-tested; fixed finding: spoofable `X-Forwarded-For` rate-limit key |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused |
 
 ## Blockers / unverified

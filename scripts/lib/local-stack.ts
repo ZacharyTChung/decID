@@ -27,6 +27,8 @@ export interface StackOptions {
   mode: "dev" | "start";
   distDir: string;
   log?: (msg: string) => void;
+  /** Extra environment for the app server (e.g. TRUST_PROXY). */
+  appEnv?: Record<string, string>;
 }
 
 async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: number) {
@@ -104,6 +106,7 @@ export async function startLocalStack(opts: StackOptions): Promise<LocalStack> {
         TRUSTED_ISSUERS_FILE: trustFile,
         DEPLOYMENT_FILE: deploymentFile,
         NEXT_TELEMETRY_DISABLED: "1",
+        ...opts.appEnv,
       },
       "next",
     );

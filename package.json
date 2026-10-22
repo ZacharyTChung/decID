@@ -25,7 +25,8 @@
     "rotate-keys": "tsx scripts/rotate-keys.ts",
     "test:fuzz": "hardhat test solidity",
     "test:coverage": "hardhat test --coverage",
-    "verify": "tsx --conditions=react-server scripts/verify.ts"
+    "verify": "tsx --conditions=react-server scripts/verify.ts",
+    "redteam": "tsx scripts/redteam.ts"
   },
   "dependencies": {
     "@digitalbazaar/did-method-key": "5.3.0",

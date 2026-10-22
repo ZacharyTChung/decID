@@ -23,6 +23,7 @@ import type { ChallengeResponse } from "../src/lib/shared/api";
 import type { VerificationResult } from "../src/lib/shared/verification";
 import { DEV_ROLES, devWallet } from "./lib/dev-accounts";
 import { startLocalStack, type LocalStack } from "./lib/local-stack";
+import { HttpActor } from "./lib/http-actor";
 
 const ROOT = process.cwd();
 const CHAIN_PORT = 8546;
@@ -55,38 +56,6 @@ process.on("SIGINT", () => {
   shutdown();
   process.exit(130);
 });
-
-/** HTTP client with a cookie jar and the Origin header a browser would send. */
-class HttpActor {
-  cookie = "";
-  constructor(
-    readonly name: string,
-    readonly wallet: HDNodeWallet,
-  ) {}
-  get address() {
-    return this.wallet.address;
-  }
-  async call(method: string, url: string, body?: unknown): Promise<{ status: number; body: any }> {
-    const res = await fetch(`${ORIGIN}${url}`, {
-      method,
-      headers: {
-        ...(body !== undefined ? { "content-type": "application/json" } : {}),
-        ...(method !== "GET" ? { origin: ORIGIN } : {}),
-        ...(this.cookie ? { cookie: this.cookie } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    const setCookie = res.headers.get("set-cookie");
-    if (setCookie) this.cookie = setCookie.split(";")[0]!;
-    return { status: res.status, body: await res.json() };
-  }
-  async signIn(role: "holder" | "issuer") {
-    const ch = await this.call("POST", "/api/auth/challenge", { address: this.address, chainId: 31337, role });
-    if (ch.status !== 200) return ch;
-    const signature = await this.wallet.signMessage(ch.body.message);
-    return this.call("POST", "/api/auth/verify", { message: ch.body.message, signature });
-  }
-}
 
 async function present(actor: HttpActor, bundle: HolderBundle): Promise<VerificationResult> {
   const ch = await actor.call("POST", "/api/verifier/challenges", { action: "access-verified-member-area" });
@@ -147,9 +116,9 @@ async function main() {
   });
   const { provider, deployment } = stack;
 
-  const holder = new HttpActor("holder", devWallet(DEV_ROLES.holder, provider));
-  const intruder = new HttpActor("intruder", devWallet(DEV_ROLES.otherHolder, provider));
-  const issuer = new HttpActor("issuer", devWallet(DEV_ROLES.issuerOperator, provider));
+  const holder = new HttpActor(ORIGIN, "holder", devWallet(DEV_ROLES.holder, provider));
+  const intruder = new HttpActor(ORIGIN, "intruder", devWallet(DEV_ROLES.otherHolder, provider));
+  const issuer = new HttpActor(ORIGIN, "issuer", devWallet(DEV_ROLES.issuerOperator, provider));
   const registry = new Contract(deployment.registry, CREDENTIAL_REGISTRY_ABI, provider);
   const gate = new Contract(deployment.gate, DEMO_GATE_ABI, provider);
 

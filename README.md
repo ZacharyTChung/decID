@@ -49,7 +49,7 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 68 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 70 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -71,6 +71,14 @@ npm run test:ui          # browser test of all three views (Playwright + Chromiu
 **Reload behaviour:** the holder's credential bundle lives only in the tab's memory, and the server deletes its copy at pickup. A reload forgets it, so export the encrypted backup first and import it after reloading. MetaMask caches nonces per chain. If you restart `npm run chain`, use MetaMask's *Clear activity tab data* for the account.
 
 Without an injected wallet, the UI says so and does not pretend to sign. Use `npm run demo` instead.
+
+## Red-team campaign
+
+```bash
+npm run redteam      # ~2 min: 43 attacks against a fresh live stack; exits 1 if any defense fails
+```
+
+Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).
 
 ## Standalone verification (relying parties)
 

@@ -92,8 +92,11 @@ export async function readJson<T extends z.ZodType>(req: Request, schema: T): Pr
 }
 
 function clientKey(req: Request): string {
-  // Local prototype: the first X-Forwarded-For hop if a proxy set one, else a single local bucket.
-  return (req.headers.get("x-forwarded-for") ?? "local").split(",")[0]!.trim().slice(0, 64);
+  // X-Forwarded-For is client-controlled unless a reverse proxy we operate overwrites it.
+  // Only with TRUST_PROXY=1 (app deployed behind such a proxy) is it used to tell clients apart;
+  // otherwise every request shares one bucket, so rotating a spoofed header cannot bypass limits.
+  if (process.env.TRUST_PROXY !== "1") return "direct";
+  return (req.headers.get("x-forwarded-for") ?? "direct").split(",")[0]!.trim().slice(0, 64) || "direct";
 }
 
 export function enforceRateLimit(req: Request, name: string, perMinute: number): void {
