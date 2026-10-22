@@ -19,7 +19,7 @@ A working prototype of a privacy-conscious credential flow with three roles:
 | Credentials | W3C VC Data Model 2.0 secured as `application/vc+jwt` (VC-JOSE-COSE) with `jose`; issuer `did:key` (Ed25519) via `@digitalbazaar/did-method-key`; holder `did:pkh:eip155` |
 | Sign-in | ERC-4361 SIWE via `siwe`, server-side sessions |
 | Storage | SQLite via `better-sqlite3` |
-| Tests | Hardhat + Mocha/Chai (contracts), Vitest (credentials, API, integration), scripted headless demo, Playwright UI test |
+| Tests | Hardhat + Mocha/Chai and Solidity fuzz tests (contracts), Vitest (credentials, API, integration), scripted headless demo, Playwright UI test |
 
 **Node.js 22.13 or newer** (tested on 22.22). Package manager: npm (lockfile committed, exact versions pinned).
 
@@ -45,7 +45,9 @@ The demo starts its own Hardhat node (port 8546) and Next.js dev server (port 31
 ### All checks
 
 ```bash
-npm run test:contracts   # 36 Hardhat tests (registry + gate security properties)
+npm run test:contracts   # 37 Hardhat example-based tests (registry + gate security properties)
+npm run test:fuzz        # 8 Solidity property tests, 1,000 random inputs each (forge-std)
+npm run test:coverage    # contract line/statement coverage (currently 100%)
 npm run test:app         # 67 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness

@@ -35,7 +35,9 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm ci` | ok; `npm audit`: 0 vulnerabilities (after the `tmp` override) |
 | `npm run compile` | 2 contracts compiled with solc 0.8.37 (upstream OpenZeppelin “`error` will become a keyword” warnings only) |
 | `npm run typecheck` | clean (app, scripts, contract tests, ABI freshness) |
-| `npm run test:contracts` | 36 passing |
+| `npm run test:contracts` | 37 passing |
+| `npm run test:fuzz` | 8 Solidity property tests × 1,000 runs passing |
+| `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
 | `npm run test:app` | 67 passed (7 files; includes API integration, key rotation, account recovery and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |

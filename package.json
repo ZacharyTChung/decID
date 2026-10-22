@@ -14,7 +14,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run test:contracts && npm run test:app",
+    "test": "npm run test:contracts && npm run test:fuzz && npm run test:app",
     "test:contracts": "hardhat test mocha",
     "test:app": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.hardhat.json && tsx scripts/gen-abi.ts --check",
@@ -22,7 +22,9 @@
     "reset": "tsx scripts/reset.ts",
     "test:ui": "NEXT_DIST_DIR=.next-uitest next build && tsx scripts/ui-test.ts",
     "admin": "tsx scripts/admin.ts",
-    "rotate-keys": "tsx scripts/rotate-keys.ts"
+    "rotate-keys": "tsx scripts/rotate-keys.ts",
+    "test:fuzz": "hardhat test solidity",
+    "test:coverage": "hardhat test --coverage"
   },
   "dependencies": {
     "@digitalbazaar/did-method-key": "5.3.0",
@@ -51,6 +53,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "chai": "6.3.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.17.0",
     "hardhat": "3.20.0",
     "mocha": "12.0.3",
     "playwright": "1.56.1",

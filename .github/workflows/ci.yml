@@ -22,6 +22,8 @@ jobs:
       - run: npm run compile
       - run: npm run typecheck
       - run: npm run test:contracts
+      - name: Solidity fuzz tests (property-based)
+        run: npm run test:fuzz
       - run: npm run test:app
       - run: npm run build
       - name: Headless lifecycle demo (local chain + app, synthetic data)

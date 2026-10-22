@@ -400,6 +400,22 @@ describe("CredentialRegistry", () => {
     });
   });
 
+  describe("defensive input checks", () => {
+    it("rejects a zero admin, zero holder/issuer, and admin revocation of unknown records", async () => {
+      const ctx = await loadFixture(fixture);
+      const factory = await ethers.getContractFactory("CredentialRegistry");
+      await expect(factory.deploy(ethers.ZeroAddress, keccak256(toUtf8Bytes("x")))).to.be.revertedWithCustomError(factory, "ZeroAddress");
+
+      const zeroHolder = await makeAuth(ctx, { holder: ethers.ZeroAddress });
+      await expect(on(ctx.registry, ctx.holder).register(zeroHolder, await sign(ctx, zeroHolder))).to.be.revertedWithCustomError(ctx.registry, "ZeroAddress");
+      const zeroIssuer = { ...(await makeAuth(ctx)), issuer: ethers.ZeroAddress };
+      await expect(on(ctx.registry, ctx.holder).register(zeroIssuer, await sign(ctx, zeroIssuer))).to.be.revertedWithCustomError(ctx.registry, "ZeroAddress");
+
+      const unknown = freshCommitment();
+      await expect(on(ctx.registry, ctx.admin).adminRevoke(unknown)).to.be.revertedWithCustomError(ctx.registry, "UnknownCredential").withArgs(unknown);
+    });
+  });
+
   describe("authorization cancellation (account recovery)", () => {
     it("lets the issuer withdraw an unregistered authorization, permanently", async () => {
       const ctx = await loadFixture(fixture);

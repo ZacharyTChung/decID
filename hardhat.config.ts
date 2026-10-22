@@ -25,9 +25,13 @@ export default defineConfig({
   },
   paths: {
     sources: "contracts",
-    tests: { mocha: "test/contracts" },
+    tests: { mocha: "test/contracts", solidity: "test/solidity" },
   },
-  test: { mocha: { timeout: 60_000 } },
+  test: {
+    mocha: { timeout: 60_000 },
+    // Property-based tests in test/solidity: each fuzz test runs on this many random inputs.
+    solidity: { fuzz: { runs: 1000 } },
+  },
   networks: {
     localhost: { type: "http", chainType: "l1", url: "http://127.0.0.1:8545" },
   },

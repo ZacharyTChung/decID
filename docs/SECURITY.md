@@ -71,10 +71,10 @@ The same pieces would apply with a different type and schema: a new `credentialT
 
 1. **Stronger disclosure privacy:** SD-JWT VC or BBS selective disclosure, and ZK predicates.
 2. **Unlinkability:** pairwise or rotating holder identifiers, privacy-preserving status (Bitstring Status List or ZK non-revocation), no per-credential public record.
-3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: did:web or another updatable DID method so verifiers can learn rotations without a local policy file.
+3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: publishing key history through an updatable DID method (e.g. did:web) so verifiers learn rotations without a local policy file. This was deliberately not built here: did:web requires HTTPS on a real domain, and resolving it over plain `http://localhost` would contradict the trust model (verifiers never fetch keys over unauthenticated channels).
 4. **Account recovery (implemented for the simulated issuer):** reissue to a new wallet after re-verification, revoking or cancelling the old wallet's credentials first. Smart-account holders (EIP-1271) are supported for sign-in, presentation, registration and the gate. Social-recovery wallets therefore work if their contract implements EIP-1271.
 5. **Real issuer onboarding:** governed trust lists, issuer accreditation, audit logging, HSM-held keys, real identity proofing. All of this is out of scope for this prototype.
-6. **Hardening:** HTTPS-only cookies, distributed rate limiting, formal contract audit and fuzzing, external key management.
+6. **Hardening:** HTTPS-only cookies, distributed rate limiting, a formal contract audit and invariant (stateful) testing, external key management. Property-based fuzz tests and 100% contract line coverage are already in place.
 
 ## Implemented vs future (summary)
 
