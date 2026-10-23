@@ -43,7 +43,9 @@
     ".next-uitest/types/**/*.ts",
     ".next-uitest/dev/types/**/*.ts",
     ".next-redteam/types/**/*.ts",
-    ".next-redteam/dev/types/**/*.ts"
+    ".next-redteam/dev/types/**/*.ts",
+    ".next-bench/types/**/*.ts",
+    ".next-bench/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

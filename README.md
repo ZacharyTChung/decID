@@ -90,6 +90,15 @@ npm run verify -- backup.json --json                   # full per-check result
 
 This runs the same checks as the verifier API (`src/lib/server/verifier/core.ts`) with public inputs only: trust policy, deployment record and RPC. Issuer secrets are removed from the environment first. A Hardhat dev key stands in for the holder's wallet (`--holder-index`). See [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md).
 
+## Performance and gas
+
+```bash
+npm run bench      # live stack: request latency, verification under concurrency 1/8/32, gas per transaction
+npm run test:gas   # per-function gas statistics over the contract test suite
+```
+
+Results and analysis: [docs/PERFORMANCE.md](docs/PERFORMANCE.md). On a 4-core machine, one verification takes about 20 ms (p50). The bench found that ethers' default 10 ms JSON-RPC batch delay was more than half of that, and it has been removed.
+
 ## API description (OpenAPI 3.1)
 
 [docs/openapi.json](docs/openapi.json) describes every route, its auth, rate limit, request body and responses. It is generated from the same zod schemas the handlers validate with (`npm run openapi`). `npm run typecheck` fails if it is stale. `test/unit/openapi.test.ts` fails if a route is undocumented, or if any real response (success or error) does not match its strict response schema. An extra field that appears in a response also fails it.
@@ -168,4 +177,7 @@ docs/                      architecture, credential profile, security & privacy
 - [docs/CREDENTIAL-PROFILE.md](docs/CREDENTIAL-PROFILE.md): credential profile, DIDs, trust configuration, commitment encoding and test vector, EIP-712 structures, challenge format, revocation rules
 - [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md): what a relying party needs, the exchange, mandatory checks, privacy obligations
 - [docs/SECURITY.md](docs/SECURITY.md): trust assumptions, threat model, privacy limits, status-privacy tradeoff, roadmap, extension to other credential types
+- [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md): red-team campaign scenarios and findings
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): latency, load and gas measurements
+- [docs/openapi.json](docs/openapi.json): OpenAPI 3.1 description of the HTTP API
 - [HANDOFF.md](HANDOFF.md): current state, decisions, verified commands

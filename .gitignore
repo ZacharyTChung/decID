@@ -25,3 +25,5 @@ npm-debug.log*
 .uitest/
 .redteam/
 .next-redteam/
+.bench/
+.next-bench/

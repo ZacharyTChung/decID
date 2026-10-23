@@ -27,6 +27,8 @@
     "test:coverage": "hardhat test --coverage",
     "verify": "tsx --conditions=react-server scripts/verify.ts",
     "redteam": "tsx scripts/redteam.ts",
+    "bench": "NEXT_DIST_DIR=.next-bench next build && tsx scripts/bench.ts",
+    "test:gas": "hardhat test mocha --gas-stats",
     "openapi": "tsx scripts/openapi.ts",
     "audit-log": "tsx --conditions=react-server scripts/audit-log.ts"
   },

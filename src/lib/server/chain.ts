@@ -41,7 +41,9 @@ let cached: { url: string; provider: JsonRpcProvider } | undefined;
 export function provider(): JsonRpcProvider {
   const url = appConfig().rpcUrl;
   if (!cached || cached.url !== url) {
-    cached = { url, provider: new JsonRpcProvider(url, undefined, { staticNetwork: false, cacheTimeout: -1 }) };
+    // batchStallTime 0: calls made in the same tick still go out as one JSON-RPC batch, but
+    // without ethers' default 10 ms wait for more calls (which dominated verification latency).
+    cached = { url, provider: new JsonRpcProvider(url, undefined, { staticNetwork: false, cacheTimeout: -1, batchStallTime: 0 }) };
   }
   return cached.provider;
 }
@@ -105,15 +107,21 @@ export interface OnChainRecord {
   revoked: boolean;
   status: RegistryStatus;
   blockTag: number;
+  /** `isCredentialValid(commitment, holder, schemaId)` at the same block, when `validFor` was given. */
+  validFor?: boolean;
 }
 
-/** Reads the record and its status in one consistent block. */
-export async function readRecord(commitment: string, d: Deployment = loadDeployment()): Promise<OnChainRecord> {
+/**
+ * Reads the record and its status (and optionally `isCredentialValid` for a holder) in one
+ * consistent block: one round trip for the block number, then one batched round trip.
+ */
+export async function readRecord(commitment: string, d: Deployment = loadDeployment(), validFor?: { holder: string; schemaId: string }): Promise<OnChainRecord> {
   const registry = registryContract(d);
   const blockTag = await provider().getBlockNumber();
-  const [r, status] = await Promise.all([
+  const [r, status, valid] = await Promise.all([
     registry.getFunction("getRecord")(commitment, { blockTag }),
     registry.getFunction("credentialStatus")(commitment, { blockTag }),
+    validFor ? (registry.getFunction("isCredentialValid")(commitment, validFor.holder, validFor.schemaId, { blockTag }) as Promise<boolean>) : undefined,
   ]);
   return {
     exists: r.holder !== "0x0000000000000000000000000000000000000000",
@@ -127,5 +135,6 @@ export async function readRecord(commitment: string, d: Deployment = loadDeploym
     revoked: r.revoked,
     status: REGISTRY_STATUS[Number(status)] ?? "None",
     blockTag,
+    validFor: valid,
   };
 }

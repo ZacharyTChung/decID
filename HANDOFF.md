@@ -31,6 +31,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Device vault:** the holder can save the bundle in IndexedDB encrypted with a passphrase (same envelope as the export) and unlock it after a reload; the UI test checks that only ciphertext is at rest.
 - **Issuer audit log:** issuer actions go into an append-only SHA-256 hash chain (`issuer_audit`), checked by `npm run audit-log -- verify` and shown on the issuer page. Tests tamper with a copy of the database (edit, forged re-hash, delete, reorder) and confirm detection; tail truncation is documented as needing an external head hash.
 - **OpenAPI 3.1:** `docs/openapi.json` is generated from zod schemas (`src/lib/shared/api.ts` for requests, `api-responses.ts` for responses); typecheck fails if stale. A conformance test exercises every operation against real handlers and parses each response with its strict schema (a mutation adding a `salt` field to a response was confirmed to fail it).
+- **Performance:** `npm run bench` (live stack, correctness-checked) and `npm run test:gas`. Finding fixed: ethers' default 10 ms `batchStallTime` and a third sequential RPC round trip made a verification take 51 ms; now 20 ms p50 (docs/PERFORMANCE.md).
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -56,4 +57,4 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 
 ## Next concrete step
 
-Try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”). Planned next: SD-JWT selective disclosure, and gas/load measurements.
+Try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”). Planned next: SD-JWT selective disclosure.

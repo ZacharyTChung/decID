@@ -7,7 +7,7 @@ import { sameAddress } from "../../shared/did-pkh";
 import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../../shared/eip712";
 import { CHECK_IDS, type CheckResult, type DisclosedClaims, type VerificationResult } from "../../shared/verification";
 import { isValidContractSignature } from "../auth/contract-signature";
-import { readRecord, registryContract, type Deployment } from "../chain";
+import { readRecord, type Deployment } from "../chain";
 import { verifyCredentialJwt } from "../credential/verify";
 import { trustedEvmSigner, type TrustedIssuerT } from "../trust";
 
@@ -132,7 +132,7 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
   // 10. Live registry state, matched field-by-field against the verified credential.
   let registryStatus: string;
   try {
-    const rec = await readRecord(recomputed, deployment);
+    const rec = await readRecord(recomputed, deployment, { holder: proof.holder, schemaId: SCHEMA_ID });
     registryStatus = rec.exists ? rec.status : "NotRegistered";
     const problems: string[] = [];
     if (!rec.exists) problems.push("no registry record for this commitment");
@@ -144,8 +144,7 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
       if (rec.schemaId.toLowerCase() !== SCHEMA_ID.toLowerCase()) problems.push("registered schema differs");
       if (rec.validFrom !== fromUtcSeconds(vc.validFrom) || rec.expiresAt !== fromUtcSeconds(vc.validUntil)) problems.push("registered validity window differs from credential");
       if (rec.status !== "Active") problems.push(`registry status is ${rec.status}`);
-      const valid = (await registryContract(deployment).getFunction("isCredentialValid")(recomputed, proof.holder, SCHEMA_ID, { blockTag: rec.blockTag })) as boolean;
-      if (!valid && rec.status === "Active") problems.push("registry isCredentialValid returned false");
+      if (rec.validFor !== true && rec.status === "Active") problems.push("registry isCredentialValid returned false");
     }
     if (problems.length) {
       const code = !rec.exists ? "NOT_REGISTERED" : rec.status === "Revoked" ? "REVOKED" : rec.status !== "Active" ? `REGISTRY_${rec.status.toUpperCase()}` : "REGISTRY_MISMATCH";
