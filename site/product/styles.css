@@ -1,0 +1,24 @@
+@import "tailwindcss" source(none);
+@source "./app.tsx";
+@source "../../src/components/pass/ui.tsx";
+
+/* decID brand (same tokens as src/app/globals.css). */
+@theme {
+  --color-brand-50: #eef7f5;
+  --color-brand-100: #d9ece8;
+  --color-brand-200: #b3d9d2;
+  --color-brand-500: #13857a;
+  --color-brand-600: #0b6e65;
+  --color-brand-700: #0a5c55;
+  --color-brand-800: #08453f;
+  --color-brand-900: #062f2b;
+  --color-paper: #f3f6f5;
+  --color-ink: #11201d;
+}
+
+/* One deliberate look: a dark stage with light product surfaces on it. */
+body { background: var(--color-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

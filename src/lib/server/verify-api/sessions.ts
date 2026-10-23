@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { hexlify } from "ethers";
 import { ACTION_POLICIES } from "../../shared/constants";
 import { presentationStatement } from "../../shared/eip712";
@@ -13,6 +13,7 @@ import { ApiError } from "../errors";
 import { loadTrustedIssuers } from "../trust";
 import { failureCode, finalize, verifyPresentationCore } from "../verifier/core";
 import { appendReceipt } from "./receipts";
+import { matchCode, sha256Hex } from "../../shared/receipt-chain";
 import { getMerchant, type Merchant } from "./merchants";
 
 /**
@@ -30,7 +31,6 @@ import { getMerchant, type Merchant } from "./merchants";
  */
 
 export const SESSION_TTL = 300; // seconds: long enough to scan a QR code and approve
-const MATCH_ALPHABET = "ACDEFHJKMNPRTUVWXY3479"; // no look-alikes (0/O, 1/I/L, 2/Z, 5/S, 8/B)
 
 interface Row {
   id: string;
@@ -143,11 +143,6 @@ export function walletRequest(id: string) {
   };
 }
 
-function matchCode(id: string, signature: string): string {
-  const h = createHash("sha256").update(`${id}|${signature}`).digest();
-  return Array.from(h.subarray(0, 4), (b) => MATCH_ALPHABET[b % MATCH_ALPHABET.length]).join("");
-}
-
 /** The holder answers. Single use: the first submission consumes the session. */
 export async function submitPresentation(id: string, sub: Omit<PresentationSubmissionT, "challengeId">) {
   const now = nowSeconds();
@@ -191,7 +186,7 @@ export async function submitPresentation(id: string, sub: Omit<PresentationSubmi
     failureCode: code,
     issuer: verified && core.disclosed ? { name: core.disclosed.issuerName, did: core.disclosed.issuerDid } : null,
     registry: { chainId: claimed.chain_id, address: claimed.registry, status: core.registryStatus ?? null },
-    evidence: createHash("sha256").update(`${compactPresentation(sub.credentialJwt, sub.disclosures)}|${sub.proof.signature}`).digest("hex"),
+    evidence: sha256Hex(`${compactPresentation(sub.credentialJwt, sub.disclosures)}|${sub.proof.signature}`),
     checkedAt: new Date(now * 1000).toISOString(),
   });
   db()

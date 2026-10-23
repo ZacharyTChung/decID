@@ -144,7 +144,7 @@ export default function Shop() {
           {received && (
             <section className="rounded-2xl bg-[#2b1d12] p-4 text-sm text-[#fbf7f0]" aria-label="What Hopline received">
               <h2 className="font-bold">What Hopline received from decID</h2>
-              <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-3 text-xs leading-relaxed">{JSON.stringify(received, null, 2)}</pre>
+              <pre className="mt-2 overflow-x-auto rounded-lg bg-black/30 p-3 text-xs leading-relaxed" tabIndex={0}>{JSON.stringify(received, null, 2)}</pre>
               <p className="mt-2 text-xs text-[#d9c3a5]">Not received: name, birth date, address, ID number, ID photo, selfie. Receipt signature checked against decID’s published key.</p>
             </section>
           )}

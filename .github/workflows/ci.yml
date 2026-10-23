@@ -39,6 +39,8 @@ jobs:
         run: npm run test:site
       - name: Product demo end to end (Pass, Hopline, Neon Hall, dashboard, demo stage)
         run: npm run test:product
+      - name: Hosted in-browser prototype (build, then drive it in Chromium)
+        run: npm run test:product-site
       - if: always()
         uses: actions/upload-artifact@v4
         with:

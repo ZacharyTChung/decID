@@ -5,6 +5,8 @@
 - They then answer "are you 21+?" with one tap, online or at a venue door.
 - Businesses integrate **decID Verify** (API + SDK). They get a yes/no and a signed, hash-chained compliance receipt, and never hold a name, birth date or ID photo.
 
+**Try it without installing anything:** the hosted prototype at https://claude.ai/artifact/SE7SVzFQFUQpWQJm4su763 runs the whole product in one browser tab. `npm run site:product` builds it and `npm run test:product-site` tests it. The product plan, user stories and core mechanics are in [docs/PRODUCT-PLAN.md](docs/PRODUCT-PLAN.md), and the prompts used to build it are in [docs/PROMPTS.md](docs/PROMPTS.md).
+
 ```bash
 npm ci && npm run compile
 npm run product            # one command: chain, keys, contracts, demo businesses, app

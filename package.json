@@ -36,7 +36,9 @@
     "site:evidence": "tsx scripts/collect-evidence.ts",
     "test:gas": "hardhat test mocha --gas-stats",
     "openapi": "tsx scripts/openapi.ts",
-    "audit-log": "tsx --conditions=react-server scripts/audit-log.ts"
+    "audit-log": "tsx --conditions=react-server scripts/audit-log.ts",
+    "site:product": "tsx site/product/build.ts",
+    "test:product-site": "tsx site/product/build.ts && tsx scripts/product-site-test.ts"
   },
   "dependencies": {
     "@digitalbazaar/did-method-key": "5.3.0",

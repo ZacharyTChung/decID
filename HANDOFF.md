@@ -58,6 +58,12 @@ State as of 2026-10-23. No secrets or credential payloads are in this file.
   - **Landing page** at `/`; the old home moved to `/lab`.
   - `npm run product` (one-command demo, `--lan` for a phone) and `npm run test:product` (end to end in Chromium, in CI).
   - Docs: docs/PRODUCT.md, docs/DEMO-SCRIPT.md.
+- **Hosted prototype** (`site/product/`, published at https://claude.ai/artifact/SE7SVzFQFUQpWQJm4su763):
+  - The whole product in one browser tab: `DecidCloud` (`site/product/cloud.ts`) runs the real issuance, contracts on the in-page EVM, verifier core and receipt chain. Sessions and receipts live in memory.
+  - Receipt signing, chain checking and match codes moved to `src/lib/shared/receipt-chain.ts`, shared with the server (`receipt-chain.test.ts` pins byte-for-byte equality with the old node:crypto code).
+  - The dashboard adds an outcome chart, a verification-time chart, an insider-tamper demo and a "busy night" simulation that includes a borrowed credential and a revoked Pass.
+  - `npm run site:product` builds it; `npm run test:product-site` tests it (in CI).
+  - Product plan: docs/PRODUCT-PLAN.md. Prompts: docs/PROMPTS.md.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
 
@@ -69,11 +75,12 @@ State as of 2026-10-23. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 130 passed (now including the decID Verify API tests); previously 111 passed (14 files: independent-library interop, W3C context/schema conformance, chain-outage resilience, issuer lease, SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 132 passed (now including the decID Verify API and receipt-chain tests); previously 111 passed (14 files: independent-library interop, W3C context/schema conformance, chain-outage resilience, issuer lease, SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run test:multi-instance` | `MULTI-INSTANCE TEST PASSED`: shared sessions, 60/60 cross-instance presentations, 8/8 concurrent cross-instance revocations, intact audit chain |
 | `npm run redteam` | 53/53 defenses held (10 selective-disclosure attacks added with SD-JWT) (report: docs/REDTEAM-REPORT.md); harness mutation-tested; fixed finding: spoofable `X-Forwarded-For` rate-limit key |
+| `npm run test:product-site` | `HOSTED PROTOTYPE TEST PASSED`: tour, charts, tamper detection, busy night (borrowed and revoked passes refused), phone width, axe, no console errors |
 | `npm run test:product` | `PRODUCT TEST PASSED` (twice in a row): Pass onboarding, Hopline checkout with a verified receipt and no personal data, matching door codes, under-21 refusal, intact receipt chain, demo stage; axe: no serious violations; no console errors |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → 18+ selective disclosure → reload/import → gate refused; axe (WCAG 2.1 A/AA) audit of 8 UI states: 0 violations |
 
