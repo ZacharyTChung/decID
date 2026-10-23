@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+/* decID brand: security-print teal on cool paper (shared with the evaluation site). */
+@theme {
+  --color-brand-50: #eef7f5;
+  --color-brand-100: #d9ece8;
+  --color-brand-200: #b3d9d2;
+  --color-brand-500: #13857a;
+  --color-brand-600: #0b6e65;
+  --color-brand-700: #0a5c55;
+  --color-brand-800: #08453f;
+  --color-brand-900: #062f2b;
+  --color-paper: #f3f6f5;
+  --color-ink: #11201d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

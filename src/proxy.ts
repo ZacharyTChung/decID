@@ -35,7 +35,8 @@ export function proxy(request: NextRequest) {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // Same-origin framing only: the demo stage (/demo) shows the phone and the business side by side.
+    "frame-ancestors 'self'",
   ].join("; ");
 
   const requestHeaders = new Headers(request.headers);

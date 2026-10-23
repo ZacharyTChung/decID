@@ -29,6 +29,10 @@ export interface StackOptions {
   log?: (msg: string) => void;
   /** Extra environment for the app server (e.g. TRUST_PROXY). */
   appEnv?: Record<string, string>;
+  /** Interface the app listens on (default: Next's default). "0.0.0.0" exposes it on the LAN. */
+  host?: string;
+  /** Public origin users open (default http://localhost:<appPort>); e.g. http://192.168.1.20:3000. */
+  origin?: string;
 }
 
 async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: number) {
@@ -81,7 +85,7 @@ export async function startLocalStack(opts: StackOptions): Promise<LocalStack> {
 
   try {
     const rpc = `http://127.0.0.1:${opts.chainPort}`;
-    const origin = `http://localhost:${opts.appPort}`;
+    const origin = opts.origin ?? `http://localhost:${opts.appPort}`;
     start(["node_modules/hardhat/dist/src/cli.js", "node", "--port", String(opts.chainPort)], process.env, "hardhat");
     const provider = new JsonRpcProvider(rpc, undefined, { cacheTimeout: -1 });
     await waitFor("Hardhat node", async () => (await provider.getNetwork()).chainId === 31337n, 90_000);
@@ -97,7 +101,7 @@ export async function startLocalStack(opts: StackOptions): Promise<LocalStack> {
     log(`Contracts deployed: registry ${deployment.registry}, gate ${deployment.gate}`);
 
     start(
-      ["node_modules/next/dist/bin/next", opts.mode, "--port", String(opts.appPort)],
+      ["node_modules/next/dist/bin/next", opts.mode, "--port", String(opts.appPort), ...(opts.host ? ["--hostname", opts.host] : [])],
       {
         ...process.env,
         ...issuerEnv,

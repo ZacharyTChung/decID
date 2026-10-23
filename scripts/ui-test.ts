@@ -139,7 +139,7 @@ async function run(stack: LocalStack) {
 
     const holder = await (await walletContext(browser, DEV_ROLES.holder, stack.rpc, stack.provider)).newPage();
     watch(holder, "holder");
-    await holder.goto(`${BASE}/`);
+    await holder.goto(`${BASE}/lab`);
     await holder.getByText("Local Hardhat 31337").waitFor();
     await holder.goto(`${BASE}/holder`);
     await holder.getByRole("button", { name: "Connect wallet" }).click();
@@ -274,8 +274,8 @@ async function run(stack: LocalStack) {
     await holder.getByText(/Access denied by the gate: registry status is Revoked/).waitFor({ timeout: 20_000 });
     await holder.screenshot({ path: `${SHOTS}/05-holder-revoked.png`, fullPage: true });
     await audit(holder, "holder (revoked, gate refused)");
-    await holder.goto(`${BASE}/`);
-    await audit(holder, "home");
+    await holder.goto(`${BASE}/lab`);
+    await audit(holder, "protocol lab");
     step("after reload: wrong backup password rejected, import works, gate refuses the revoked credential");
   } finally {
     await browser.close();

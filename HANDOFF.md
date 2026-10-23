@@ -1,6 +1,6 @@
 # Handoff
 
-State as of 2026-10-22. No secrets or credential payloads are in this file.
+State as of 2026-10-23. No secrets or credential payloads are in this file.
 
 ## Completed
 
@@ -40,6 +40,25 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Showcase site (`site/`):** verdict, evidence and an in-browser playground running the real issuance function (`issuer/issue.ts`, extracted from `approveRequest`), the holder code and the production verifier core. The verifier core now accepts an injected `provider`. `ApiError` moved to `errors.ts`, so the core no longer pulls in the database. The chain is an in-page ethereumjs EVM running the compiled contracts. `npm run test:site` drives it in Chromium (in CI). Evidence comes from `npm run site:evidence`.
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
+- **Product layer (decID):** reusable age verification, built on the protocol above.
+  - **decID Verify** (`src/lib/server/verify-api`, `/api/v1/*`, SDK `src/sdk/decid-verify.ts`):
+    - Merchants authenticate with bearer API keys (stored as SHA-256).
+    - Policies: `age_over_21`, `age_over_18`, `identity_verified`.
+    - Single-use sessions, audience `urn:decid:merchant:<id>`, 5-minute TTL.
+    - A 4-letter match code for doors.
+    - Ed25519 receipts (`decid-receipt+jwt`), hash-chained per merchant, with the JWKS at `/api/v1/receipt-keys`.
+    - A `false` result only for `POLICY_NOT_SATISFIED`; every other failure is a rejection with a reason.
+  - **decID Pass** (`/pass`, `src/lib/client/pass.ts`):
+    - Embedded wallet in IndexedDB with multiple demo people and SIWE sign-in.
+    - Its on-chain registration is relayed by a sponsor account (`/api/pass/registration`). The relay only accepts `register` to the registry, signed by the session holder, for a commitment issued to them, on chain 31337.
+    - Optional `ISSUER_AUTO_APPROVE=1` (server-side, actor "auto-approval"; recovery requests excluded).
+  - **Demo businesses** Hopline (`/demo/shop`) and Neon Hall (`/demo/door`): their backends (`/api/demo/*`) call decID Verify over HTTP through the SDK, only when `DEMO_MODE=1`.
+  - **Business dashboard** (`/business`): cookie session from an API key.
+  - **Demo stage** (`/demo`): same-origin iframes, so the CSP now has `frame-ancestors 'self'` and `X-Frame-Options SAMEORIGIN`.
+  - **Landing page** at `/`; the old home moved to `/lab`.
+  - `npm run product` (one-command demo, `--lan` for a phone) and `npm run test:product` (end to end in Chromium, in CI).
+  - Docs: docs/PRODUCT.md, docs/DEMO-SCRIPT.md.
+
 ## Verified commands and results (fresh clone, Node 22.22.0)
 
 | Command | Result |
@@ -50,11 +69,12 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 111 passed (14 files: independent-library interop, W3C context/schema conformance, chain-outage resilience, issuer lease, SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 130 passed (now including the decID Verify API tests); previously 111 passed (14 files: independent-library interop, W3C context/schema conformance, chain-outage resilience, issuer lease, SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run test:multi-instance` | `MULTI-INSTANCE TEST PASSED`: shared sessions, 60/60 cross-instance presentations, 8/8 concurrent cross-instance revocations, intact audit chain |
 | `npm run redteam` | 53/53 defenses held (10 selective-disclosure attacks added with SD-JWT) (report: docs/REDTEAM-REPORT.md); harness mutation-tested; fixed finding: spoofable `X-Forwarded-For` rate-limit key |
+| `npm run test:product` | `PRODUCT TEST PASSED` (twice in a row): Pass onboarding, Hopline checkout with a verified receipt and no personal data, matching door codes, under-21 refusal, intact receipt chain, demo stage; axe: no serious violations; no console errors |
 | `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → 18+ selective disclosure → reload/import → gate refused; axe (WCAG 2.1 A/AA) audit of 8 UI states: 0 violations |
 
 ## Blockers / unverified
@@ -63,5 +83,8 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - The W3C spec site was not reachable from the build environment. VC-JOSE-COSE requirements were checked against the spec source on GitHub (w3c/vc-jose-cose).
 
 ## Next concrete step
+
+For the class demo, follow docs/DEMO-SCRIPT.md. Product next steps are in docs/PRODUCT.md → Roadmap.
+
 
 Try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”). Planned next: see the roadmap in docs/SECURITY.md (unlinkable disclosure, privacy-preserving status).

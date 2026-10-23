@@ -32,3 +32,6 @@ npm-debug.log*
 .evidence/
 site/dist/
 .site-test/
+.product/
+.next-product/
+.product-test/

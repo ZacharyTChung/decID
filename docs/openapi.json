@@ -104,6 +104,9 @@
                     "origin": {
                       "type": "string"
                     },
+                    "demo": {
+                      "type": "boolean"
+                    },
                     "issuers": {
                       "type": "array",
                       "items": {
@@ -209,6 +212,7 @@
                     "schemaId",
                     "rpcUrl",
                     "origin",
+                    "demo",
                     "issuers"
                   ],
                   "additionalProperties": false

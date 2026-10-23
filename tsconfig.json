@@ -49,7 +49,9 @@
     ".next-bench/types/**/*.ts",
     ".next-bench/dev/types/**/*.ts",
     ".next-multi/types/**/*.ts",
-    ".next-multi/dev/types/**/*.ts"
+    ".next-multi/dev/types/**/*.ts",
+    ".next-product/types/**/*.ts",
+    ".next-product/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

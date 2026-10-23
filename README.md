@@ -1,4 +1,43 @@
-# Decentralized Identity MVP
+# decID
+
+**Prove you're 21. Nothing else.** decID is reusable, privacy-preserving age verification:
+- A person is verified once into **decID Pass**, a wallet on their phone.
+- They then answer "are you 21+?" with one tap, online or at a venue door.
+- Businesses integrate **decID Verify** (API + SDK). They get a yes/no and a signed, hash-chained compliance receipt, and never hold a name, birth date or ID photo.
+
+```bash
+npm ci && npm run compile
+npm run product            # one command: chain, keys, contracts, demo businesses, app
+# open http://localhost:3000/demo  (add -- --lan to use a real phone on the same Wi-Fi)
+```
+
+| Page | What it is |
+| --- | --- |
+| `/` | Product landing page |
+| `/demo` | Demo stage: business and phone side by side, with the script |
+| `/pass` | decID Pass, the consumer wallet (mobile-first) |
+| `/demo/shop` | Hopline, a demo online drinks shop with a 21+ checkout |
+| `/demo/door` | Neon Hall, a demo venue door kiosk with a QR code and a match code |
+| `/business` | decID Verify business dashboard (receipt chain, stored fields) |
+| `/lab` | Protocol lab: the underlying holder / issuer / verifier roles |
+
+More docs:
+- [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors, business model (labelled assumptions), risks and roadmap.
+- [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md): how to present it live.
+- [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md) and `docs/openapi.json`: integrating a business.
+
+`npm run test:product` drives the whole product in Chromium:
+- Pass onboarding with sponsored gas;
+- a checkout that receives only `{ ageOver21: true }` plus a verified receipt;
+- door and phone showing the same match code;
+- an under-21 refusal;
+- the dashboard's intact receipt chain;
+- the demo stage;
+- axe accessibility audits.
+
+The rest of this README covers the protocol underneath.
+
+## Protocol: decentralized identity MVP
 
 A working prototype of a privacy-conscious credential flow with three roles:
 

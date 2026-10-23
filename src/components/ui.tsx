@@ -131,6 +131,7 @@ export function useAction() {
 }
 
 const NAV = [
+  { href: "/lab", label: "Lab" },
   { href: "/holder", label: "Holder" },
   { href: "/issuer", label: "Issuer" },
   { href: "/verifier", label: "Verifier" },

@@ -29,6 +29,8 @@
     "redteam": "tsx scripts/redteam.ts",
     "bench": "NEXT_DIST_DIR=.next-bench next build && tsx scripts/bench.ts",
     "test:multi-instance": "NEXT_DIST_DIR=.next-multi next build && tsx scripts/multi-instance.ts",
+    "product": "NEXT_DIST_DIR=.next-product next build && tsx --conditions=react-server scripts/product.ts",
+    "test:product": "NEXT_DIST_DIR=.next-product next build && tsx --conditions=react-server scripts/product-test.ts",
     "site": "tsx site/build.ts",
     "test:site": "tsx site/build.ts && tsx scripts/site-test.ts",
     "site:evidence": "tsx scripts/collect-evidence.ts",

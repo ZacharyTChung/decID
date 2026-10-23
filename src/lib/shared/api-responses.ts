@@ -30,6 +30,7 @@ export const ConfigResponse = z.strictObject({
   schemaId: Hex32,
   rpcUrl: z.string(),
   origin: z.string(),
+  demo: z.boolean(),
   issuers: z.array(
     z.strictObject({
       id: z.string(),

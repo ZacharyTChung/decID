@@ -94,6 +94,8 @@ export interface PublicConfigResponse {
   schemaId: string;
   rpcUrl: string;
   origin: string;
+  /** Demo conveniences are on (DEMO_MODE=1): demo businesses, one-click dashboard sign-in. */
+  demo: boolean;
   issuers: {
     id: string;
     name: string;

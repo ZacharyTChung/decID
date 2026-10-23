@@ -10,7 +10,7 @@ import {
   HolderRequestBody,
   type PublicConfigResponse,
 } from "../../shared/api";
-import { appConfig, issuerAutoApprove } from "../config";
+import { appConfig, demoMode, issuerAutoApprove } from "../config";
 import { loadDeployment } from "../chain";
 import { ApiError, json, readJson, route } from "../http";
 import {
@@ -51,6 +51,7 @@ export const getConfig = route(async () => {
     schemaId: d.schemaId,
     rpcUrl: appConfig().rpcUrl,
     origin: appConfig().origin,
+    demo: demoMode(),
     issuers: loadTrustedIssuers().map((i) => ({
       id: i.id,
       name: i.name,

@@ -37,9 +37,13 @@ jobs:
         run: npm run test:ui
       - name: Showcase site (build, then drive the in-browser playground in Chromium)
         run: npm run test:site
+      - name: Product demo end to end (Pass, Hopline, Neon Hall, dashboard, demo stage)
+        run: npm run test:product
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ui-screenshots
-          path: .uitest/screenshots/
+          path: |
+            .uitest/screenshots/
+            .product-test/*.png
           if-no-files-found: ignore
