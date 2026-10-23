@@ -30,6 +30,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Verifier core + CLI:** presentation checks live in stateless `verifier/core.ts`, shared by the API and `npm run verify` (public inputs only; exercised by `npm run demo`).
 - **Device vault:** the holder can save the bundle in IndexedDB encrypted with a passphrase (same envelope as the export) and unlock it after a reload; the UI test checks that only ciphertext is at rest.
 - **Issuer audit log:** issuer actions go into an append-only SHA-256 hash chain (`issuer_audit`), checked by `npm run audit-log -- verify` and shown on the issuer page. Tests tamper with a copy of the database (edit, forged re-hash, delete, reorder) and confirm detection; tail truncation is documented as needing an external head hash.
+- **OpenAPI 3.1:** `docs/openapi.json` is generated from zod schemas (`src/lib/shared/api.ts` for requests, `api-responses.ts` for responses); typecheck fails if stale. A conformance test exercises every operation against real handlers and parses each response with its strict schema (a mutation adding a `salt` field to a response was confirmed to fail it).
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -42,7 +43,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 77 passed (8 files; includes API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 83 passed (9 files; includes OpenAPI sync and response conformance, includes API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
 | `npm run redteam` | 43/43 defenses held (report: docs/REDTEAM-REPORT.md); harness mutation-tested; fixed finding: spoofable `X-Forwarded-For` rate-limit key |
@@ -55,4 +56,4 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 
 ## Next concrete step
 
-Try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”). Planned next: an OpenAPI description of the API, SD-JWT selective disclosure, and gas/load measurements.
+Try the UI with MetaMask on the local chain (README → “Using the UI with a browser wallet”). Planned next: SD-JWT selective disclosure, and gas/load measurements.

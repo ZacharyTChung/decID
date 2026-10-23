@@ -49,7 +49,7 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 77 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 83 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -89,6 +89,10 @@ npm run verify -- backup.json --json                   # full per-check result
 ```
 
 This runs the same checks as the verifier API (`src/lib/server/verifier/core.ts`) with public inputs only: trust policy, deployment record and RPC. Issuer secrets are removed from the environment first. A Hardhat dev key stands in for the holder's wallet (`--holder-index`). See [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md).
+
+## API description (OpenAPI 3.1)
+
+[docs/openapi.json](docs/openapi.json) describes every route, its auth, rate limit, request body and responses. It is generated from the same zod schemas the handlers validate with (`npm run openapi`). `npm run typecheck` fails if it is stale. `test/unit/openapi.test.ts` fails if a route is undocumented, or if any real response (success or error) does not match its strict response schema. An extra field that appears in a response also fails it.
 
 ## Issuer audit log
 

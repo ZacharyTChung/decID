@@ -17,7 +17,7 @@
     "test": "npm run test:contracts && npm run test:fuzz && npm run test:app",
     "test:contracts": "hardhat test mocha",
     "test:app": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.hardhat.json && tsx scripts/gen-abi.ts --check",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.hardhat.json && tsx scripts/gen-abi.ts --check && tsx scripts/openapi.ts --check",
     "demo": "tsx scripts/demo.ts",
     "reset": "tsx scripts/reset.ts",
     "test:ui": "NEXT_DIST_DIR=.next-uitest next build && tsx scripts/ui-test.ts",
@@ -27,6 +27,7 @@
     "test:coverage": "hardhat test --coverage",
     "verify": "tsx --conditions=react-server scripts/verify.ts",
     "redteam": "tsx scripts/redteam.ts",
+    "openapi": "tsx scripts/openapi.ts",
     "audit-log": "tsx --conditions=react-server scripts/audit-log.ts"
   },
   "dependencies": {

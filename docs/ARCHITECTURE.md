@@ -141,6 +141,8 @@ A valid-looking registry entry never makes an invalid token acceptable: the veri
 | `POST /api/verifier/challenges` | public, rate-limited | Create single-use challenge |
 | `POST /api/verifier/presentations` | public, rate-limited | Verify a presentation (200 verified / 422 not) |
 
+The machine-readable description is [openapi.json](openapi.json), generated from the request and response zod schemas and checked against real responses by the test suite.
+
 Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body of at most 32 KiB. Errors are `{ "error": { "code", "message" } }` with stable codes. Validation errors name fields, never submitted values, and stack traces are never returned.
 
 ## Data placement

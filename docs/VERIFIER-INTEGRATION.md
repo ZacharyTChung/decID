@@ -12,7 +12,7 @@ A verifier decides whether a presenter controls a wallet that holds a valid "Ide
 
 ## Three ways to verify
 
-1. **HTTP API** (this app): `POST /api/verifier/challenges` then `POST /api/verifier/presentations`. Challenges are single-use and stored server-side. See *Challenge format* in [CREDENTIAL-PROFILE.md](CREDENTIAL-PROFILE.md).
+1. **HTTP API** (this app): `POST /api/verifier/challenges` then `POST /api/verifier/presentations` (schemas in [openapi.json](openapi.json)). Challenges are single-use and stored server-side. See *Challenge format* in [CREDENTIAL-PROFILE.md](CREDENTIAL-PROFILE.md).
 2. **Library**: `verifyPresentationCore(context, presented, { deployment, issuers, now })` in `src/lib/server/verifier/core.ts`. It is stateless: you generate and track your own challenge (32 random bytes, short expiry, single use).
 3. **CLI**: `npm run verify -- <bundle.json> [--password …]` runs the same core against a holder bundle or encrypted backup. It uses a fresh challenge whose audience is `urn:did-mvp:cli-verifier`, and simulates the holder's signature with a Hardhat dev key (`--holder-index`, default 2). Exit code 0 means verified and 2 means not verified. `npm run demo` exercises it.
 
