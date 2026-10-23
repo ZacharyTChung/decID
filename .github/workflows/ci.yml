@@ -28,8 +28,10 @@ jobs:
       - run: npm run build
       - name: Headless lifecycle demo (local chain + app, synthetic data)
         run: npm run demo
-      - name: Red-team campaign (43 attacks against a live local stack)
+      - name: Red-team campaign (53 attacks against a live local stack)
         run: npm run redteam
+      - name: Two app instances sharing one database and issuer key
+        run: npm run test:multi-instance
       - run: npx playwright install --with-deps chromium
       - name: Browser UI test
         run: npm run test:ui

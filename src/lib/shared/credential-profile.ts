@@ -138,6 +138,10 @@ export const IDENTITY_CONTEXT_DOCUMENT = {
     ageOver18: { "@id": `${PROTOCOL_NAMESPACE}/vocab#ageOver18`, "@type": "http://www.w3.org/2001/XMLSchema#boolean" },
     ageOver21: { "@id": `${PROTOCOL_NAMESPACE}/vocab#ageOver21`, "@type": "http://www.w3.org/2001/XMLSchema#boolean" },
     countryOfResidence: { "@id": `${PROTOCOL_NAMESPACE}/vocab#countryOfResidence` },
+    // `jti` (duplicate of `id`, see jwtClaimMismatches) is the one JWT claim in our payload that
+    // the W3C VC v2 context does not define (it defines iss, sub, iat, exp) and it has no default
+    // @vocab, so JSON-LD-aware verifiers would reject it as an undefined term. Same IRI pattern.
+    jti: { "@id": "https://www.iana.org/assignments/jwt#jti", "@type": "@id" },
     [CREDENTIAL_STATUS_TYPE]: {
       "@id": `${PROTOCOL_NAMESPACE}/vocab#${CREDENTIAL_STATUS_TYPE}`,
       "@context": {

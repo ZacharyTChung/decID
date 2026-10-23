@@ -49,11 +49,12 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 94 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 111 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
-npm run test:ui          # browser test of all three views + axe accessibility audit (WCAG 2.1 A/AA) of 7 UI states
+npm run test:ui          # browser test of all three views + axe accessibility audit (WCAG 2.1 A/AA) of 8 UI states
+npm run test:multi-instance  # two app instances sharing one database and issuer key (load-balanced deployment)
 ```
 
 `test:ui` needs a Chromium for Playwright (`npx playwright install chromium` once). The page's wallet in that test is an injected EIP-1193 provider that signs with Hardhat's public dev keys, so its signatures and transactions are real. It is test tooling, not part of the app. CI (`.github/workflows/ci.yml`) runs every command above.

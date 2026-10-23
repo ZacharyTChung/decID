@@ -33,6 +33,10 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **OpenAPI 3.1:** `docs/openapi.json` is generated from zod schemas (`src/lib/shared/api.ts` for requests, `api-responses.ts` for responses); typecheck fails if stale. A conformance test exercises every operation against real handlers and parses each response with its strict schema (a mutation adding a `salt` field to a response was confirmed to fail it).
 - **Performance:** `npm run bench` (live stack, correctness-checked) and `npm run test:gas`. Finding fixed: ethers' default 10 ms `batchStallTime` and a third sequential RPC round trip made a verification take 51 ms; now 20 ms p50 (docs/PERFORMANCE.md).
 - **Selective disclosure (credential profile v2):** the credential is `vc+sd-jwt`. `ageOver18`, `ageOver21` and `countryOfResidence` are issuer-derived SD-JWT disclosures behind 8 sorted digests (decoys included). Verifier actions carry a disclosure policy (the 18+ area requests `ageOver18 = true`), and unrequested disclosures are refused. The EIP-712 presentation proof (v2) signs the disclosed names and the `sdHash` of the exact presentation instead of using a KB-JWT. Upgrading an existing checkout needs `npm run setup` (authorizes the new schema id) and `npm run deploy` (the gate is bound to the schema). Old v1 bundles are not accepted.
+- **Independent evaluation (2026-10-23):** a fresh clone passed every documented command. Third-party libraries (OWF SD-JWT, viem, Python `cryptography`, W3C schema and context) accept the real issuer's output (`interop.test.ts`, `w3c-conformance.test.ts`). Two findings were fixed:
+  1. `jti` was an undefined JSON-LD term, so JSON-LD safe mode rejected the credential.
+  2. Concurrent issuer transactions from two app instances raced for the nonce (2 of 4 revocations failed, reported as an RPC outage). They now use a cross-process lease in the database (`issuer/tx-lock.ts`, `npm run test:multi-instance`).
+  A chain outage makes the verifier fail closed (`resilience.test.ts`).
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
@@ -45,11 +49,12 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 | `npm run test:contracts` | 37 passing |
 | `npm run test:fuzz` | 8 fuzz properties × 1,000 runs and 4 stateful invariants (128 sequences × 40 calls) passing; a deliberately false probe invariant was confirmed to fail, so the handler exercises real state |
 | `npm run test:coverage` | 100% line and statement coverage of CredentialRegistry, DemoGate and the test wallet |
-| `npm run test:app` | 94 passed (10 files: SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
+| `npm run test:app` | 111 passed (14 files: independent-library interop, W3C context/schema conformance, chain-outage resilience, issuer lease, SD-JWT primitives with the RFC 9901 vector, disclosure tamper tests, OpenAPI sync and response conformance, API integration, key rotation, account recovery with the audit-log tamper tests, and a smart-account holder against a real Hardhat node) |
 | `npm run build` | success; client chunks scanned: no issuer key material, no server modules, no source maps |
 | `npm run demo` | `DEMO PASSED: every expected condition held.` |
+| `npm run test:multi-instance` | `MULTI-INSTANCE TEST PASSED`: shared sessions, 60/60 cross-instance presentations, 8/8 concurrent cross-instance revocations, intact audit chain |
 | `npm run redteam` | 53/53 defenses held (10 selective-disclosure attacks added with SD-JWT) (report: docs/REDTEAM-REPORT.md); harness mutation-tested; fixed finding: spoofable `X-Forwarded-For` rate-limit key |
-| `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → reload/import → gate refused; axe (WCAG 2.1 A/AA) audit of 7 UI states: 0 violations |
+| `npm run test:ui` (Playwright + Chromium, production build, injected EIP-1193 provider signing with Hardhat dev keys) | `UI TEST PASSED`: holder → issuer → non-operator refused → register → gate → verify → revoke → REVOKED → 18+ selective disclosure → reload/import → gate refused; axe (WCAG 2.1 A/AA) audit of 8 UI states: 0 violations |
 
 ## Blockers / unverified
 

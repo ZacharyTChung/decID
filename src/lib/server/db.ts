@@ -91,6 +91,14 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   window_start  INTEGER NOT NULL,
   count         INTEGER NOT NULL
 );
+
+-- Cross-process lease for the issuer's EVM key: at most one transaction in flight per key,
+-- even with several app instances sharing this database (see issuer/tx-lock.ts).
+CREATE TABLE IF NOT EXISTS issuer_tx_lease (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  owner          TEXT NOT NULL,
+  expires_at_ms  INTEGER NOT NULL
+);
 `;
 
 let instance: { file: string; db: Database.Database } | undefined;

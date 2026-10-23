@@ -36,6 +36,7 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "test/unit/**/*.ts",
+    "test/types/**/*.d.ts",
     "scripts/**/*.ts",
     "vitest.config.ts",
     ".next-demo/types/**/*.ts",
@@ -45,7 +46,9 @@
     ".next-redteam/types/**/*.ts",
     ".next-redteam/dev/types/**/*.ts",
     ".next-bench/types/**/*.ts",
-    ".next-bench/dev/types/**/*.ts"
+    ".next-bench/dev/types/**/*.ts",
+    ".next-multi/types/**/*.ts",
+    ".next-multi/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

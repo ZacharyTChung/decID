@@ -118,6 +118,10 @@ Its disclosures (held by the holder only):
 
 The other five digests are decoys.
 
+**JSON-LD.** The unsecured credential (after SD-JWT processing) expands with no undefined terms under jsonld.js safe mode, and validates against the official W3C VC 2.0 JSON Schema (`test/unit/w3c-conformance.test.ts`, with the W3C files vendored). The VC v2 context defines `iss`, `sub`, `iat` and `exp`, but not `jti`, and it has no default `@vocab`. Our context therefore defines `jti` (IANA JWT claim IRI). An independent evaluation found this gap: without it, JSON-LD-aware verifiers in safe mode rejected the credential.
+
+**Interoperability.** `test/unit/interop.test.ts` checks the real issuer's output with independent implementations: the OpenWallet Foundation `@sd-jwt/core`, viem (EIP-712, ABI/keccak, ERC-4361), Node's raw Ed25519, and Python `cryptography` with a hand-written did:key decoder.
+
 Minimal disclosure: the subject may contain only `id`, `identityVerified: true` and `_sd`. A selectively disclosable claim in plaintext, a different number of digests, or any other property fails validation. No name, birth date, document number, address, image or health data is ever included. `credentialStatus` names the intended chain and registry. It does **not** contain the commitment, which would be circular because the commitment is computed over the signed token.
 
 ### Processing disclosures (verifier)

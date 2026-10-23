@@ -27,3 +27,5 @@ npm-debug.log*
 .next-redteam/
 .bench/
 .next-bench/
+.multi-instance/
+.next-multi/

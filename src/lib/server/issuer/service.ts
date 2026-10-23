@@ -18,6 +18,7 @@ import { signCredentialJwt } from "../credential/sign";
 import { deriveDidKeyFromJwk } from "../did/did-key";
 import { loadTrustedIssuers } from "../trust";
 import { appendAudit } from "./audit";
+import { withIssuerTxLock } from "./tx-lock";
 import type { Session } from "../auth/session";
 
 /**
@@ -392,17 +393,6 @@ export async function listIssuedCredentials(_issuer: Session): Promise<IssuedCre
   );
 }
 
-/**
- * Transactions from the issuer's single attestation key must not be sent concurrently: two in-flight
- * sends would race for the same account nonce. This process-local queue serializes them, which is
- * sufficient for this single-server prototype.
- */
-let issuerTxQueue: Promise<unknown> = Promise.resolve();
-function withIssuerTxLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = issuerTxQueue.then(fn, fn);
-  issuerTxQueue = run.catch(() => undefined);
-  return run;
-}
 
 /** Revokes on-chain with the issuer's attestation key. Only for credentials this issuer issued. */
 export function revokeCredential(issuer: Session, commitment: string): Promise<{ txHash: string }> {

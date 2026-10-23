@@ -82,6 +82,11 @@ export async function onChain<T>(fn: () => Promise<T>): Promise<T> {
       }
       throw new ApiError(409, "TX_REVERTED", `the registry rejected the transaction: ${name}`);
     }
+    // A nonce clash means another sender used this account concurrently. The chain is
+    // reachable; reporting RPC_UNAVAILABLE would send operators looking in the wrong place.
+    if (e?.code === "NONCE_EXPIRED" || e?.code === "REPLACEMENT_UNDERPRICED" || /nonce/i.test(String((err as Error)?.message ?? ""))) {
+      throw new ApiError(409, "ISSUER_TX_CONFLICT", "another transaction from the issuer key used the same nonce; retry");
+    }
     throw new ApiError(503, "RPC_UNAVAILABLE", "the local chain is unreachable or was restarted: check `npm run chain` and `npm run deploy`");
   }
 }
