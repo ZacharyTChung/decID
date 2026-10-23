@@ -70,6 +70,34 @@ export function issuerSecrets(): IssuerSecretsT {
   return IssuerSecrets.parse({ credentialPrivateJwk: JSON.parse(jwk), evmPrivateKey: evm, retiredEvmPrivateKeys: retired });
 }
 
+/**
+ * decID Verify's receipt-signing key (Ed25519). Receipts attest to a verification outcome and
+ * carry no personal data. Kept separate from the issuer's keys: the verification service is a
+ * different party than any issuer.
+ */
+export function verifyReceiptKey(): { kty: "OKP"; crv: "Ed25519"; x: string; d: string } {
+  const jwk = env("VERIFY_RECEIPT_PRIVATE_JWK");
+  if (!jwk) throw new Error("receipt signing key is not configured: run `npm run setup`");
+  return z.object({ kty: z.literal("OKP"), crv: z.literal("Ed25519"), x: z.string(), d: z.string() }).parse(JSON.parse(jwk));
+}
+
+/**
+ * decID Pass gas sponsor: pays for holders' registration transactions so consumers never need
+ * cryptocurrency. Local chain only (a Hardhat development account); production would use an
+ * ERC-4337 paymaster. Undefined means sponsoring is off.
+ */
+export function sponsorPrivateKey(): string | undefined {
+  return env("SPONSOR_PRIVATE_KEY");
+}
+
+/** Demo conveniences (one-click business sign-in, auto-approving issuer). Off unless set. */
+export function demoMode(): boolean {
+  return env("DEMO_MODE") === "1";
+}
+export function issuerAutoApprove(): boolean {
+  return env("ISSUER_AUTO_APPROVE") === "1";
+}
+
 export function credentialLifetimeSeconds(): number {
   const days = Number(env("CREDENTIAL_LIFETIME_DAYS") ?? "365");
   if (!Number.isFinite(days) || days <= 0 || days > 3650) throw new Error("invalid CREDENTIAL_LIFETIME_DAYS");

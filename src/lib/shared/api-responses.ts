@@ -47,7 +47,7 @@ export const SignInResponse = z.strictObject({ session: SessionView });
 export const SessionResponse = z.strictObject({ session: SessionView.nullable() });
 export const OkResponse = z.strictObject({ ok: z.literal(true) });
 
-export const CreatedRequestResponse = z.strictObject({ id: z.uuid() });
+export const CreatedRequestResponse = z.strictObject({ id: z.uuid(), status: z.literal("approved").optional().describe("Present when the demo issuer approved at once (ISSUER_AUTO_APPROVE=1)") });
 export const HolderRequestsResponse = z.strictObject({
   requests: z.array(
     z.strictObject({
@@ -173,4 +173,97 @@ export const VerifierHistoryResponse = z.strictObject({
       code: z.string().nullable(),
     }),
   ),
+});
+
+// ---------------------------------------------------------------- decID Verify, decID Pass, business dashboard, demo
+
+const PolicyId = z.enum(["age_over_21", "age_over_18", "identity_verified"]);
+const SessionStatus = z.enum(["pending", "processing", "verified", "rejected", "expired"]);
+const Answer = z
+  .partialRecord(z.enum(["ageOver21", "ageOver18", "identityVerified"]), z.boolean())
+  .nullable()
+  .describe("The one answer the business receives: true when satisfied, false only when the holder genuinely does not meet the policy");
+const MatchCode = z.string().regex(/^[A-Z0-9]{4}$/).nullable().describe("Shown on the holder's phone and to the business; compare them at a door");
+
+const VerificationCore = {
+  id: z.uuid(),
+  policy: PolicyId,
+  reference: z.string().nullable(),
+  status: SessionStatus,
+  createdAt: Unix,
+  expiresAt: Unix,
+  completedAt: Unix.nullable(),
+  result: Answer,
+  failureCode: z.string().nullable(),
+  matchCode: MatchCode,
+  issuer: z.strictObject({ name: z.string() }).nullable(),
+};
+export const VerificationResponseV1 = z
+  .strictObject({ ...VerificationCore, walletUrl: z.string().url(), receipt: z.string().nullable().describe("Signed compliance receipt (compact JWS, typ decid-receipt+jwt)") })
+  .describe("A verification as the business sees it. Holds no personal data.");
+
+export const WalletRequestResponse = z.strictObject({
+  id: z.uuid(),
+  merchant: z.strictObject({ name: z.string(), kind: z.enum(["online", "venue"]) }),
+  policy: z.strictObject({ id: PolicyId, question: z.string(), short: z.string() }),
+  status: SessionStatus,
+  expiresAt: Unix,
+  challenge: ChallengeResponseSchema,
+});
+
+export const PresentationOutcome = z.strictObject({
+  status: z.enum(["verified", "rejected"]),
+  failureCode: z.string().nullable(),
+  matchCode: MatchCode,
+  merchant: z.strictObject({ name: z.string() }),
+  policy: z.strictObject({ id: PolicyId, short: z.string() }),
+});
+
+export const ReceiptKeysResponse = z.strictObject({
+  keys: z.array(z.strictObject({ kty: z.literal("OKP"), crv: z.literal("Ed25519"), x: z.string(), kid: z.string(), alg: z.literal("Ed25519"), use: z.literal("sig") })),
+});
+
+export const PassRegistrationParams = z.strictObject({
+  chainId: z.number().int().positive(),
+  to: Address,
+  nonce: z.number().int().nonnegative(),
+  gasLimit: z.string().regex(/^\d+$/),
+  maxFeePerGas: z.string().regex(/^\d+$/),
+  maxPriorityFeePerGas: z.string().regex(/^\d+$/),
+});
+export const PassRegistrationResult = z.strictObject({
+  txHash: TxHash,
+  status: z.enum(["registered", "reverted"]),
+  gasUsed: z.string().regex(/^\d+$/),
+  sponsoredWei: z.string().regex(/^\d+$/).describe("Gas money decID added to the holder's wallet; 0 if it had enough"),
+});
+export const PassCredentialStatus = z.strictObject({ status: z.union([RegistryStatus, z.literal("NotRegistered")]) });
+
+export const BusinessSessionResponse = z.strictObject({ merchant: z.strictObject({ id: z.string(), name: z.string() }) });
+export const BusinessOverviewResponse = z.strictObject({
+  merchant: z.strictObject({ id: z.string(), name: z.string(), kind: z.enum(["online", "venue"]), keyPrefix: z.string() }),
+  stats: z.strictObject({
+    total: z.number().int(),
+    verified: z.number().int(),
+    rejected: z.number().int(),
+    pending: z.number().int(),
+    expired: z.number().int(),
+    medianSecondsToAnswer: z.number().nullable(),
+    failures: z.record(z.string(), z.number().int()),
+  }),
+  receipts: z.strictObject({ ok: z.boolean(), count: z.number().int(), head: z.string(), firstBrokenSeq: z.number().int().optional(), problem: z.string().optional() }),
+  storedFields: z.array(z.string()).describe("Every column of a verification record: proof that none can hold personal data"),
+  recent: z.array(z.strictObject(VerificationCore)),
+});
+
+export const DemoSessionCreated = z.strictObject({ id: z.uuid(), walletUrl: z.string().url(), qrSvg: z.string().startsWith("<svg"), expiresAt: Unix });
+export const DemoSessionStatus = z.strictObject({
+  status: SessionStatus,
+  result: Answer,
+  failureCode: z.string().nullable(),
+  reason: z.string(),
+  matchCode: MatchCode,
+  issuer: z.strictObject({ name: z.string() }).nullable(),
+  receipt: z.strictObject({ valid: z.boolean(), payload: z.unknown().optional() }).nullable(),
+  reference: z.string().nullable(),
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { VERIFIER_ACTIONS } from "./constants";
+import { POLICY_IDS } from "./policies";
 import { MAX_DISCLOSURE_LENGTH, SD_CLAIM_NAMES } from "./sd-jwt";
 
 /**
@@ -112,3 +113,21 @@ export interface HolderRequestView {
   bundleAvailable: boolean;
   recoveryOf: string | null;
 }
+
+// ---------------------------------------------------------------- decID Verify (business API) and decID Pass
+
+export const CreateVerificationRequest = z.strictObject({
+  policy: z.enum(POLICY_IDS),
+  /** The business's own reference (an order number, a door name). Must not contain personal data. */
+  reference: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional(),
+});
+
+/** A wallet's answer to a verification session (the session id is the challenge id). */
+export const WalletPresentation = PresentationSubmission.omit({ challengeId: true });
+
+export const BusinessLoginRequest = z.strictObject({ apiKey: z.string().min(1).max(200) });
+export const DemoBusinessLoginRequest = z.strictObject({ merchant: z.enum(["hopline", "neonhall"]) });
+export const DemoSessionRequest = z.strictObject({ reference: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional() });
+
+/** decID Pass: a registration transaction signed by the holder's device wallet, relayed and gas-sponsored. */
+export const PassRegistrationRequest = z.strictObject({ rawTx: z.string().regex(/^0x[0-9a-fA-F]{2,8192}$/) });

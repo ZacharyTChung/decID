@@ -45,9 +45,10 @@ export const ENCRYPTED_BUNDLE_VERSION = "did-mvp.encrypted-holder-bundle/v1";
  * disclosed (and nothing else); `require` constrains their values. Every action also requires
  * the always-disclosed identityVerified=true credential itself.
  */
-export const VERIFIER_ACTIONS = ["access-verified-member-area", "access-age-restricted-area"] as const;
+export const VERIFIER_ACTIONS = ["access-verified-member-area", "access-age-restricted-area", "verify-age-over-21"] as const;
 export type VerifierAction = (typeof VERIFIER_ACTIONS)[number];
 export const ACTION_POLICIES: Record<VerifierAction, { label: string; requested: readonly ("ageOver18" | "ageOver21" | "countryOfResidence")[]; require: Record<string, boolean | string> }> = {
   "access-verified-member-area": { label: "Verified member area", requested: [], require: {} },
   "access-age-restricted-area": { label: "Age-restricted area (18+)", requested: ["ageOver18"], require: { ageOver18: true } },
+  "verify-age-over-21": { label: "Age 21+ (alcohol, venues)", requested: ["ageOver21"], require: { ageOver21: true } },
 };

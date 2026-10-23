@@ -34,6 +34,12 @@ type Handler = (req: Request) => Promise<Response>;
 interface RouteOptions {
   /** Rate-limit bucket name and per-minute budget per client. */
   rateLimit?: { name: string; perMinute: number };
+  /**
+   * Origin check for unsafe methods (default true). Only routes that authenticate with an
+   * Authorization header (server-to-server API keys), never with cookies, may turn it off:
+   * CSRF needs an ambient credential, and a header is not one.
+   */
+  csrf?: boolean;
 }
 
 /** Wraps a handler with origin/CSRF checks for unsafe methods, rate limiting and error mapping. */
@@ -41,7 +47,7 @@ export function route(handler: Handler, opts: RouteOptions = {}): Handler {
   return async (req) => {
     try {
       purgeExpired();
-      if (req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req);
+      if (opts.csrf !== false && req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req);
       if (opts.rateLimit) enforceRateLimit(req, opts.rateLimit.name, opts.rateLimit.perMinute);
       return await handler(req);
     } catch (err) {

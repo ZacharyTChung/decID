@@ -10,7 +10,7 @@ import {
   HolderRequestBody,
   type PublicConfigResponse,
 } from "../../shared/api";
-import { appConfig } from "../config";
+import { appConfig, issuerAutoApprove } from "../config";
 import { loadDeployment } from "../chain";
 import { ApiError, json, readJson, route } from "../http";
 import {
@@ -94,7 +94,14 @@ export const postHolderRequest = route(
     const session = requireSession(req, "holder");
     // The holder address comes from the authenticated session, never from the form.
     const { recoveryOf, ...application } = await readJson(req, HolderRequestBody);
-    return json(issuer.submitRequest(session, application, recoveryOf), { status: 201 });
+    const created = issuer.submitRequest(session, application, recoveryOf);
+    // Demo issuer: approve at once (a server-side policy decision, logged in the audit chain as
+    // "auto-approval"). Recovery requests always wait for a human operator.
+    if (issuerAutoApprove() && !recoveryOf) {
+      await issuer.approveRequest({ address: "auto-approval", chainId: session.chainId, role: "issuer", expiresAt: session.expiresAt }, created.id);
+      return json({ ...created, status: "approved" }, { status: 201 });
+    }
+    return json(created, { status: 201 });
   },
   { rateLimit: { name: "holder-request", perMinute: 10 } },
 );
@@ -170,3 +177,5 @@ export const getIssuerAudit = route(async (req) => {
   requireSession(req, "issuer");
   return json({ verification: verifyAuditChain(), entries: listAudit(50) });
 });
+
+export * from "./product-handlers";

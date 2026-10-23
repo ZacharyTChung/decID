@@ -47,8 +47,12 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
       `RPC_URL=${opts.rpcUrl}`,
       `ISSUER_CREDENTIAL_PRIVATE_JWK=${JSON.stringify({ kty: privateJwk.kty, crv: privateJwk.crv, x: privateJwk.x, d: privateJwk.d })}`,
       `ISSUER_EVM_PRIVATE_KEY=${evm.privateKey}`,
+      "# decID Verify: signs compliance receipts for businesses (a separate party from the issuer).",
+      `VERIFY_RECEIPT_PRIVATE_JWK=${await receiptKeyJson()}`,
       `# Wallets allowed to sign in to the issuer console (Hardhat dev account #${DEV_ROLES.issuerOperator}).`,
       `ISSUER_OPERATOR_ADDRESSES=${devWallet(DEV_ROLES.issuerOperator).address}`,
+      `# decID Pass gas sponsor (Hardhat PUBLIC dev account #${DEV_ROLES.gasSponsor}; local chain only, refused on any other chain).`,
+      `SPONSOR_PRIVATE_KEY=${devWallet(DEV_ROLES.gasSponsor).privateKey}`,
       ...Object.entries(opts.extraEnv ?? {}).map(([k, v]) => `${k}=${v}`),
       "",
     ];
@@ -58,6 +62,12 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
     created = true;
   }
 
+  // Upgrade an older .env.local that predates decID Verify: add the receipt key, keep the rest.
+  if (!created) {
+    const existing = parseEnvFile(opts.envFile);
+    if (!existing.VERIFY_RECEIPT_PRIVATE_JWK) updateEnvFile(opts.envFile, { VERIFY_RECEIPT_PRIVATE_JWK: await receiptKeyJson() });
+    if (!existing.SPONSOR_PRIVATE_KEY) updateEnvFile(opts.envFile, { SPONSOR_PRIVATE_KEY: devWallet(DEV_ROLES.gasSponsor).privateKey });
+  }
   const env = parseEnvFile(opts.envFile);
   const priv = JSON.parse(env.ISSUER_CREDENTIAL_PRIVATE_JWK!) as Ed25519PublicJwk & { d: string };
   const publicJwk: Ed25519PublicJwk = { kty: "OKP", crv: "Ed25519", x: priv.x };
@@ -119,4 +129,10 @@ export function updateEnvFile(file: string, updates: Record<string, string>): vo
   }
   writeFileSync(file, lines.join("\n"), { mode: 0o600 });
   chmodSync(file, 0o600);
+}
+
+async function receiptKeyJson(): Promise<string> {
+  const { privateKey } = await generateKeyPair("Ed25519", { extractable: true });
+  const jwk = await exportJWK(privateKey);
+  return JSON.stringify({ kty: jwk.kty, crv: jwk.crv, x: jwk.x, d: jwk.d });
 }

@@ -92,6 +92,52 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count         INTEGER NOT NULL
 );
 
+-- decID Verify (the business API). Businesses authenticate with an API key, stored only as a
+-- SHA-256 hash. A verification session holds the challenge and the outcome. It never holds
+-- the holder's address, DID, credential, disclosures or salt.
+CREATE TABLE IF NOT EXISTS verify_merchants (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL,           -- 'online' | 'venue'
+  key_hash    TEXT NOT NULL UNIQUE,
+  key_prefix  TEXT NOT NULL,           -- first characters, to recognise a key in the dashboard
+  created_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS verify_sessions (
+  id            TEXT PRIMARY KEY,
+  merchant_id   TEXT NOT NULL REFERENCES verify_merchants(id),
+  policy        TEXT NOT NULL,
+  reference     TEXT,                  -- the business's own reference (e.g. order number)
+  nonce         TEXT NOT NULL,
+  audience      TEXT NOT NULL,
+  chain_id      INTEGER NOT NULL,
+  registry      TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  status        TEXT NOT NULL,         -- 'pending' | 'processing' | 'verified' | 'rejected'
+  failure_code  TEXT,
+  completed_at  INTEGER,
+  match_code    TEXT,
+  issuer_name   TEXT,
+  receipt_seq   INTEGER
+);
+CREATE INDEX IF NOT EXISTS verify_sessions_merchant ON verify_sessions (merchant_id, created_at);
+CREATE TABLE IF NOT EXISTS verify_receipts (
+  merchant_id  TEXT NOT NULL,
+  seq          INTEGER NOT NULL,
+  session_id   TEXT NOT NULL,
+  jws          TEXT NOT NULL,
+  hash         TEXT NOT NULL,
+  prev_hash    TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  PRIMARY KEY (merchant_id, seq)
+);
+CREATE TABLE IF NOT EXISTS business_sessions (
+  id_hash      TEXT PRIMARY KEY,
+  merchant_id  TEXT NOT NULL,
+  expires_at   INTEGER NOT NULL
+);
+
 -- Cross-process lease for the issuer's EVM key: at most one transaction in flight per key,
 -- even with several app instances sharing this database (see issuer/tx-lock.ts).
 CREATE TABLE IF NOT EXISTS issuer_tx_lease (
@@ -150,4 +196,5 @@ export function purgeExpired(now = nowSeconds()): void {
   // Keep consumed/expired challenge rows for one hour as an audit trail (no credential data in them).
   d.prepare("DELETE FROM verifier_challenges WHERE expires_at <= ?").run(now - 3600);
   d.prepare("DELETE FROM rate_limits WHERE window_start <= ?").run(now - 3600);
+  d.prepare("DELETE FROM business_sessions WHERE expires_at <= ?").run(now);
 }

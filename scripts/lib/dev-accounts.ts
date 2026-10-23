@@ -17,6 +17,7 @@ export const DEV_ROLES = {
   issuerOperator: 1, // signs in to the issuer console
   holder: 2,
   otherHolder: 3, // used as an attacker / second holder in tests and the demo
+  gasSponsor: 19, // pays decID Pass holders' registration gas (local chain only)
 } as const;
 
 export function devWallet(index: number, provider?: Provider): HDNodeWallet {
