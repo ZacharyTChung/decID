@@ -16,6 +16,7 @@ import { ApiError } from "../http";
 import { signCredentialJwt } from "../credential/sign";
 import { deriveDidKeyFromJwk } from "../did/did-key";
 import { loadTrustedIssuers } from "../trust";
+import { appendAudit } from "./audit";
 import type { Session } from "../auth/session";
 
 /**
@@ -158,7 +159,7 @@ export interface SupersedeResult {
  *  - not registered yet    → cancelAuthorization() so the old bundle can never be registered.
  * Rows are marked superseded one by one, so a retry after a failure skips finished work.
  */
-async function supersedeCredentials(previousHolder: string, requestId: string, deployment: ReturnType<typeof loadDeployment>): Promise<SupersedeResult> {
+async function supersedeCredentials(actor: string, previousHolder: string, requestId: string, deployment: ReturnType<typeof loadDeployment>): Promise<SupersedeResult> {
   return withIssuerTxLock(async () => {
     const keys = await issuerKeys();
     const wallets = [keys.evmWallet, ...keys.retiredEvmWallets];
@@ -187,6 +188,12 @@ async function supersedeCredentials(previousHolder: string, requestId: string, d
            WHERE commitment = ?`,
         )
         .run(nowSeconds(), requestId, txHash, nowSeconds(), txHash, row.commitment);
+      appendAudit(actor, "credential.superseded", row.commitment, {
+        byRequest: requestId,
+        previousHolder,
+        method: rec.exists ? (rec.revoked ? "already-revoked" : "revoked") : "authorization-cancelled",
+        txHash,
+      });
     }
     return result;
   });
@@ -200,6 +207,7 @@ export function rejectRequest(issuer: Session, requestId: string, reason: string
     )
     .run(reason, nowSeconds(), issuer.address, requestId);
   if (res.changes !== 1) throw new ApiError(409, "NOT_PENDING", "request is not pending");
+  appendAudit(issuer.address, "request.rejected", requestId, { reason });
 }
 
 export interface IssuanceResult {
@@ -233,7 +241,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     if (!active) throw new ApiError(409, "ISSUER_NOT_ACTIVE_ON_CHAIN", "issuer attestation key is not authorized in the registry");
 
     // Recovery: shut down the lost wallet's credentials first; if that fails, nothing new is issued.
-    const superseded = claimed.recovery_of ? await supersedeCredentials(claimed.recovery_of, requestId, deployment) : undefined;
+    const superseded = claimed.recovery_of ? await supersedeCredentials(issuer.address, claimed.recovery_of, requestId, deployment) : undefined;
 
     const holderAddress = getAddress(claimed.holder_address);
     const holderDid = deriveHolderDid(deployment.chainId, holderAddress);
@@ -299,6 +307,15 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       ).run(requestId, holderAddress, JSON.stringify(bundle), now, now + BUNDLE_PICKUP_TTL);
     })();
 
+    appendAudit(issuer.address, "credential.issued", commitment, {
+      requestId,
+      credentialId,
+      holderDid,
+      issuerDid: keys.did,
+      issuerSigner: issuerAddress,
+      validUntil,
+      recoveryOf: claimed.recovery_of,
+    });
     return { requestId, commitment, credentialId, superseded };
   } catch (err) {
     // Roll the claim back so the request can be retried.
@@ -400,6 +417,7 @@ async function revokeCredentialLocked(issuer: Session, commitment: string): Prom
   db()
     .prepare("UPDATE issuer_credentials SET revoked_at = ?, revoke_tx = ? WHERE commitment = ?")
     .run(nowSeconds(), receipt.hash, commitment);
+  appendAudit(issuer.address, "credential.revoked", commitment, { txHash: receipt.hash, signer: signer.address });
   console.info(`[issuer] revoked credential ${commitment.slice(0, 10)}… by operator ${issuer.address}`);
   return { txHash: receipt.hash };
 }

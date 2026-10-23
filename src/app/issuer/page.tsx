@@ -186,6 +186,60 @@ function IssuedList({ version }: { version: number }) {
   );
 }
 
+interface AuditView {
+  verification: { ok: boolean; entries: number; head: string; firstBrokenSeq?: number; problem?: string };
+  entries: { seq: number; at: number; actor: string; action: string; subject: string; details: Record<string, unknown> }[];
+}
+
+function AuditLog({ version }: { version: number }) {
+  const [log, setLog] = useState<AuditView>();
+  useEffect(() => {
+    const load = () => void api<AuditView>("GET", "/api/issuer/audit").then(setLog, () => undefined);
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [version]);
+  if (!log) return null;
+  const v = log.verification;
+  return (
+    <Card
+      title="Audit log"
+      subtitle="Every issue, rejection, revocation and recovery supersede is appended to a SHA-256 hash chain. Editing, reordering or deleting a past entry breaks the chain. Record the head hash elsewhere to also detect removal of the newest entries."
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <Badge tone={v.ok ? "green" : "red"}>{v.ok ? "Chain intact" : `Chain broken at #${v.firstBrokenSeq}`}</Badge>
+        <span className="text-slate-600">{v.entries} entries · head</span>
+        <Mono>{v.head.slice(0, 16)}…</Mono>
+        {!v.ok && <span className="text-red-700">{v.problem}</span>}
+      </div>
+      {log.entries.length === 0 ? (
+        <p className="text-sm text-slate-500">No issuer actions yet.</p>
+      ) : (
+        <table className="w-full text-left text-xs">
+          <thead className="text-slate-500">
+            <tr>
+              <th scope="col" className="py-1 pr-2 font-medium">#</th>
+              <th scope="col" className="py-1 pr-2 font-medium">Time</th>
+              <th scope="col" className="py-1 pr-2 font-medium">Action</th>
+              <th scope="col" className="py-1 font-medium">Subject</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {log.entries.map((e) => (
+              <tr key={e.seq}>
+                <td className="py-1 pr-2">{e.seq}</td>
+                <td className="py-1 pr-2">{new Date(e.at * 1000).toLocaleTimeString()}</td>
+                <td className="py-1 pr-2">{e.action}</td>
+                <td className="py-1"><Mono>{e.subject.slice(0, 18)}{e.subject.length > 18 ? "…" : ""}</Mono></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
 function KeyStatusBadge({ status, retiredAt }: { status: "active" | "retired" | "compromised"; retiredAt?: number }) {
   const when = retiredAt ? ` since ${new Date(retiredAt * 1000).toLocaleString()}` : "";
   return <Badge tone={status === "active" ? "green" : status === "retired" ? "slate" : "red"}>{status}{status !== "active" ? when : ""}</Badge>;
@@ -234,6 +288,7 @@ export default function IssuerPage() {
       <SignInGate role="issuer">
         <ReviewQueue onIssued={() => setVersion((v) => v + 1)} />
         <IssuedList version={version} />
+        <AuditLog version={version} />
       </SignInGate>
     </Shell>
   );

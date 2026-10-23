@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { dataDir } from "./config";
+import { ensureAuditTable } from "./issuer/audit";
 
 /**
  * Local SQLite persistence. Tables are grouped by trust domain:
@@ -120,6 +121,7 @@ function migrate(d: Database.Database): void {
   // Set when a recovery replaced this credential (revoked or authorization cancelled).
   addColumn("issuer_credentials", "superseded_at", "INTEGER");
   addColumn("issuer_credentials", "superseded_by", "TEXT");
+  ensureAuditTable(d);
 }
 
 export function closeDb(): void {

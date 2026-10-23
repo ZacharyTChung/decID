@@ -23,6 +23,7 @@ import {
 } from "../auth/session";
 import * as issuer from "../issuer/service";
 import * as verifier from "../verifier/service";
+import { listAudit, verifyAuditChain } from "../issuer/audit";
 import { loadTrustedIssuers } from "../trust";
 
 /**
@@ -163,4 +164,9 @@ export const postPresentation = route(
 
 export const getVerifierHistory = route(async () => json({ entries: verifier.recentVerifications() }), {
   rateLimit: { name: "verifier-history", perMinute: 60 },
+});
+
+export const getIssuerAudit = route(async (req) => {
+  requireSession(req, "issuer");
+  return json({ verification: verifyAuditChain(), entries: listAudit(50) });
 });

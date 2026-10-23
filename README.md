@@ -49,7 +49,7 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 70 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 77 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -89,6 +89,18 @@ npm run verify -- backup.json --json                   # full per-check result
 ```
 
 This runs the same checks as the verifier API (`src/lib/server/verifier/core.ts`) with public inputs only: trust policy, deployment record and RPC. Issuer secrets are removed from the environment first. A Hardhat dev key stands in for the holder's wallet (`--holder-index`). See [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md).
+
+## Issuer audit log
+
+Every issuer action (issue, reject, revoke, recovery supersede) is appended to a SHA-256 hash chain, where each entry commits to the previous one. The issuer page shows the chain status.
+
+```bash
+npm run audit-log -- verify     # recompute the chain: exit 0 intact, 2 tampered (names the first broken entry)
+npm run audit-log -- head       # entry count + head hash: record it elsewhere to also detect truncation
+npm run audit-log -- list 20    # newest entries
+```
+
+Entries hold pseudonymous identifiers only (commitment, holder DID, request id, operator address), never application data, tokens or salts.
 
 ## Registry administration (local)
 

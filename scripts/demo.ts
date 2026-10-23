@@ -207,6 +207,12 @@ async function main() {
   const cliRevoked = cliVerify(path.join(ROOT, ".demo", "backup.json"));
   check(cliRevoked.code === 2 && cliRevoked.out.includes("REVOKED"), "the standalone verifier also sees the revocation");
 
+  step("9b. Issuer audit log is an intact hash chain covering this session's actions");
+  const audit = await issuer.call("GET", "/api/issuer/audit");
+  const auditActions = ((audit.body.entries ?? []) as { action: string; subject: string }[]).filter((e) => e.subject === bundle.commitment).map((e) => e.action);
+  check(audit.status === 200 && audit.body.verification?.ok === true, `audit chain intact (${audit.body.verification?.entries} entries, head ${String(audit.body.verification?.head).slice(0, 16)}…)`, audit.body.verification);
+  check(auditActions.includes("credential.issued") && auditActions.includes("credential.revoked"), "issuance and revocation of this credential are both logged");
+
   step("10. Privacy regression scan of every transaction and event on the demo chain");
   const latest = await provider.getBlockNumber();
   const parts: string[] = [];

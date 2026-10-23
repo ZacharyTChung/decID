@@ -136,6 +136,8 @@ A valid-looking registry entry never makes an invalid token acceptable: the veri
 | `GET /api/issuer/requests` | issuer | Pending synthetic applications |
 | `POST /api/issuer/requests/:id/decision` | issuer | Approve (issue) or reject |
 | `GET /api/issuer/credentials`, `POST /api/issuer/credentials/revoke` | issuer | Issuance log with live status; on-chain revocation |
+| `GET /api/issuer/audit` | issuer | Newest 50 audit entries and the verification of the whole hash chain |
+| `GET /api/verifier/history` | public | Recent verifications: reference, action, time, outcome code |
 | `POST /api/verifier/challenges` | public, rate-limited | Create single-use challenge |
 | `POST /api/verifier/presentations` | public, rate-limited | Verify a presentation (200 verified / 422 not) |
 
@@ -148,6 +150,7 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Synthetic application (name, DOB, document no., country) | SQLite `issuer_requests.synthetic_json` | Issuer operators | Erased (set NULL) when the request is approved or rejected |
 | Request status, holder address/DID, timestamps, reject reason, recovery link (lost wallet address) | SQLite `issuer_requests` | Issuer; the holder sees their own | Until `npm run reset` |
 | Issuance log: commitment, credential id, holder DID, validity, authorizing signer, superseded-by-recovery | SQLite `issuer_credentials` | Issuer | Until reset |
+| Issuer audit log: sequence, time, operator address, action, subject (commitment or request id), details (credential id, holder DID, signer, tx hash, reject reason), previous hash, hash | SQLite `issuer_audit` | Issuer | Append-only; until reset |
 | Holder bundle (token, salt, authorization) awaiting pickup | SQLite `issuer_bundle_pickup` | That holder only | Deleted at pickup, or after 24 h |
 | Holder bundle after pickup | Browser tab memory | The holder | Until reload or wallet switch |
 | Encrypted backup file | Wherever the holder saves it | Anyone with the password | Holder-controlled |
