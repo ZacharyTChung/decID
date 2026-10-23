@@ -15,6 +15,7 @@ import {
   getVerified,
   history,
   listProfiles,
+  saveProfile,
   setActive,
   type HistoryEntry,
   type PassProfile,
@@ -74,6 +75,16 @@ function PassHome() {
     if (persona) setForm(applicationOf(persona));
     await reload();
     return p;
+  };
+
+  // Filling an unnamed person ("Person 2") with a sample person also names them, so the person
+  // menu reads "Sam" rather than "Person 2" during a demo.
+  const fillAs = async (persona: keyof typeof PERSONAS) => {
+    setForm(applicationOf(persona));
+    if (profile && !profile.bundle && /^Person \d+$/.test(profile.label)) {
+      await saveProfile({ ...profile, label: PERSONAS[persona].label });
+      await reload();
+    }
   };
 
   const verify = async (e: FormEvent) => {
@@ -187,7 +198,7 @@ function PassHome() {
             <Panel title="Your details (synthetic)">
               <div className="mb-3 flex gap-2 text-xs">
                 {(Object.keys(PERSONAS) as (keyof typeof PERSONAS)[]).map((k) => (
-                  <button key={k} type="button" className="rounded-full bg-brand-50 px-3 py-1 font-medium text-brand-800 ring-1 ring-brand-100" onClick={() => setForm(applicationOf(k))}>
+                  <button key={k} type="button" className="rounded-full bg-brand-50 px-3 py-1 font-medium text-brand-800 ring-1 ring-brand-100" onClick={() => void fillAs(k)}>
                     Fill as {PERSONAS[k].label} ({PERSONAS[k].note})
                   </button>
                 ))}

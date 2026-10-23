@@ -107,7 +107,7 @@ export default function ApproveRequest() {
             </div>
           )}
         </section>
-        <p className="text-center text-sm text-slate-600">{venue ? "The door screen shows the same code." : `You can return to ${req.merchant.name}; it has been updated.`}</p>
+        <p className="text-center text-sm text-slate-600">{venue ? (ok ? "The door screen shows the same code." : "The door screen shows the same answer.") : `You can return to ${req.merchant.name}; it has been updated.`}</p>
         <Link href="/pass" className="text-center text-sm font-semibold text-brand-700 underline">Back to my Pass</Link>
       </>,
     );

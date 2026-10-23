@@ -133,6 +133,8 @@ try {
   await phone.getByLabel("Demo person").selectOption("__new");
   await phone.getByRole("heading", { name: "Get verified" }).waitFor();
   await phone.getByRole("button", { name: /Fill as Sam/ }).click();
+  await phone.waitForFunction(() => (document.querySelector("select") as HTMLSelectElement | null)?.selectedOptions[0]?.text === "Sam");
+  check(true, "filling the new person as Sam names them “Sam” in the person menu");
   await phone.getByRole("button", { name: "Verify me" }).click();
   await phone.getByText("Active", { exact: true }).waitFor({ timeout: 60_000 });
   check(await phone.getByText("21+").first().isVisible(), "Sam has a Pass too (18+ ✕, 21+ ✕ on the card)");
@@ -144,6 +146,7 @@ try {
   await phone.getByRole("button", { name: /Share “21\+” with Neon Hall/ }).click();
   await door.getByText("ENTRY REFUSED").waitFor({ timeout: 15_000 });
   check((await door.getByTestId("door-reason").innerText()).includes("Not old enough"), "Sam is refused at the door: “Not old enough”");
+  check(!(await phone.getByText("shows the same code").isVisible()), "Sam’s phone does not mention a match code it doesn’t show");
   await door.screenshot({ path: path.join(SHOTS, "10-door-refused.png") });
 
   // ---------------------------------------------------------------- business dashboard
