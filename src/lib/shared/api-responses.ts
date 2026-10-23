@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { HolderBundleV1 } from "./bundle";
+import { HolderBundleV2 } from "./bundle";
 import { CHECK_IDS } from "./verification";
 import { VERIFIER_ACTIONS } from "./constants";
+import { SD_CLAIM_NAMES, type SdClaimName } from "./sd-jwt";
 
 /**
  * Response body schemas. They are the source of the response half of docs/openapi.json
@@ -60,7 +61,7 @@ export const HolderRequestsResponse = z.strictObject({
     }),
   ),
 });
-export const BundleResponse = z.strictObject({ bundle: HolderBundleV1.describe("Private holder bundle; returned once, then deleted on the server") });
+export const BundleResponse = z.strictObject({ bundle: HolderBundleV2.describe("Private holder bundle; returned once, then deleted on the server") });
 
 export const PendingRequestsResponse = z.strictObject({
   requests: z.array(
@@ -132,6 +133,7 @@ export const ChallengeResponseSchema = z.strictObject({
   chainId: z.number().int().positive(),
   registry: Address,
   expiresAt: Unix,
+  requestedClaims: z.array(z.enum(SD_CLAIM_NAMES as [SdClaimName, ...SdClaimName[]])).describe("Disclose exactly these SD-JWT claims"),
   statement: z.string(),
 });
 
@@ -154,6 +156,7 @@ export const VerificationResponse = z.strictObject({
       validFrom: z.string(),
       validUntil: z.string(),
       credentialType: z.string(),
+      claims: z.record(z.string(), z.union([z.boolean(), z.string()])).describe("Selectively disclosed claims (exactly those requested)"),
     })
     .optional(),
   registryStatus: z.string().optional(),

@@ -28,7 +28,7 @@ VC-JOSE-COSE asks that verification material from controlled identifier document
     "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "…" },
     "evmAttestationSigner": "0x…",
     "credentialTypes": ["IdentityVerifiedCredential"],
-    "schemaIds": ["0x85879d7d1c3284670dfb12c110f22f58f78d24870630e6747af5bccf086f84c6"]
+    "schemaIds": ["0x677d9a497133c8fc60e5fad9bc10c3d2b3215472699b05e8ca8d7a6fe8fa3227"]
   }]
 }
 ```
@@ -50,20 +50,38 @@ The on-chain signer is judged by the credential's `validFrom` (its issuance time
 
 A self-issued `did:key` that is not listed fails with `ISSUER_NOT_TRUSTED`. Keys in token headers (`jwk`, `jku`, `x5u`, `x5c`, …) are rejected outright. The verifier never uses a key supplied by the presenter.
 
-## Credential: `IdentityVerifiedCredential` v1
+## Credential: `IdentityVerifiedCredential` v2 (SD-JWT)
 
 - Data model: **W3C VC Data Model 2.0**.
-- Securing: **VC-JOSE-COSE §3.1.1, JWS compact serialization**. The unsecured credential *is* the JWS payload, with no `vc` claim. Media type `application/vc+jwt`.
-- Protected header: `{"alg":"Ed25519","typ":"vc+jwt","cty":"vc","kid":"<issuer DID URL>"}`.
+- Securing: **VC-JOSE-COSE "With SD-JWT"** using SD-JWT (RFC 9901). The unsecured credential is the input claims set. The issuer replaces the selectively disclosable subject claims with digests and signs the result as a JWS (compact serialization, no `vc` claim). Media type `application/vc+sd-jwt`.
+- Protected header: `{"alg":"Ed25519","typ":"vc+sd-jwt","cty":"vc","kid":"<issuer DID URL>"}`.
 - Algorithm allowlist: `Ed25519` only (fully-specified EdDSA, RFC 9864). `none`, HMAC, `EdDSA` and every other algorithm are rejected before and during verification.
-- Validation schema: zod definition `IdentityVerifiedCredentialV1` (`src/lib/shared/credential-profile.ts`). The JSON Schema generated from it is served at `/schemas/identity-verified/v1.json`.
-- Custom terms: JSON-LD context `https://did-mvp.invalid/contexts/identity-verified/v1`, bundled in code and served read-only at `/contexts/identity-verified/v1`. `.invalid` is a reserved TLD (RFC 2606), chosen so these prototype IRIs cannot be mistaken for live resources. Verifiers accept only the exact `[VC v2 context, this context]` pair and never fetch contexts. Example-only contexts (`…/credentials/examples/v2`) are rejected. A production profile would host the context and schema at a stable HTTPS origin it controls.
+- Validation schema: zod definition `IdentityVerifiedCredentialV2` (`src/lib/shared/credential-profile.ts`), strict at every level. The JSON Schema generated from it is served at `/schemas/identity-verified/v2.json`.
+- Custom terms: JSON-LD context `https://did-mvp.invalid/contexts/identity-verified/v2`, bundled in code and served read-only at `/contexts/identity-verified/v2`. `.invalid` is a reserved TLD (RFC 2606), chosen so these prototype IRIs cannot be mistaken for live resources. Verifiers accept only the exact `[VC v2 context, this context]` pair and never fetch contexts. Example-only contexts (`…/credentials/examples/v2`) are rejected. A production profile would host the context and schema at a stable HTTPS origin it controls.
 
-Sample synthetic credential (decoded payload):
+### What is always disclosed, and what is selective
+
+As VC-JOSE-COSE recommends, everything needed to validate the credential stays always-disclosed: `@context`, `type`, `id`, `issuer`, validity, `credentialSchema`, `credentialStatus`, the holder DID and `identityVerified: true`.
+
+The issuer derives three claims from the synthetic application at issuance. Each is a separate object-property disclosure inside `credentialSubject`:
+
+| Claim | Type | Derived from |
+| --- | --- | --- |
+| `ageOver18` | boolean | birth date, as of issuance |
+| `ageOver21` | boolean | birth date, as of issuance |
+| `countryOfResidence` | `^[A-Z]{2}$` | country (synthetic `ZZ`-style codes) |
+
+The birth date itself is never placed in the credential.
+
+- **Digests.** `credentialSubject._sd` always holds exactly **8** digests: the 3 real ones plus random decoys. They are sorted, so neither their number nor their order reveals anything. `_sd_alg` is `sha-256`.
+- **Disclosures.** Each disclosure is `base64url(JSON [salt, name, value])`, with a fresh 128-bit salt. Its digest is `base64url(SHA-256(ASCII(disclosure)))`. The implementation reproduces the RFC 9901 example digest (`test/unit/sd-jwt.test.ts`).
+- **Holder bundle.** The bundle (`did-mvp.holder-bundle/v2`) carries the issuer-signed JWT and all three disclosures. The holder presents only the disclosures a verifier's action requests.
+
+Sample synthetic credential (decoded payload of the issuer-signed JWT):
 
 ```json
 {
-  "@context": ["https://www.w3.org/ns/credentials/v2", "https://did-mvp.invalid/contexts/identity-verified/v1"],
+  "@context": ["https://www.w3.org/ns/credentials/v2", "https://did-mvp.invalid/contexts/identity-verified/v2"],
   "id": "urn:uuid:5aa8224a-af8d-4f4e-a316-9e57282ed108",
   "type": ["VerifiableCredential", "IdentityVerifiedCredential"],
   "issuer": "did:key:z6MkjdiFVCEuoVPCvD4d7HpsxLSAohCFRPn6AMSYooTTaPzx",
@@ -71,19 +89,48 @@ Sample synthetic credential (decoded payload):
   "validUntil": "2027-10-22T03:40:58Z",
   "credentialSubject": {
     "id": "did:pkh:eip155:31337:0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-    "identityVerified": true
+    "identityVerified": true,
+    "_sd": [
+      "0KiGFXJm2EvzcfzQLIkgSjDLvyXvpKSdVMYlZSH9T98", "FIlf8sLUG9iGBG1qoI4nckhAzi26YOYPCxxTzqhdii0",
+      "VC0WaVT2LkZ0RKAicbyBWOhF7i-iKYE_X702WJhtT68", "Xrg-92fDXLarBu-th-cztoR-BVTEVyKf1coxDXmgIck",
+      "_RnwI3dCODdxw6yUylEHGi9IM5iopROoURUcitCSxno", "axrGWRRAMvtIcSNSKz7zvADX9p9_HWgn06EBShPp5Mw",
+      "fm-e_88vAk-ut9dJt45tq65uKdSTTPUeZvd8dGFpPg8", "nbQpLgSlb8P8_nJTGusXd_51h7n-RMkRkiRDqlNzeVM"
+    ]
   },
-  "credentialSchema": { "id": "https://did-mvp.invalid/schemas/identity-verified/v1.json", "type": "JsonSchema" },
+  "credentialSchema": { "id": "https://did-mvp.invalid/schemas/identity-verified/v2.json", "type": "JsonSchema" },
   "credentialStatus": { "type": "EvmCredentialRegistryStatus2026", "chainId": 31337, "registry": "0x5FbDB2315678afecb367f032d93F642f64180aa3" },
   "iss": "did:key:z6MkjdiFVCEuoVPCvD4d7HpsxLSAohCFRPn6AMSYooTTaPzx",
   "sub": "did:pkh:eip155:31337:0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
   "jti": "urn:uuid:5aa8224a-af8d-4f4e-a316-9e57282ed108",
   "iat": 1792640458,
-  "exp": 1824176458
+  "exp": 1824176458,
+  "_sd_alg": "sha-256"
 }
 ```
 
-Minimal disclosure: the subject may contain only `id` and `identityVerified: true`, and any extra subject property fails validation. No name, birth date, document number, address, image or health data is ever included. `credentialStatus` names the intended chain and registry. It does **not** contain the commitment, which would be circular because the commitment is computed over the signed token.
+Its disclosures (held by the holder only):
+
+| Disclosure | Decoded | Digest (found in `_sd`) |
+| --- | --- | --- |
+| `WyJJSVZQT3pUT3lTTlJUT0VJTVI3LXpBIiwiYWdlT3ZlcjE4Iix0cnVlXQ` | `["IIVPOzTOySNRTOEIMR7-zA","ageOver18",true]` | `FIlf8sLU…` |
+| `WyJmMUVvVDBBN2dxaVQwalJ3LS1mTVFRIiwiYWdlT3ZlcjIxIix0cnVlXQ` | `["f1EoT0A7gqiT0jRw--fMQQ","ageOver21",true]` | `fm-e_88v…` |
+| `WyJldmxsNWRxWElmTnFWT3B4QW5QQmVRIiwiY291bnRyeU9mUmVzaWRlbmNlIiwiWloiXQ` | `["evll5dqXIfNqVOpxAnPBeQ","countryOfResidence","ZZ"]` | `VC0WaVT2…` |
+
+The other five digests are decoys.
+
+Minimal disclosure: the subject may contain only `id`, `identityVerified: true` and `_sd`. A selectively disclosable claim in plaintext, a different number of digests, or any other property fails validation. No name, birth date, document number, address, image or health data is ever included. `credentialStatus` names the intended chain and registry. It does **not** contain the commitment, which would be circular because the commitment is computed over the signed token.
+
+### Processing disclosures (verifier)
+
+The verifier follows RFC 9901 §7.1. It processes disclosures only after the issuer signature and the payload schema have been verified. Every presented disclosure must:
+
+- decode to a 3-element array with a salt of at least 128 bits (`DISCLOSURE_MALFORMED`);
+- have a digest that appears in the signed `_sd` (`DISCLOSURE_NOT_REFERENCED`);
+- not be presented twice, nor repeat a claim (`DISCLOSURE_DUPLICATE`);
+- name one of the three disclosable claims, so it can never overwrite `id` or invent one (`DISCLOSURE_CLAIM_NOT_ALLOWED`);
+- carry a value of the right type (`DISCLOSURE_VALUE_INVALID`).
+
+Repeated digests in the payload are rejected (`DIGEST_DUPLICATE`). The verifier's action then decides what must be disclosed (see *Actions and disclosure policy*).
 
 ### Duplicated JWT claims
 
@@ -96,7 +143,8 @@ Decoding base64url segments is **not** verification: anyone can produce any JSON
 ## Commitment
 
 ```
-tokenBytes  = UTF-8 bytes of the exact compact JWS string received (ASCII; never re-serialized)
+tokenBytes  = UTF-8 bytes of the exact issuer-signed JWT received (ASCII; never re-serialized).
+              Disclosures are not part of it: they are bound by their digests inside the signed payload.
 domain      = keccak256("did-mvp:credential-commitment:v1")
             = 0xd56ab0b39608399acbb848ac88eb83405436002381faae47f6678f9e4abf71dd
 salt        = 32 bytes from a CSPRNG, new per credential, kept only in the holder bundle
@@ -126,7 +174,7 @@ RegistrationAuthorization(bytes32 commitment, address holder, address issuer, by
                           bytes32 deploymentId)
 ```
 
-- `schemaId = keccak256("https://did-mvp.invalid/schemas/identity-verified/v1.json")` = `0x85879d7d…f84c6`.
+- `schemaId = keccak256("https://did-mvp.invalid/schemas/identity-verified/v2.json")` = `0x677d9a49…fa3227`.
 - `validFrom`/`expiresAt` equal the VC's `validFrom`/`validUntil` (unix seconds), and the verifier checks this equality.
 - `deadline` is the submission deadline: min(issuance + 24 h, expiresAt − 1). It is inclusive (`block.timestamp <= deadline`).
 - `issuerEpoch` must equal the issuer's current epoch, so authorizations signed before an issuer removal can never be used.
@@ -135,35 +183,51 @@ RegistrationAuthorization(bytes32 commitment, address holder, address issuer, by
 
 ## Presentation proof (application-specific, verified off-chain)
 
-**This is not a W3C Verifiable Presentation.** It is a custom EIP-712 message proving wallet control for one verifier challenge:
+**This is not a W3C Verifiable Presentation, and no SD-JWT Key Binding JWT is used.** Holder binding is a custom EIP-712 message proving wallet control for one verifier challenge. It also signs exactly which claims are disclosed and the hash of the exact SD-JWT presentation, which plays the role of a KB-JWT's `sd_hash`:
 
 ```
-domain = { name: "CredentialPresentation", version: "1", chainId, verifyingContract: <registry address> }
+domain = { name: "CredentialPresentation", version: "2", chainId, verifyingContract: <registry address> }
 PresentationProof(string statement, string audience, string action, bytes32 challenge,
-                  address holder, bytes32 commitment, uint64 expiresAt)
+                  address holder, bytes32 commitment, string disclosed, bytes32 sdHash, uint64 expiresAt)
+disclosed = comma-separated names of the presented disclosures, in order ("" for none)
+sdHash    = SHA-256( credentialJwt "~" disclosure_1 "~" … disclosure_n "~" )   (SD-JWT compact presentation)
 statement = 'I consent to share my Identity Verified credential (holder DID, issuer, validity,
-             identityVerified=true) with <audience> for the action "<action>".'
+             identityVerified=true, and only these optional claims: ageOver18) with <audience>
+             for the action "<action>".'            (", and no optional claims" when none)
 ```
 
-Submission: `POST /api/verifier/presentations` with `{ challengeId, credentialJwt, salt, proof: { holder, commitment, expiresAt, signature } }`.
+Submission: `POST /api/verifier/presentations` with `{ challengeId, credentialJwt, disclosures, salt, proof: { holder, commitment, expiresAt, signature } }`. `src/lib/shared/presentation.ts` (`preparePresentation`) builds the disclosures and the message on the holder side.
 
-The verifier rebuilds the typed data from **its own stored challenge** (nonce, audience = `APP_ORIGIN`, action, chain, registry) and the recomputed statement. It recovers the signer and requires `signer == proof.holder`, with `now < expiresAt <= challenge.expiresAt`. If the holder is a **contract account** (EIP-1271), the verifier instead asks the holder contract `isValidSignature(eip712Digest, signature)` and requires the magic value `0x1626ba7e`. SIWE sign-in uses the same fallback on the EIP-191 hash. A proof for another audience, action, nonce, chain or registry therefore recovers a different address and fails. SIWE is used only for app sessions. A login never counts as consent to a presentation.
+The verifier rebuilds the typed data from **its own stored challenge** (nonce, audience = `APP_ORIGIN`, action, chain, registry), the recomputed statement, and the `disclosed` and `sdHash` values recomputed from what was submitted. It recovers the signer and requires `signer == proof.holder`, with `now < expiresAt <= challenge.expiresAt`. If the holder is a **contract account** (EIP-1271), the verifier instead asks the holder contract `isValidSignature(eip712Digest, signature)` and requires the magic value `0x1626ba7e`. SIWE sign-in uses the same fallback on the EIP-191 hash.
+
+A proof for another audience, action, nonce, chain, registry or set of disclosures therefore recovers a different address and fails. A relay cannot strip a disclosure the holder consented to, or append one they did not. SIWE is used only for app sessions. A login never counts as consent to a presentation.
+
+## Actions and disclosure policy
+
+Each verifier action states which optional claims it requests and what values it requires (`ACTION_POLICIES` in `src/lib/shared/constants.ts`):
+
+| Action | Requests | Requires |
+| --- | --- | --- |
+| `access-verified-member-area` | nothing | — |
+| `access-age-restricted-area` | `ageOver18` | `ageOver18 = true` |
+
+Data minimization is enforced in both directions. A requested claim that is missing fails with `CLAIM_NOT_DISCLOSED`. A disclosed claim that was not requested fails with `UNREQUESTED_DISCLOSURE`: the verifier refuses to receive more than it asked for. A value that does not meet the policy fails with `POLICY_NOT_SATISFIED`.
 
 ## Challenge format and lifecycle
 
 ```json
-{ "challengeId": "<uuid v4>", "nonce": "0x<32 random bytes>", "action": "access-verified-member-area",
+{ "challengeId": "<uuid v4>", "nonce": "0x<32 random bytes>", "action": "access-age-restricted-area",
   "audience": "http://localhost:3000", "chainId": 31337, "registry": "0x…", "expiresAt": <unix s>,
-  "statement": "<exact consent text>" }
+  "requestedClaims": ["ageOver18"], "statement": "<exact consent text>" }
 ```
 
-The challenge is server-generated, lives 120 s, and is single-use. It is consumed **before** any other check by a conditional `UPDATE … WHERE consumed_at IS NULL AND expires_at > now RETURNING`, so exactly one concurrent submission can consume it. Failure codes are `CHALLENGE_UNKNOWN`, `CHALLENGE_EXPIRED` and `CHALLENGE_REUSED`. Only the challenge row and an outcome code are stored. Tokens and salts are not.
+The challenge is server-generated, lives 120 s, and is single-use. It is consumed **before** any other check by a conditional `UPDATE … WHERE consumed_at IS NULL AND expires_at > now RETURNING`, so exactly one concurrent submission can consume it. Failure codes are `CHALLENGE_UNKNOWN`, `CHALLENGE_EXPIRED` and `CHALLENGE_REUSED`. Only the challenge row and an outcome code are stored. Tokens, disclosures and salts are not.
 
 ## Verification order and failure codes
 
-1. `challenge` → 2. `walletControl` (`PROOF_*`) → 3. `tokenFormat` (`MALFORMED_TOKEN`, `UNSIGNED_TOKEN`, `ALG_NOT_ALLOWED`, `BAD_TYP`, `BAD_CTY`, `FORBIDDEN_HEADER`, `MISSING_KID`) → 4. `issuerTrust` (`ISSUER_NOT_TRUSTED`, `KID_MISMATCH`, `KEY_MISMATCH`, `KEY_RESOLUTION_FAILED`, `TYPE_NOT_AUTHORIZED`) → 5. `tokenSignature` (`BAD_SIGNATURE`) → 6. `credentialSemantics` (`SCHEMA_INVALID`, `ISSUER_KID_MISMATCH`, `JWT_CLAIM_MISMATCH`) → 7. `validityWindow` (`NOT_YET_VALID`, `EXPIRED`) → 8. `deploymentBinding` (`WRONG_DEPLOYMENT`, `BAD_SUBJECT_DID`, `SUBJECT_WRONG_CHAIN`) → 9. `holderBinding` (`SUBJECT_NOT_PRESENTER`) → 10. `commitment` (`COMMITMENT_MISMATCH`) → 11. `registry` (`NOT_REGISTERED`, `REVOKED`, `REGISTRY_EXPIRED`, `REGISTRY_ISSUERINACTIVE`, `REGISTRY_NOTYETVALID`, `REGISTRY_MISMATCH`, `RPC_UNAVAILABLE`).
+1. `challenge` → 2. `walletControl` (`PROOF_*`) → 3. `tokenFormat` (`MALFORMED_TOKEN`, `UNSIGNED_TOKEN`, `ALG_NOT_ALLOWED`, `BAD_TYP`, `BAD_CTY`, `FORBIDDEN_HEADER`, `MISSING_KID`) → 4. `issuerTrust` (`ISSUER_NOT_TRUSTED`, `KID_MISMATCH`, `KEY_MISMATCH`, `KEY_RESOLUTION_FAILED`, `TYPE_NOT_AUTHORIZED`, `KEY_COMPROMISED`, `KEY_NOT_VALID_AT_ISSUANCE`) → 5. `tokenSignature` (`BAD_SIGNATURE`) → 6. `credentialSemantics` (`SCHEMA_INVALID`, `BAD_TIMESTAMP`, `ISSUER_KID_MISMATCH`, `JWT_CLAIM_MISMATCH`) → 7. `selectiveDisclosure` (`DISCLOSURE_*`, `DIGEST_DUPLICATE`, `CLAIM_NOT_DISCLOSED`, `UNREQUESTED_DISCLOSURE`, `POLICY_NOT_SATISFIED`, `UNKNOWN_ACTION`) → 8. `validityWindow` (`NOT_YET_VALID`, `EXPIRED`) → 9. `deploymentBinding` (`WRONG_DEPLOYMENT`, `BAD_SUBJECT_DID`, `SUBJECT_WRONG_CHAIN`) → 10. `holderBinding` (`SUBJECT_NOT_PRESENTER`) → 11. `commitment` (`COMMITMENT_MISMATCH`) → 12. `registry` (`NOT_REGISTERED`, `REVOKED`, `REGISTRY_EXPIRED`, `REGISTRY_ISSUERINACTIVE`, `REGISTRY_NOTYETVALID`, `REGISTRY_MISMATCH`, `RPC_UNAVAILABLE`).
 
-Checks after the first failure are reported as `skipped` (“not reached”).
+A disclosure that cannot even be decoded fails `selectiveDisclosure` (`DISCLOSURE_MALFORMED`) before the wallet check, because the signed message needs its claim name. Checks after the first failure are reported as `skipped` (“not reached”).
 
 ## Revocation rules
 

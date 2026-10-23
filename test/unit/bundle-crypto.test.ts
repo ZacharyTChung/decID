@@ -10,6 +10,7 @@ const PASSWORD = "correct horse battery staple";
 const bundle: HolderBundle = {
   version: HOLDER_BUNDLE_VERSION,
   credentialJwt: "eyJhbGciOiJFZDI1NTE5In0.eyJ4IjoxfQ.c2ln",
+  disclosures: ["WyJzYWx0c2FsdHNhbHRzYWx0c2FsdHNhbCIsImFnZU92ZXIxOCIsdHJ1ZV0"],
   salt: "0x" + "ab".repeat(32),
   commitment: "0x" + "cd".repeat(32),
   authorization: {

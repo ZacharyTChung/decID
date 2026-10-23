@@ -18,7 +18,8 @@ import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contrac
 import { commitmentFor } from "../src/lib/shared/commitment";
 import { buildIdentityCredential } from "../src/lib/shared/credential-profile";
 import { deriveHolderDid } from "../src/lib/shared/did-pkh";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../src/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain, presentationMessage } from "../src/lib/shared/eip712";
+import { createDisclosures, decodeDisclosure, encodeDisclosure, sdHash } from "../src/lib/shared/sd-jwt";
 import type { HolderBundle } from "../src/lib/shared/bundle";
 import type { ChallengeResponse } from "../src/lib/shared/api";
 import type { VerificationResult } from "../src/lib/shared/verification";
@@ -73,8 +74,8 @@ function actor(name: string, index: number, ip: string): HttpActor {
   return new HttpActor(stack.origin, name, devWallet(index, stack.provider), ip);
 }
 
-async function challenge(a: HttpActor): Promise<ChallengeResponse> {
-  const res = await a.call("POST", "/api/verifier/challenges", { action: "access-verified-member-area" });
+async function challenge(a: HttpActor, action = "access-verified-member-area"): Promise<ChallengeResponse> {
+  const res = await a.call("POST", "/api/verifier/challenges", { action });
   if (res.status !== 201) throw new Error(`challenge failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
@@ -87,27 +88,34 @@ interface ProofOpts {
   expiresAt?: number;
   chainId?: number;
   registry?: string;
+  /** Challenge action (decides the requested claims). */
+  action?: string;
+  /** Disclosures submitted (default: none). */
+  disclosures?: string[];
+  /** Disclosures the holder's signature covers, if different from the submitted ones (tampering in transit). */
+  signedDisclosures?: string[];
 }
-async function proofFor(c: ChallengeResponse, defaults: { signer: HDNodeWallet; holder: string; commitment: string }, o: ProofOpts = {}) {
+async function proofFor(c: ChallengeResponse, defaults: { signer: HDNodeWallet; holder: string; commitment: string; token: string; disclosures: string[] }, o: ProofOpts = {}) {
   const signer = o.signer ?? defaults.signer;
   const holder = o.holder ?? defaults.holder;
   const commitment = o.commitment ?? defaults.commitment;
   const audience = o.audience ?? c.audience;
   const expiresAt = o.expiresAt ?? c.expiresAt;
-  const signature = await signer.signTypedData(presentationDomain(o.chainId ?? c.chainId, o.registry ?? c.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(audience, c.action),
-    audience,
-    action: c.action,
-    challenge: c.nonce,
-    holder,
-    commitment,
-    expiresAt,
+  const signed = o.signedDisclosures ?? defaults.disclosures;
+  const names = signed.map((d) => {
+    try {
+      return decodeDisclosure(d).name;
+    } catch {
+      return "?";
+    }
   });
+  const message = presentationMessage({ audience, action: c.action, challenge: c.nonce, holder, commitment, disclosed: names, sdHash: sdHash(defaults.token, signed), expiresAt });
+  const signature = await signer.signTypedData(presentationDomain(o.chainId ?? c.chainId, o.registry ?? c.registry), PRESENTATION_TYPES, message);
   return { holder, commitment, expiresAt, signature };
 }
 
 async function present(a: HttpActor, token: string, salt: string, o: ProofOpts = {}): Promise<{ result: VerificationResult; body: unknown; c: ChallengeResponse }> {
-  const c = await challenge(a);
+  const c = await challenge(a, o.action);
   const commitment = o.commitment ?? (() => {
     try {
       return commitmentFor(token, salt);
@@ -115,15 +123,16 @@ async function present(a: HttpActor, token: string, salt: string, o: ProofOpts =
       return "0x" + "00".repeat(32);
     }
   })();
-  const proof = await proofFor(c, { signer: a.wallet, holder: a.address, commitment }, o);
-  const body = { challengeId: c.challengeId, credentialJwt: token, salt, proof };
+  const disclosures = o.disclosures ?? [];
+  const proof = await proofFor(c, { signer: a.wallet, holder: a.address, commitment, token, disclosures }, o);
+  const body = { challengeId: c.challengeId, credentialJwt: token, disclosures, salt, proof };
   const res = await a.call("POST", "/api/verifier/presentations", body);
   return { result: res.body as VerificationResult, body, c };
 }
 
-async function issue(holder: HttpActor, issuer: HttpActor, doc: string, opts: { register: boolean; pickup?: boolean }) {
+async function issue(holder: HttpActor, issuer: HttpActor, doc: string, opts: { register: boolean; pickup?: boolean; dateOfBirth?: string }) {
   if ((await holder.signIn("holder")).status !== 200) throw new Error(`${holder.name} sign-in failed`);
-  const req = await holder.call("POST", "/api/holder/requests", { ...SYNTHETIC, documentNumber: doc });
+  const req = await holder.call("POST", "/api/holder/requests", { ...SYNTHETIC, documentNumber: doc, ...(opts.dateOfBirth ? { dateOfBirth: opts.dateOfBirth } : {}) });
   if (req.status !== 201) throw new Error(`request failed: ${JSON.stringify(req.body)}`);
   const ok = await issuer.call("POST", `/api/issuer/requests/${req.body.id}/decision`, { decision: "approve" });
   if (ok.status !== 200) throw new Error(`approve failed: ${JSON.stringify(ok.body)}`);
@@ -145,7 +154,7 @@ async function attackerKey() {
 }
 
 async function signWith(key: CryptoKey | Uint8Array, header: Record<string, unknown>, payload: unknown): Promise<string> {
-  return new CompactSign(new TextEncoder().encode(JSON.stringify(payload))).setProtectedHeader({ alg: "Ed25519", typ: "vc+jwt", cty: "vc", ...header }).sign(key);
+  return new CompactSign(new TextEncoder().encode(JSON.stringify(payload))).setProtectedHeader({ alg: "Ed25519", typ: "vc+sd-jwt", cty: "vc", ...header }).sign(key);
 }
 
 // ------------------------------------------------------------------ campaign
@@ -177,6 +186,10 @@ async function main() {
   const A = (await issue(holder, issuer, "SYN-REDTEAMA", { register: true })).bundle!; // legit, registered
   const B = (await issue(holderB, issuer, "SYN-REDTEAMB", { register: false })).bundle!; // legit, NOT registered
   const pendingC = await issue(holderC, issuer, "SYN-REDTEAMC", { register: false, pickup: false }); // awaiting pickup
+  const minor = actor("minor", 8, "10.0.0.8");
+  const M = (await issue(minor, issuer, "SYN-REDTEAMM", { register: true, dateOfBirth: "2015-03-03" })).bundle!; // legit, registered, under 18
+  const disclosureOf = (b: HolderBundle, name: string) => b.disclosures.find((d) => decodeDisclosure(d).name === name)!;
+  const AGE = "access-age-restricted-area";
   const legitPayload = JSON.parse(Buffer.from(A.credentialJwt.split(".")[1]!, "base64url").toString());
   const [legitHeader, , legitSig] = A.credentialJwt.split(".");
   const evil = await attackerKey();
@@ -192,9 +205,10 @@ async function main() {
     validUntil: now + 86400,
     chainId: 31337,
     registry: stack.deployment.registry,
+    sd: createDisclosures({ ageOver18: true, ageOver21: true, countryOfResidence: "ZZ" }).sd,
   });
   const forgedSalt = hexlify(randomBytes(32));
-  console.log("  setup: legitimate credentials issued (A registered, B unregistered, C awaiting pickup)\n");
+  console.log("  setup: legitimate credentials issued (A registered, B unregistered, C awaiting pickup, M registered and under 18)\n");
 
   const scenarios: Scenario[] = [
     // -------------------------------------------------------------- A: credential forgery
@@ -211,14 +225,14 @@ async function main() {
     },
     {
       id: "A3", category: "Credential forgery", attack: 'Unsigned token (alg "none")', expected: "UNSIGNED_TOKEN",
-      run: async () => expectCode((await present(thief, `${b64({ alg: "none", typ: "vc+jwt", kid: trustedKey.kid })}.${b64(legitPayload)}.x`, forgedSalt)).result, "UNSIGNED_TOKEN"),
+      run: async () => expectCode((await present(thief, `${b64({ alg: "none", typ: "vc+sd-jwt", kid: trustedKey.kid })}.${b64(legitPayload)}.x`, forgedSalt)).result, "UNSIGNED_TOKEN"),
     },
     {
       id: "A4", category: "Credential forgery", attack: "Algorithm confusion: HS256 keyed with the issuer's PUBLIC key", expected: "ALG_NOT_ALLOWED",
       run: async () => {
         const secret = Buffer.from(trustedKey.publicKeyJwk.x, "base64url");
         const token = await new SignJWT({ ...legitPayload, sub: thiefDid, credentialSubject: { ...legitPayload.credentialSubject, id: thiefDid } })
-          .setProtectedHeader({ alg: "HS256", typ: "vc+jwt", kid: trustedKey.kid })
+          .setProtectedHeader({ alg: "HS256", typ: "vc+sd-jwt", kid: trustedKey.kid })
           .sign(secret);
         return expectCode((await present(thief, token, forgedSalt)).result, "ALG_NOT_ALLOWED");
       },
@@ -237,13 +251,13 @@ async function main() {
     },
     {
       id: "A8", category: "Credential forgery", attack: 'Deprecated alg identifier "EdDSA" (valid signature by attacker)', expected: "ALG_NOT_ALLOWED",
-      run: async () => expectCode((await present(thief, await new CompactSign(new TextEncoder().encode(JSON.stringify(selfIssued))).setProtectedHeader({ alg: "EdDSA", typ: "vc+jwt", kid: evil.kid }).sign(evil.key), forgedSalt)).result, "ALG_NOT_ALLOWED"),
+      run: async () => expectCode((await present(thief, await new CompactSign(new TextEncoder().encode(JSON.stringify(selfIssued))).setProtectedHeader({ alg: "EdDSA", typ: "vc+sd-jwt", kid: evil.kid }).sign(evil.key), forgedSalt)).result, "ALG_NOT_ALLOWED"),
     },
     {
       id: "A9", category: "Credential forgery", attack: "Oversized token (12 KB) to stress the parser", expected: "HTTP 400 before any parsing",
       run: async () => {
         const c = await challenge(thief);
-        const res = await thief.call("POST", "/api/verifier/presentations", { challengeId: c.challengeId, credentialJwt: "a".repeat(12_000) + ".b.c", salt: forgedSalt, proof: await proofFor(c, { signer: thief.wallet, holder: thief.address, commitment: "0x" + "11".repeat(32) }) });
+        const res = await thief.call("POST", "/api/verifier/presentations", { challengeId: c.challengeId, credentialJwt: "a".repeat(12_000) + ".b.c", salt: forgedSalt, proof: await proofFor(c, { signer: thief.wallet, holder: thief.address, commitment: "0x" + "11".repeat(32), token: "a.b.c", disclosures: [] }) });
         return expectStatus(res.status, 400, res.body?.error?.code);
       },
     },
@@ -278,7 +292,7 @@ async function main() {
       id: "B6", category: "Impersonation & replay", attack: "Race: the same valid submission fired 8 times concurrently", expected: "exactly 1 accepted",
       run: async () => {
         const c = await challenge(holder);
-        const body = { challengeId: c.challengeId, credentialJwt: A.credentialJwt, salt: A.salt, proof: await proofFor(c, { signer: holder.wallet, holder: holder.address, commitment: A.commitment }) };
+        const body = { challengeId: c.challengeId, credentialJwt: A.credentialJwt, disclosures: [], salt: A.salt, proof: await proofFor(c, { signer: holder.wallet, holder: holder.address, commitment: A.commitment, token: A.credentialJwt, disclosures: [] }) };
         const all = await Promise.all(Array.from({ length: 8 }, () => holder.call("POST", "/api/verifier/presentations", body)));
         const accepted = all.filter((r) => (r.body as VerificationResult).verified).length;
         return { ok: accepted === 1, observed: `${accepted} accepted, ${8 - accepted} CHALLENGE_REUSED` };
@@ -288,7 +302,7 @@ async function main() {
       id: "B7", category: "Impersonation & replay", attack: "Guessed challenge id", expected: "CHALLENGE_UNKNOWN",
       run: async () => {
         const c = await challenge(holder);
-        const res = await holder.call("POST", "/api/verifier/presentations", { challengeId: crypto.randomUUID(), credentialJwt: A.credentialJwt, salt: A.salt, proof: await proofFor(c, { signer: holder.wallet, holder: holder.address, commitment: A.commitment }) });
+        const res = await holder.call("POST", "/api/verifier/presentations", { challengeId: crypto.randomUUID(), credentialJwt: A.credentialJwt, disclosures: [], salt: A.salt, proof: await proofFor(c, { signer: holder.wallet, holder: holder.address, commitment: A.commitment, token: A.credentialJwt, disclosures: [] }) });
         return expectCode(res.body, "CHALLENGE_UNKNOWN");
       },
     },
@@ -442,6 +456,72 @@ async function main() {
         const flagged = pending?.recovery?.previousHolder === holder.address;
         await issuer.call("POST", `/api/issuer/requests/${req.body.id}/decision`, { decision: "reject", reason: "re-verification failed" });
         return { ok: req.status === 201 && flagged && stillValid, observed: `queued with recovery warning=${flagged}; victim still verified=${stillValid}; rejected by issuer` };
+      },
+    },
+
+    // -------------------------------------------------------------- S: selective disclosure (SD-JWT)
+    {
+      id: "S0", category: "Selective disclosure", attack: "Control: adult holder discloses ageOver18 to the 18+ area", expected: "VERIFIED with exactly { ageOver18: true }",
+      run: async () => {
+        const r = (await present(holder, A.credentialJwt, A.salt, { action: AGE, disclosures: [disclosureOf(A, "ageOver18")] })).result;
+        const claims = JSON.stringify(r.disclosed?.claims);
+        return { ok: r.verified && claims === '{"ageOver18":true}', observed: r.verified ? `VERIFIED ${claims}` : firstFail(r) };
+      },
+    },
+    {
+      id: "S1", category: "Selective disclosure", attack: "Adult holder withholds the requested ageOver18 claim", expected: "CLAIM_NOT_DISCLOSED",
+      run: async () => expectCode((await present(holder, A.credentialJwt, A.salt, { action: AGE })).result, "CLAIM_NOT_DISCLOSED"),
+    },
+    {
+      id: "S2", category: "Selective disclosure", attack: "Under-18 holder honestly discloses ageOver18=false", expected: "POLICY_NOT_SATISFIED",
+      run: async () => expectCode((await present(minor, M.credentialJwt, M.salt, { action: AGE, disclosures: [disclosureOf(M, "ageOver18")] })).result, "POLICY_NOT_SATISFIED"),
+    },
+    {
+      id: "S3", category: "Selective disclosure", attack: "Under-18 holder flips their disclosure to true (same salt, signs it)", expected: "DISCLOSURE_NOT_REFERENCED",
+      run: async () => {
+        const own = decodeDisclosure(disclosureOf(M, "ageOver18"));
+        return expectCode((await present(minor, M.credentialJwt, M.salt, { action: AGE, disclosures: [encodeDisclosure(own.salt, "ageOver18", true)] })).result, "DISCLOSURE_NOT_REFERENCED");
+      },
+    },
+    {
+      id: "S4", category: "Selective disclosure", attack: "Under-18 holder borrows the adult's genuine ageOver18=true disclosure", expected: "DISCLOSURE_NOT_REFERENCED",
+      run: async () => expectCode((await present(minor, M.credentialJwt, M.salt, { action: AGE, disclosures: [disclosureOf(A, "ageOver18")] })).result, "DISCLOSURE_NOT_REFERENCED"),
+    },
+    {
+      id: "S5", category: "Selective disclosure", attack: "Over-disclosure: country disclosed to an action that requests nothing", expected: "UNREQUESTED_DISCLOSURE",
+      run: async () => expectCode((await present(holder, A.credentialJwt, A.salt, { disclosures: [disclosureOf(A, "countryOfResidence")] })).result, "UNREQUESTED_DISCLOSURE"),
+    },
+    {
+      id: "S6", category: "Selective disclosure", attack: "Relay strips the disclosure the holder signed for (to make the holder fail)", expected: "PROOF_SIGNER_MISMATCH",
+      run: async () => expectCode((await present(holder, A.credentialJwt, A.salt, { action: AGE, disclosures: [], signedDisclosures: [disclosureOf(A, "ageOver18")] })).result, "PROOF_SIGNER_MISMATCH"),
+    },
+    {
+      id: "S7", category: "Selective disclosure", attack: "Relay appends a disclosure the holder did not consent to (country)", expected: "PROOF_SIGNER_MISMATCH",
+      run: async () => {
+        const age = disclosureOf(A, "ageOver18");
+        return expectCode((await present(holder, A.credentialJwt, A.salt, { action: AGE, disclosures: [age, disclosureOf(A, "countryOfResidence")], signedDisclosures: [age] })).result, "PROOF_SIGNER_MISMATCH");
+      },
+    },
+    {
+      id: "S8", category: "Selective disclosure", attack: "The same disclosure presented twice", expected: "DISCLOSURE_DUPLICATE",
+      run: async () => {
+        const age = disclosureOf(A, "ageOver18");
+        return expectCode((await present(holder, A.credentialJwt, A.salt, { action: AGE, disclosures: [age, age] })).result, "DISCLOSURE_DUPLICATE");
+      },
+    },
+    {
+      id: "S9", category: "Selective disclosure", attack: "Inspect the signed credential for the hidden claims (plaintext or guessable digests)", expected: "only salted digests; same count for every holder",
+      run: async () => {
+        const payloadOf = (b: HolderBundle) => JSON.parse(Buffer.from(b.credentialJwt.split(".")[1]!, "base64url").toString());
+        const pa = payloadOf(A);
+        const pm = payloadOf(M);
+        const text = JSON.stringify([pa, pm]);
+        const leaks = ["ageOver18", "ageOver21", "countryOfResidence", '"ZZ"'].filter((n) => text.includes(n));
+        // An attacker who guesses a value cannot confirm it without the 128-bit salt: try the obvious unsalted forms.
+        const guesses = ["ageOver18", "true", '["ageOver18",true]'].map((g) => Buffer.from(g).toString("base64url"));
+        const confirmed = guesses.some((g) => pa.credentialSubject._sd.includes(g));
+        const sameCount = pa.credentialSubject._sd.length === pm.credentialSubject._sd.length;
+        return { ok: leaks.length === 0 && !confirmed && sameCount, observed: `${leaks.length ? `leaks: ${leaks.join(",")}` : "no plaintext"}, ${pa.credentialSubject._sd.length} vs ${pm.credentialSubject._sd.length} digests` };
       },
     },
 

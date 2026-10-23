@@ -1,8 +1,8 @@
 # Red-team report
 
-Run: 2026-10-22T23:15:36.548Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
+Run: 2026-10-23T03:32:36.106Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
 
-**43 of 43 defenses held.**
+**53 of 53 defenses held.**
 
 | ID | Category | Attack | Expected defense | Observed | Result |
 | --- | --- | --- | --- | --- | --- |
@@ -43,12 +43,25 @@ Run: 2026-10-22T23:15:36.548Z against a fresh local stack (`npm run redteam`). S
 | D8 | API & auth abuse | Oversized request body (40 KB) | HTTP 413 | HTTP 413 BODY_TOO_LARGE | held |
 | D9 | API & auth abuse | Flood: 40 sign-in challenges per minute from one client (others unaffected) | HTTP 429 for the flooder only | 10/40 throttled; bystander HTTP 200 | held |
 | D10 | API & auth abuse | Recovery hijack: thief files a recovery request naming the victim's wallet | request only queued; victim stays valid until an issuer re-verifies (accepted risk) | queued with recovery warning=true; victim still verified=true; rejected by issuer | held |
+| S0 | Selective disclosure | Control: adult holder discloses ageOver18 to the 18+ area | VERIFIED with exactly { ageOver18: true } | VERIFIED {"ageOver18":true} | held |
+| S1 | Selective disclosure | Adult holder withholds the requested ageOver18 claim | CLAIM_NOT_DISCLOSED | CLAIM_NOT_DISCLOSED | held |
+| S2 | Selective disclosure | Under-18 holder honestly discloses ageOver18=false | POLICY_NOT_SATISFIED | POLICY_NOT_SATISFIED | held |
+| S3 | Selective disclosure | Under-18 holder flips their disclosure to true (same salt, signs it) | DISCLOSURE_NOT_REFERENCED | DISCLOSURE_NOT_REFERENCED | held |
+| S4 | Selective disclosure | Under-18 holder borrows the adult's genuine ageOver18=true disclosure | DISCLOSURE_NOT_REFERENCED | DISCLOSURE_NOT_REFERENCED | held |
+| S5 | Selective disclosure | Over-disclosure: country disclosed to an action that requests nothing | UNREQUESTED_DISCLOSURE | UNREQUESTED_DISCLOSURE | held |
+| S6 | Selective disclosure | Relay strips the disclosure the holder signed for (to make the holder fail) | PROOF_SIGNER_MISMATCH | PROOF_SIGNER_MISMATCH | held |
+| S7 | Selective disclosure | Relay appends a disclosure the holder did not consent to (country) | PROOF_SIGNER_MISMATCH | PROOF_SIGNER_MISMATCH | held |
+| S8 | Selective disclosure | The same disclosure presented twice | DISCLOSURE_DUPLICATE | DISCLOSURE_DUPLICATE | held |
+| S9 | Selective disclosure | Inspect the signed credential for the hidden claims (plaintext or guessable digests) | only salted digests; same count for every holder | no plaintext, 8 vs 8 digests | held |
 | E1 | Privacy probes | Look for issuer secrets in the public config endpoint and page HTML | no secret material | none found | held |
 | E2 | Privacy probes | Mine the verifier activity log for holder addresses or commitments | only reference, action, time, outcome | no identifiers | held |
 | E3 | Privacy probes | Inspect a successful verification response for application data | only identityVerified + DIDs + dates | verified=true; 0 private value(s) in response | held |
 | E4 | Privacy probes | Check the page CSP an XSS payload would face | per-request nonce, no 'unsafe-inline' | fresh nonce per response, no unsafe-inline | held |
 | E5 | Privacy probes | Malformed JSON to provoke a stack trace | stable error code, no internals | HTTP 400 INVALID_JSON | held |
-| E6 | Privacy probes | Scan every transaction and event on the chain for identity data, tokens and salts | nothing private on-chain | 9 blocks scanned; 0 private value(s) found | held |
+| E6 | Privacy probes | Scan every transaction and event on the chain for identity data, tokens and salts | nothing private on-chain | 10 blocks scanned; 0 private value(s) found | held |
+
+Not covered here (needs clock control): expiry, not-yet-valid and registration-deadline boundaries; these are
+covered by the contract tests and the Solidity fuzz/invariant suite (`npm run test:fuzz`).
 
 ## How trustworthy is this scorecard?
 
@@ -56,6 +69,11 @@ The harness was mutation-tested: with the verifier's holder-binding check and co
 scenarios that depend on them (B1, C1, C2) failed. Even then, the attacks were still rejected one layer deeper (the live
 registry check caught the mismatched holder or commitment), which is the intended defense in depth. The scorecard
 requires the *specific* defense to fire, so a missing layer shows up even when a later one would catch it.
+
+The selective-disclosure scenarios (S0–S9, added with SD-JWT) were checked the same way: with the
+"digest must be referenced by the signed credential" check disabled, the tamper tests in
+`test/unit/credential.test.ts` fail. S3 and S4 are the attacks that check stops: an under-18 holder
+flipping their own disclosure, or borrowing an adult's genuine one.
 
 ## Findings fixed during the campaign
 

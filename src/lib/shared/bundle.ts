@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_DISCLOSURE_LENGTH, SD_CLAIM_NAMES } from "./sd-jwt";
 import { ENCRYPTED_BUNDLE_VERSION, HOLDER_BUNDLE_VERSION } from "./constants";
 
 const Hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
@@ -11,9 +12,12 @@ const Uint64 = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
  * the exact signed token bytes, the commitment salt, and the issuer's
  * registration authorization.
  */
-export const HolderBundleV1 = z.strictObject({
+export const HolderBundleV2 = z.strictObject({
   version: z.literal(HOLDER_BUNDLE_VERSION),
+  /** Issuer-signed JWT of the SD-JWT (the commitment covers exactly these bytes). */
   credentialJwt: z.string().min(1).max(8192),
+  /** All SD-JWT disclosures issued with it; the holder presents only the ones a verifier requests. */
+  disclosures: z.array(z.string().min(1).max(MAX_DISCLOSURE_LENGTH)).max(SD_CLAIM_NAMES.length),
   salt: Hex32,
   commitment: Hex32,
   authorization: z.strictObject({
@@ -31,7 +35,7 @@ export const HolderBundleV1 = z.strictObject({
   deployment: z.strictObject({ chainId: z.number().int().positive(), registry: Address }),
   issuedAt: z.string(),
 });
-export type HolderBundle = z.infer<typeof HolderBundleV1>;
+export type HolderBundle = z.infer<typeof HolderBundleV2>;
 
 const B64Url = z.string().regex(/^[A-Za-z0-9_-]+$/);
 

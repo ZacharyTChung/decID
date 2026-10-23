@@ -13,6 +13,8 @@
  * Options:
  *   --password <pw>        decrypt an encrypted backup (or set BUNDLE_PASSWORD)
  *   --holder-index <n>     Hardhat dev account that signs the proof (default 2)
+ *   --action <action>      verifier action, which decides the claims to disclose
+ *                          (default access-verified-member-area; access-age-restricted-area requests ageOver18)
  *   --rpc <url>            default: RPC_URL from .env.local, else http://127.0.0.1:8545
  *   --deployment <file>    default: deployments/localhost.json
  *   --trust <file>         default: config/trusted-issuers.local.json
@@ -51,10 +53,12 @@ async function main(): Promise<number> {
   process.env.DEPLOYMENT_FILE = path.resolve(flag("--deployment") ?? "deployments/localhost.json");
   process.env.TRUSTED_ISSUERS_FILE = path.resolve(flag("--trust") ?? "config/trusted-issuers.local.json");
 
-  const { HolderBundleV1 } = await import("../src/lib/shared/bundle");
+  const { HolderBundleV2 } = await import("../src/lib/shared/bundle");
   const { decryptBundle } = await import("../src/lib/shared/bundle-crypto");
   const { ENCRYPTED_BUNDLE_VERSION } = await import("../src/lib/shared/constants");
-  const { PRESENTATION_TYPES, presentationDomain, presentationStatement } = await import("../src/lib/shared/eip712");
+  const { PRESENTATION_TYPES, presentationDomain } = await import("../src/lib/shared/eip712");
+  const { preparePresentation } = await import("../src/lib/shared/presentation");
+  const { ACTION_POLICIES, VERIFIER_ACTIONS } = await import("../src/lib/shared/constants");
   const { CHECK_LABELS } = await import("../src/lib/shared/verification");
   const { loadDeployment } = await import("../src/lib/server/chain");
   const { loadTrustedIssuers } = await import("../src/lib/server/trust");
@@ -71,7 +75,7 @@ async function main(): Promise<number> {
     }
     bundle = await decryptBundle(raw, password);
   } else {
-    const parsed = HolderBundleV1.safeParse(raw);
+    const parsed = HolderBundleV2.safeParse(raw);
     if (!parsed.success) {
       console.error("not a holder bundle or encrypted backup (expected did-mvp.holder-bundle/v1 or an encrypted export)");
       return 1;
@@ -86,7 +90,7 @@ async function main(): Promise<number> {
   // This verifier's own fresh challenge (the CLI is its own audience).
   const ctx = {
     nonce: hexlify(randomBytes(32)),
-    action: "access-verified-member-area",
+    action: flag("--action") ?? "access-verified-member-area",
     audience: "urn:did-mvp:cli-verifier",
     chainId: deployment.chainId,
     registry: deployment.registry,
@@ -99,19 +103,17 @@ async function main(): Promise<number> {
   if (holderKey.address.toLowerCase() !== holder.toLowerCase()) {
     console.error(`note: dev account ${holderKey.address} does not control the holder wallet ${holder}; wallet control will fail`);
   }
-  const signature = await holderKey.signTypedData(presentationDomain(ctx.chainId, ctx.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(ctx.audience, ctx.action),
-    audience: ctx.audience,
-    action: ctx.action,
-    challenge: ctx.nonce,
-    holder,
-    commitment: bundle.commitment,
-    expiresAt: ctx.expiresAt,
-  });
+  if (!(VERIFIER_ACTIONS as readonly string[]).includes(ctx.action)) {
+    console.error(`unknown action ${ctx.action}; one of: ${VERIFIER_ACTIONS.join(", ")}`);
+    return 1;
+  }
+  const requestedClaims = ACTION_POLICIES[ctx.action as keyof typeof ACTION_POLICIES].requested;
+  const { disclosures, message } = preparePresentation(bundle, { ...ctx, requestedClaims }, holder);
+  const signature = await holderKey.signTypedData(presentationDomain(ctx.chainId, ctx.registry), PRESENTATION_TYPES, message);
 
   const core = await verifyPresentationCore(
     ctx,
-    { credentialJwt: bundle.credentialJwt, salt: bundle.salt, proof: { holder, commitment: bundle.commitment, expiresAt: ctx.expiresAt, signature } },
+    { credentialJwt: bundle.credentialJwt, disclosures, salt: bundle.salt, proof: { holder, commitment: bundle.commitment, expiresAt: ctx.expiresAt, signature } },
     { deployment, issuers, now },
   );
   const result = finalize([{ id: "challenge", status: "pass", detail: "fresh CLI challenge" }, ...core.checks], {
@@ -127,7 +129,7 @@ async function main(): Promise<number> {
       console.log(`${mark} ${CHECK_LABELS[c.id]}${c.status === "fail" ? `  [${c.code}] ${c.detail ?? ""}` : ""}`);
     }
     if (result.registryStatus) console.log(`registry status: ${result.registryStatus}`);
-    console.log(result.verified ? `\nVERIFIED: ${result.disclosed?.holderDid} identityVerified=true (issuer ${result.disclosed?.issuerName})` : "\nNOT VERIFIED");
+    console.log(result.verified ? `\nVERIFIED: ${result.disclosed?.holderDid} identityVerified=true${Object.entries(result.disclosed?.claims ?? {}).map(([k, v]) => ` ${k}=${String(v)}`).join("")} (issuer ${result.disclosed?.issuerName})` : "\nNOT VERIFIED");
   }
   return result.verified ? 0 : 2;
 }

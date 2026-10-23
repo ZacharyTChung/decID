@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { hexlify } from "ethers";
-import type { VerifierAction } from "../../shared/constants";
+import { ACTION_POLICIES, type VerifierAction } from "../../shared/constants";
 import { sameAddress } from "../../shared/did-pkh";
 import { presentationStatement } from "../../shared/eip712";
 import type { VerificationResult } from "../../shared/verification";
@@ -43,7 +43,8 @@ export function createChallenge(action: VerifierAction): ChallengeResponse {
     chainId: deployment.chainId,
     registry: deployment.registry,
     expiresAt,
-    statement: presentationStatement(cfg.origin, action),
+    requestedClaims: [...ACTION_POLICIES[action].requested],
+    statement: presentationStatement(cfg.origin, action, ACTION_POLICIES[action].requested),
   };
 }
 

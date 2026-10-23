@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
 import type { ChallengeResponse } from "@/lib/shared/api";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "@/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain } from "@/lib/shared/eip712";
+import { preparePresentation } from "@/lib/shared/presentation";
+import { ACTION_POLICIES, VERIFIER_ACTIONS, type VerifierAction } from "@/lib/shared/constants";
+import { decodeDisclosure } from "@/lib/shared/sd-jwt";
 import { CHECK_LABELS, type VerificationResult } from "@/lib/shared/verification";
 import { useApp } from "@/components/providers";
 import { Badge, Button, Card, Mono, Notice, Shell, WalletBar, useAction } from "@/components/ui";
@@ -68,11 +71,11 @@ function ActivityLog({ version }: { version: number }) {
   );
 }
 
-function Results({ result }: { result: VerificationResult }) {
+function Results({ result, action }: { result: VerificationResult; action: VerifierAction }) {
   return (
     <Card title="Verification result" subtitle={`Checked at ${new Date(result.verifiedAt).toLocaleTimeString()}. Every check is reported separately.`}>
       <div className="mb-4">
-        {result.verified ? <Notice tone="success">Verified. Access to “verified member area” may be granted.</Notice> : <Notice tone="error">Not verified. See the failing check below.</Notice>}
+        {result.verified ? <Notice tone="success">Verified. Access to “{ACTION_POLICIES[action].label}” may be granted.</Notice> : <Notice tone="error">Not verified. See the failing check below.</Notice>}
       </div>
       <ul className="divide-y divide-slate-100 text-sm">
         {result.checks.map((c) => (
@@ -110,6 +113,16 @@ function Results({ result }: { result: VerificationResult }) {
             <dd>
               {result.disclosed.validFrom} → {result.disclosed.validUntil}
             </dd>
+            <dt className="font-medium">Disclosed claims</dt>
+            <dd>
+              {Object.keys(result.disclosed.claims).length === 0
+                ? "none requested"
+                : Object.entries(result.disclosed.claims).map(([k, v]) => (
+                    <span key={k} className="mr-3">
+                      {k}: <strong>{String(v)}</strong>
+                    </span>
+                  ))}
+            </dd>
           </dl>
           <p className="mt-2 text-xs text-emerald-800">The original application (name, birth date, document number) is not available to the verifier, and it does not keep the token or salt.</p>
         </div>
@@ -121,8 +134,9 @@ function Results({ result }: { result: VerificationResult }) {
 export default function VerifierPage() {
   const app = useApp();
   const [challenge, setChallenge] = useState<ChallengeResponse>();
-  const [result, setResult] = useState<VerificationResult>();
+  const [result, setResult] = useState<{ result: VerificationResult; action: VerifierAction }>();
   const [consent, setConsent] = useState(false);
+  const [action, setAction] = useState<VerifierAction>("access-verified-member-area");
   const [logVersion, setLogVersion] = useState(0);
   const start = useAction();
   const present = useAction();
@@ -148,13 +162,26 @@ export default function VerifierPage() {
       </div>
 
       <Card title="1. Start a fresh verification request" subtitle="The server creates an unpredictable 32-byte nonce for one action. It expires after 2 minutes and can be used once.">
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <label htmlFor="verifier-action" className="text-slate-600">
+            Action
+          </label>
+          <select id="verifier-action" className="rounded-md border border-slate-300 px-2 py-1" value={action} onChange={(e) => setAction(e.target.value as VerifierAction)}>
+            {VERIFIER_ACTIONS.map((a) => (
+              <option key={a} value={a}>
+                {ACTION_POLICIES[a].label}
+                {ACTION_POLICIES[a].requested.length ? ` (requests ${ACTION_POLICIES[a].requested.join(", ")})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
         <Button
           busy={start.busy}
           onClick={() =>
             start.run(async () => {
               setResult(undefined);
               setConsent(false);
-              setChallenge(await api<ChallengeResponse>("POST", "/api/verifier/challenges", { action: "access-verified-member-area" }));
+              setChallenge(await api<ChallengeResponse>("POST", "/api/verifier/challenges", { action }));
               setLogVersion((v) => v + 1);
             })
           }
@@ -167,6 +194,10 @@ export default function VerifierPage() {
             <div>
               <dt className="text-slate-500">Action</dt>
               <dd>{challenge.action}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Requested optional claims</dt>
+              <dd>{challenge.requestedClaims.length ? challenge.requestedClaims.join(", ") : "none"}</dd>
             </div>
             <div>
               <dt className="text-slate-500">Audience (this verifier)</dt>
@@ -207,8 +238,25 @@ export default function VerifierPage() {
               <div className="font-medium">You are about to share with {challenge?.audience ?? "the verifier"}:</div>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
                 <li>The signed credential: your holder DID, the issuer DID, the validity dates, and identityVerified = true.</li>
+                <li>
+                  Optional claims:{" "}
+                  {!challenge || challenge.requestedClaims.length === 0 ? (
+                    <>none. Your age and country claims stay hidden; the verifier sees only unreadable digests.</>
+                  ) : (
+                    <>
+                      only{" "}
+                      {challenge.requestedClaims
+                        .map((name) => {
+                          const d = bundle.disclosures.find((x) => decodeDisclosure(x).name === name);
+                          return d ? `${name} = ${String(decodeDisclosure(d).value)}` : `${name} (not in your credential)`;
+                        })
+                        .join(", ")}
+                      . Your other optional claims stay hidden.
+                    </>
+                  )}
+                </li>
                 <li>The private commitment salt, so the verifier can match the credential to the on-chain record. The verifier does not store it.</li>
-                <li>A wallet signature over this request’s nonce, audience, action, chain, registry and commitment, valid only until the request expires.</li>
+                <li>A wallet signature over this request’s nonce, audience, action, chain, registry, commitment and exactly these disclosures, valid only until the request expires.</li>
               </ul>
               <p className="mt-2 text-xs text-slate-500">
                 Not shared: the synthetic application data (the issuer erased it). The verifier will be able to link this presentation to your wallet address and on-chain
@@ -227,22 +275,16 @@ export default function VerifierPage() {
                   const c = challenge!;
                   const signer = await app.signer();
                   const holder = await signer.getAddress();
-                  const signature = await signer.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, {
-                    statement: presentationStatement(c.audience, c.action),
-                    audience: c.audience,
-                    action: c.action,
-                    challenge: c.nonce,
-                    holder,
-                    commitment: bundle.commitment,
-                    expiresAt: c.expiresAt,
-                  });
+                  const { disclosures, message } = preparePresentation(bundle, c, holder);
+                  const signature = await signer.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, message);
                   const r = await api<VerificationResult>("POST", "/api/verifier/presentations", {
                     challengeId: c.challengeId,
                     credentialJwt: bundle.credentialJwt,
+                    disclosures,
                     salt: bundle.salt,
                     proof: { holder, commitment: bundle.commitment, expiresAt: c.expiresAt, signature },
                   });
-                  setResult(r);
+                  setResult({ result: r, action: c.action as VerifierAction });
                   setLogVersion((v) => v + 1);
                   setConsent(false);
                   setChallenge(undefined); // single-use: it was consumed by this submission
@@ -260,7 +302,7 @@ export default function VerifierPage() {
         )}
       </Card>
 
-      {result && <Results result={result} />}
+      {result && <Results result={result.result} action={result.action} />}
       <ActivityLog version={logVersion} />
     </Shell>
   );

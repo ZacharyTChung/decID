@@ -73,6 +73,9 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
     const issuer = parsed.success ? parsed.data.issuers[0] : undefined;
     if (issuer?.credentialKeys.some((k) => k.did === did) && issuer.evmAttestationSigners.some((e) => e.address.toLowerCase() === issuerEvmAddress.toLowerCase())) {
       trust = parsed.data;
+      // Profile upgrade (v1 -> v2 credential schema): authorize the current schema for this issuer.
+      // Old schema ids stay listed; credentials under them fail anyway (the profile changed).
+      if (!issuer.schemaIds.includes(SCHEMA_ID)) issuer.schemaIds.push(SCHEMA_ID);
     }
   }
   trust ??= {

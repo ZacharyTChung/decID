@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JsonRpcProvider, toUtf8Bytes, hexlify } from "ethers";
 import * as h from "@/lib/server/api/handlers";
 import { db } from "@/lib/server/db";
-import { SCHEMA_ID } from "@/lib/shared/constants";
+import { SCHEMA_ID, VERIFIER_ACTIONS } from "@/lib/shared/constants";
 import type { ChallengeResponse } from "@/lib/shared/api";
 import type { HolderBundle } from "@/lib/shared/bundle";
 import { Actor, contracts, signIn, signPresentation, submission } from "./helpers/actors";
@@ -43,8 +43,8 @@ beforeAll(async () => {
 
 afterAll(() => provider.destroy());
 
-async function challenge(actor: Actor = holder): Promise<ChallengeResponse> {
-  const res = await actor.call(h.postChallenge, "POST", { action: "access-verified-member-area" });
+async function challenge(actor: Actor = holder, action = "access-verified-member-area"): Promise<ChallengeResponse> {
+  const res = await actor.call(h.postChallenge, "POST", { action });
   expect(res.status).toBe(201);
   return res.body;
 }
@@ -171,7 +171,7 @@ describe("issuance lifecycle", () => {
 
   it("rejects presentation before on-chain registration", async () => {
     const c = await challenge();
-    const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)));
+    const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)));
     expect(res.status).toBe(422);
     expect(res.body.checks.find((x: { id: string }) => x.id === "registry")).toMatchObject({ status: "fail", code: "NOT_REGISTERED" });
   });
@@ -188,9 +188,33 @@ describe("issuance lifecycle", () => {
 });
 
 describe("presentation and verification", () => {
+  it("selective disclosure: the 18+ action requests ageOver18 and reveals nothing else", async () => {
+    const c = await challenge(holder, "access-age-restricted-area");
+    expect(c.requestedClaims).toEqual(["ageOver18"]);
+    expect(c.statement).toContain("only these optional claims: ageOver18");
+    const sub = submission(c, bundle, await signPresentation(holder, c, bundle));
+    expect(sub.disclosures).toHaveLength(1);
+    const res = await holder.call(h.postPresentation, "POST", sub);
+    expect(res.status).toBe(200);
+    expect(res.body.disclosed.claims).toEqual({ ageOver18: true });
+    expect(JSON.stringify(res.body)).not.toContain("countryOfResidence");
+
+    // The same credential with nothing disclosed fails this action but passes the member area.
+    const c2 = await challenge(holder, "access-age-restricted-area");
+    const withheld = await holder.call(h.postPresentation, "POST", submission(c2, bundle, await signPresentation(holder, c2, bundle, { disclosures: [] }), { disclosures: [] }));
+    expect(withheld.body.checks.find((x: { id: string }) => x.id === "selectiveDisclosure")).toMatchObject({ status: "fail", code: "CLAIM_NOT_DISCLOSED" });
+  });
+
+  it("the bundle carries one disclosure per optional claim, and the token none of their values", () => {
+    expect(bundle.disclosures.map((d) => JSON.parse(Buffer.from(d, "base64url").toString())[1]).sort()).toEqual(["ageOver18", "ageOver21", "countryOfResidence"]);
+    const payload = Buffer.from(bundle.credentialJwt.split(".")[1]!, "base64url").toString();
+    expect(payload).not.toContain("ageOver");
+    expect(payload).not.toContain("countryOfResidence");
+  });
+
   it("verifies a valid presentation and discloses only the minimal claim", async () => {
     const c = await challenge();
-    const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)));
+    const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)));
     expect(res.status).toBe(200);
     expect(res.body.verified).toBe(true);
     expect(res.body.checks.every((x: { status: string }) => x.status === "pass")).toBe(true);
@@ -207,7 +231,7 @@ describe("presentation and verification", () => {
     delete process.env.ISSUER_EVM_PRIVATE_KEY;
     try {
       const c = await challenge();
-      const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)));
+      const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)));
       expect(res.body.verified).toBe(true);
     } finally {
       process.env.ISSUER_CREDENTIAL_PRIVATE_JWK = saved.jwk;
@@ -222,7 +246,7 @@ describe("presentation and verification", () => {
 
   it("rejects a replayed challenge", async () => {
     const c = await challenge();
-    const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
+    const body = submission(c, bundle, await signPresentation(holder, c, bundle));
     expect((await holder.call(h.postPresentation, "POST", body)).body.verified).toBe(true);
     const replay = await holder.call(h.postPresentation, "POST", body);
     expect(replay.body.verified).toBe(false);
@@ -231,7 +255,7 @@ describe("presentation and verification", () => {
 
   it("lets only one of many concurrent submissions consume a challenge", async () => {
     const c = await challenge();
-    const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
+    const body = submission(c, bundle, await signPresentation(holder, c, bundle));
     const results = await Promise.all(Array.from({ length: 8 }, () => holder.call(h.postPresentation, "POST", body)));
     expect(results.filter((r) => r.body.verified).length).toBe(1);
     expect(results.filter((r) => r.body.checks[0].code === "CHALLENGE_REUSED").length).toBe(7);
@@ -239,7 +263,7 @@ describe("presentation and verification", () => {
 
   it("does not burn a challenge when the verifier is misconfigured", async () => {
     const c = await challenge();
-    const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
+    const body = submission(c, bundle, await signPresentation(holder, c, bundle));
     const saved = process.env.TRUSTED_ISSUERS_FILE;
     process.env.TRUSTED_ISSUERS_FILE = path.join(process.cwd(), ".test-data", "missing-trust.json");
     try {
@@ -254,7 +278,7 @@ describe("presentation and verification", () => {
 
   it("rejects an expired challenge", async () => {
     const c = await challenge();
-    const body = submission(c, bundle, await signPresentation(holder, c, bundle.commitment));
+    const body = submission(c, bundle, await signPresentation(holder, c, bundle));
     db().prepare("UPDATE verifier_challenges SET expires_at = ? WHERE id = ?").run(Math.floor(Date.now() / 1000) - 1, c.challengeId);
     const res = await holder.call(h.postPresentation, "POST", body);
     expect(res.body.checks[0]).toMatchObject({ id: "challenge", code: "CHALLENGE_EXPIRED" });
@@ -263,24 +287,24 @@ describe("presentation and verification", () => {
   it("rejects proofs bound to the wrong audience, action, nonce or wallet", async () => {
     for (const override of [{ audience: "https://other-verifier.example" }, { action: "something-else" }, { nonce: "0x" + "77".repeat(32) }]) {
       const c = await challenge();
-      const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment, override)));
+      const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle, override)));
       expect(res.body.checks.find((x: { id: string }) => x.id === "walletControl")).toMatchObject({ status: "fail", code: "PROOF_SIGNER_MISMATCH" });
     }
     // Another wallet presenting the holder's bundle: it can sign the proof for itself, but the credential subject is the holder.
     const c = await challenge();
-    const res = await other.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(other, c, bundle.commitment)));
+    const res = await other.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(other, c, bundle)));
     expect(res.body.checks.find((x: { id: string }) => x.id === "holderBinding")).toMatchObject({ status: "fail", code: "SUBJECT_NOT_PRESENTER" });
   });
 
   it("rejects a wrong salt or altered token bytes", async () => {
     let c = await challenge();
-    let res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment), { salt: "0x" + "00".repeat(32) }));
+    let res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle), { salt: "0x" + "00".repeat(32) }));
     expect(res.body.checks.find((x: { id: string }) => x.id === "commitment")).toMatchObject({ status: "fail", code: "COMMITMENT_MISMATCH" });
 
     c = await challenge();
     const [hd, pl, sg] = bundle.credentialJwt.split(".");
     const altered = `${hd}.${pl}.${sg!.slice(0, -2)}${sg!.endsWith("AA") ? "BB" : "AA"}`;
-    res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment), { credentialJwt: altered }));
+    res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle, { credentialJwt: altered }), { credentialJwt: altered }));
     expect(res.body.verified).toBe(false);
     expect(res.body.checks.find((x: { id: string }) => x.id === "tokenSignature")?.status).toBe("fail");
   });
@@ -314,7 +338,7 @@ describe("revocation", () => {
     expect(issued.body.credentials.find((x: { commitment: string }) => x.commitment === bundle.commitment).onChainStatus).toBe("Revoked");
 
     const c = await challenge();
-    const v = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)));
+    const v = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)));
     expect(v.body.verified).toBe(false);
     expect(v.body.registryStatus).toBe("Revoked");
     expect(v.body.checks.find((x: { id: string }) => x.id === "registry")).toMatchObject({ status: "fail", code: "REVOKED" });
@@ -337,7 +361,7 @@ describe("verifier activity log", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.status === "verified")).toBe(true);
     expect(entries.some((e) => e.status === "rejected" && e.code === "REVOKED")).toBe(true);
-    expect(entries.every((e) => e.action === "access-verified-member-area" && e.ref.length === 8)).toBe(true);
+    expect(entries.every((e) => (VERIFIER_ACTIONS as readonly string[]).includes(e.action) && e.ref.length === 8)).toBe(true);
     const text = JSON.stringify(res.body).toLowerCase();
     for (const addr of [holder.address, other.address]) expect(text).not.toContain(addr.slice(2).toLowerCase());
     expect(text).not.toContain(bundle.salt.slice(2).toLowerCase());

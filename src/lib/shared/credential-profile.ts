@@ -8,38 +8,44 @@ import {
   PROTOCOL_NAMESPACE,
   VC_V2_CONTEXT,
 } from "./constants";
+import { SD_ALG, SD_DIGEST_COUNT, SdDigest } from "./sd-jwt";
 
 /**
- * IdentityVerifiedCredential, profile v1.
+ * IdentityVerifiedCredential, profile v2.
  *
- * A W3C VC Data Model 2.0 credential secured as `application/vc+jwt`
- * (VC-JOSE-COSE, JWS compact serialization). The unsecured credential is the
- * JWS payload. A few JWT registered claims duplicate VC properties. The issuer
- * always sets them to identical values, and the verifier rejects any disagreement:
+ * A W3C VC Data Model 2.0 credential secured as `application/vc+sd-jwt`
+ * (VC-JOSE-COSE "With SD-JWT"). The issuer-signed JWT payload is the credential with
+ * `_sd_alg` and the selectively disclosable subject claims replaced by digests in
+ * `credentialSubject._sd` (see sd-jwt.ts). A few JWT registered claims duplicate VC
+ * properties. The issuer always sets them to identical values, and the verifier rejects any
+ * disagreement:
  *
  *   iss == issuer         sub == credentialSubject.id         jti == id
  *   iat == validFrom      exp == validUntil                   (nbf is never set)
  *
- * The subject carries exactly two properties: the holder DID and the
- * issuer-asserted boolean `identityVerified`. No name, birth date, document
- * number, address, image or health data ever appears in this credential.
+ * Always disclosed in the subject: the holder DID and the issuer-asserted boolean
+ * `identityVerified`. Selectively disclosable (one disclosure each, holder's choice):
+ * `ageOver18`, `ageOver21`, `countryOfResidence`, derived by the issuer at issuance. No name,
+ * birth date, document number, address, image or health data ever appears in this credential.
  */
 
 /** Second-precision UTC timestamps (the issuer never emits fractions or offsets). */
 const UtcSeconds = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/, "must be YYYY-MM-DDTHH:MM:SSZ");
 const EvmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 
-export const IdentityVerifiedCredentialV1 = z.object({
+export const IdentityVerifiedCredentialV2 = z.strictObject({
   "@context": z.tuple([z.literal(VC_V2_CONTEXT), z.literal(IDENTITY_CONTEXT_URI)]),
   id: z.string().regex(/^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
   type: z.tuple([z.literal("VerifiableCredential"), z.literal(CREDENTIAL_TYPE)]),
   issuer: z.string().regex(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/),
   validFrom: UtcSeconds,
   validUntil: UtcSeconds,
-  // Verifier policy: the subject may hold nothing beyond these two properties.
+  // Verifier policy: the subject holds nothing beyond these properties; the digests are the
+  // only place selectively disclosable claims may be referenced.
   credentialSubject: z.strictObject({
     id: z.string().startsWith("did:pkh:"),
     identityVerified: z.literal(true),
+    _sd: z.array(SdDigest).length(SD_DIGEST_COUNT),
   }),
   credentialSchema: z.strictObject({
     id: z.literal(CREDENTIAL_SCHEMA_URI),
@@ -56,9 +62,10 @@ export const IdentityVerifiedCredentialV1 = z.object({
   jti: z.string(),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  _sd_alg: z.literal(SD_ALG),
 });
 
-export type IdentityVerifiedCredential = z.infer<typeof IdentityVerifiedCredentialV1>;
+export type IdentityVerifiedCredential = z.infer<typeof IdentityVerifiedCredentialV2>;
 
 export function toUtcSeconds(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -78,6 +85,8 @@ export interface BuildCredentialInput {
   validUntil: number; // unix seconds
   chainId: number;
   registry: string;
+  /** Digests of the selectively disclosable claims (real + decoys), from createDisclosures(). */
+  sd: string[];
 }
 
 export function buildIdentityCredential(input: BuildCredentialInput): IdentityVerifiedCredential {
@@ -89,7 +98,7 @@ export function buildIdentityCredential(input: BuildCredentialInput): IdentityVe
     issuer: input.issuerDid,
     validFrom: toUtcSeconds(input.validFrom),
     validUntil: toUtcSeconds(input.validUntil),
-    credentialSubject: { id: input.holderDid, identityVerified: true },
+    credentialSubject: { id: input.holderDid, identityVerified: true, _sd: input.sd },
     credentialSchema: { id: CREDENTIAL_SCHEMA_URI, type: CREDENTIAL_SCHEMA_TYPE },
     credentialStatus: { type: CREDENTIAL_STATUS_TYPE, chainId: input.chainId, registry: input.registry },
     iss: input.issuerDid,
@@ -97,8 +106,9 @@ export function buildIdentityCredential(input: BuildCredentialInput): IdentityVe
     jti: input.credentialId,
     iat: input.validFrom,
     exp: input.validUntil,
+    _sd_alg: SD_ALG,
   };
-  return IdentityVerifiedCredentialV1.parse(credential);
+  return IdentityVerifiedCredentialV2.parse(credential);
 }
 
 /**
@@ -125,6 +135,9 @@ export const IDENTITY_CONTEXT_DOCUMENT = {
       "@id": `${PROTOCOL_NAMESPACE}/vocab#identityVerified`,
       "@type": "http://www.w3.org/2001/XMLSchema#boolean",
     },
+    ageOver18: { "@id": `${PROTOCOL_NAMESPACE}/vocab#ageOver18`, "@type": "http://www.w3.org/2001/XMLSchema#boolean" },
+    ageOver21: { "@id": `${PROTOCOL_NAMESPACE}/vocab#ageOver21`, "@type": "http://www.w3.org/2001/XMLSchema#boolean" },
+    countryOfResidence: { "@id": `${PROTOCOL_NAMESPACE}/vocab#countryOfResidence` },
     [CREDENTIAL_STATUS_TYPE]: {
       "@id": `${PROTOCOL_NAMESPACE}/vocab#${CREDENTIAL_STATUS_TYPE}`,
       "@context": {
@@ -140,7 +153,7 @@ export const IDENTITY_CONTEXT_DOCUMENT = {
 export function credentialJsonSchema(): unknown {
   return {
     $id: CREDENTIAL_SCHEMA_URI,
-    title: "IdentityVerifiedCredential v1",
-    ...z.toJSONSchema(IdentityVerifiedCredentialV1),
+    title: "IdentityVerifiedCredential v2 (issuer-signed SD-JWT payload)",
+    ...z.toJSONSchema(IdentityVerifiedCredentialV2),
   };
 }

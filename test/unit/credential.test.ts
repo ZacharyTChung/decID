@@ -3,6 +3,7 @@ import { CompactSign, SignJWT, exportJWK, generateKeyPair, decodeProtectedHeader
 import { CREDENTIAL_TYPE, SCHEMA_ID } from "@/lib/shared/constants";
 import { buildIdentityCredential, type IdentityVerifiedCredential } from "@/lib/shared/credential-profile";
 import { deriveHolderDid } from "@/lib/shared/did-pkh";
+import { createDisclosures, decodeDisclosure, disclosureDigest, encodeDisclosure } from "@/lib/shared/sd-jwt";
 import { signCredentialJwt } from "@/lib/server/credential/sign";
 import { verifyCredentialJwt } from "@/lib/server/credential/verify";
 import { deriveDidKeyFromJwk } from "@/lib/server/did/did-key";
@@ -12,6 +13,7 @@ const CHAIN_ID = 31337;
 const REGISTRY = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const HOLDER = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 const NOW = 1_800_000_000;
+const SD = createDisclosures({ ageOver18: true, ageOver21: false, countryOfResidence: "ZZ" });
 
 interface Issuer {
   privateJwk: { kty: "OKP"; crv: "Ed25519"; x: string; d: string };
@@ -49,6 +51,7 @@ function vcFor(issuer: Issuer, overrides: Partial<{ holder: string; chainId: num
     validUntil: overrides.until ?? NOW + 3600,
     chainId: overrides.chainId ?? CHAIN_ID,
     registry: overrides.registry ?? REGISTRY,
+    sd: SD.sd,
   });
 }
 
@@ -57,7 +60,7 @@ async function signRaw(issuer: Issuer, payload: unknown, header: Record<string, 
   const { importJWK } = await import("jose");
   const key = await importJWK(issuer.privateJwk, "Ed25519");
   return new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
-    .setProtectedHeader({ alg: "Ed25519", typ: "vc+jwt", cty: "vc", kid: issuer.kid, ...header })
+    .setProtectedHeader({ alg: "Ed25519", typ: "vc+sd-jwt", cty: "vc", kid: issuer.kid, ...header })
     .sign(key);
 }
 
@@ -71,20 +74,22 @@ beforeAll(async () => {
   stranger = await makeIssuer("Self-issued stranger");
 });
 
-describe("vc+jwt issuance", () => {
+describe("vc+sd-jwt issuance", () => {
   it("produces a minimal VC 2.0 payload with the VC-JOSE-COSE header", async () => {
     const vc = vcFor(issuer);
     const token = await signCredentialJwt(vc, issuer.privateJwk, issuer.kid);
-    expect(decodeProtectedHeader(token)).toEqual({ alg: "Ed25519", typ: "vc+jwt", cty: "vc", kid: issuer.kid });
+    expect(decodeProtectedHeader(token)).toEqual({ alg: "Ed25519", typ: "vc+sd-jwt", cty: "vc", kid: issuer.kid });
     const payload = JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"));
     expect(payload).toEqual(vc);
-    expect(Object.keys(payload.credentialSubject).sort()).toEqual(["id", "identityVerified"]);
+    expect(Object.keys(payload.credentialSubject).sort()).toEqual(["_sd", "id", "identityVerified"]);
+    expect(payload._sd_alg).toBe("sha-256");
+    for (const secret of ["ageOver18", "ageOver21", "countryOfResidence"]) expect(JSON.stringify(payload)).not.toContain(secret);
     expect(payload.vc).toBeUndefined();
     expect(payload.nbf).toBeUndefined();
   });
 });
 
-describe("vc+jwt verification", () => {
+describe("vc+sd-jwt verification", () => {
   it("accepts a valid credential from a trusted issuer", async () => {
     const token = await signCredentialJwt(vcFor(issuer), issuer.privateJwk, issuer.kid);
     const r = await verifyCredentialJwt(token, ctx());
@@ -114,11 +119,11 @@ describe("vc+jwt verification", () => {
   it("rejects unsigned (alg none) and unsupported algorithms", async () => {
     const vc = vcFor(issuer);
     const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
-    const unsigned = `${b64({ alg: "none", typ: "vc+jwt", kid: issuer.kid })}.${b64(vc)}.`;
+    const unsigned = `${b64({ alg: "none", typ: "vc+sd-jwt", kid: issuer.kid })}.${b64(vc)}.`;
     expect(failureOf(await verifyCredentialJwt(unsigned + "x", ctx()))?.code).toBe("UNSIGNED_TOKEN");
 
     const hs = await new SignJWT(vc as unknown as Record<string, unknown>)
-      .setProtectedHeader({ alg: "HS256", typ: "vc+jwt", kid: issuer.kid })
+      .setProtectedHeader({ alg: "HS256", typ: "vc+sd-jwt", kid: issuer.kid })
       .sign(new TextEncoder().encode("a-shared-secret-that-is-long-enough-123"));
     expect(failureOf(await verifyCredentialJwt(hs, ctx()))?.code).toBe("ALG_NOT_ALLOWED");
 
@@ -264,5 +269,63 @@ describe("vc+jwt verification", () => {
       expect(trustedEvmSigner(policy, signer, 1000)).toBeUndefined();
       expect(trustedEvmSigner({ ...policy, evmAttestationSigners: [{ address: signer, status: "compromised" as const, activatedAt: 0, retiredAt: 1000 }] }, signer, 10)).toBeUndefined();
     });
+  });
+});
+
+describe("SD-JWT disclosures (verified against the signed digests)", () => {
+  const sdCtx = (disclosures: string[]) => ({ ...ctx(), disclosures });
+
+  it("reveals exactly the presented claims", async () => {
+    const token = await signCredentialJwt(vcFor(issuer), issuer.privateJwk, issuer.kid);
+    const none = await verifyCredentialJwt(token, sdCtx([]));
+    expect(none.ok).toBe(true);
+    expect(none.disclosedClaims).toEqual({});
+    const age = SD.disclosures.find((d) => decodeDisclosure(d).name === "ageOver18")!;
+    const one = await verifyCredentialJwt(token, sdCtx([age]));
+    expect(one.disclosedClaims).toEqual({ ageOver18: true });
+    const all = await verifyCredentialJwt(token, sdCtx(SD.disclosures));
+    expect(all.disclosedClaims).toEqual({ ageOver18: true, ageOver21: false, countryOfResidence: "ZZ" });
+  });
+
+  it("rejects disclosures the issuer did not sign, duplicates, edits and malformed input", async () => {
+    const token = await signCredentialJwt(vcFor(issuer), issuer.privateJwk, issuer.kid);
+    const age = decodeDisclosure(SD.disclosures.find((d) => decodeDisclosure(d).name === "ageOver21")!);
+    // Same salt and name, value flipped false -> true: the digest no longer matches.
+    const flipped = encodeDisclosure(age.salt, "ageOver21", true);
+    expect(failureOf(await verifyCredentialJwt(token, sdCtx([flipped])))?.code).toBe("DISCLOSURE_NOT_REFERENCED");
+    // A disclosure from another credential (other issuance) is not referenced here.
+    const foreign = createDisclosures({ ageOver18: true, ageOver21: true, countryOfResidence: "ZZ" }).disclosures[1]!;
+    expect(failureOf(await verifyCredentialJwt(token, sdCtx([foreign])))?.code).toBe("DISCLOSURE_NOT_REFERENCED");
+    expect(failureOf(await verifyCredentialJwt(token, sdCtx([SD.disclosures[0]!, SD.disclosures[0]!])))?.code).toBe("DISCLOSURE_DUPLICATE");
+    for (const bad of ["", "!!!", Buffer.from("[1,2]").toString("base64url"), Buffer.from('["short","ageOver18",true]').toString("base64url"), "A".repeat(600)]) {
+      const r = await verifyCredentialJwt(token, sdCtx([bad]));
+      expect(failureOf(r)?.code, bad.slice(0, 20)).toBe("DISCLOSURE_MALFORMED");
+    }
+  });
+
+  it("refuses issuer-signed disclosures that would overwrite or invent claims", async () => {
+    // A (misbehaving) issuer signs digests for a disclosure named "id" and one with a bad value.
+    const salt = "c2FsdHNhbHRzYWx0c2FsdHNhbHQ";
+    const idOverwrite = encodeDisclosure(salt, "id", deriveHolderDid(CHAIN_ID, "0x90F79bf6EB2c4f870365E785982E1f101E93b906"));
+    const badValue = encodeDisclosure(salt, "ageOver18", "yes");
+    const sd = [...SD.sd.slice(0, 6), disclosureDigest(idOverwrite), disclosureDigest(badValue)].sort();
+    const base = vcFor(issuer);
+    const token = await signRaw(issuer, { ...base, credentialSubject: { ...base.credentialSubject, _sd: sd } });
+    expect(failureOf(await verifyCredentialJwt(token, sdCtx([idOverwrite])))?.code).toBe("DISCLOSURE_CLAIM_NOT_ALLOWED");
+    expect(failureOf(await verifyCredentialJwt(token, sdCtx([badValue])))?.code).toBe("DISCLOSURE_VALUE_INVALID");
+  });
+
+  it("rejects payloads that leak a disclosable claim in plaintext or change the digest layout", async () => {
+    const base = vcFor(issuer);
+    const plaintext = { ...base, credentialSubject: { ...base.credentialSubject, ageOver18: true } };
+    expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, plaintext), ctx()))?.code).toBe("SCHEMA_INVALID");
+    const fewer = { ...base, credentialSubject: { ...base.credentialSubject, _sd: base.credentialSubject._sd.slice(0, 3) } };
+    expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, fewer), ctx()))?.code).toBe("SCHEMA_INVALID");
+    const { _sd_alg: _drop, ...noAlg } = base;
+    expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, noAlg), ctx()))?.code).toBe("SCHEMA_INVALID");
+    const topLevelSd = { ...base, _sd: ["x"] };
+    expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, topLevelSd), ctx()))?.code).toBe("SCHEMA_INVALID");
+    const dupDigests = { ...base, credentialSubject: { ...base.credentialSubject, _sd: [...base.credentialSubject._sd.slice(0, 7), base.credentialSubject._sd[0]!] } };
+    expect(failureOf(await verifyCredentialJwt(await signRaw(issuer, dupDigests), ctx()))?.code).toBe("DIGEST_DUPLICATE");
   });
 });

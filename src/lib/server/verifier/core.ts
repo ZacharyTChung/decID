@@ -1,10 +1,11 @@
 import "server-only";
 import { TypedDataEncoder, verifyTypedData } from "ethers";
-import { CREDENTIAL_TYPE, SCHEMA_ID } from "../../shared/constants";
+import { ACTION_POLICIES, CREDENTIAL_TYPE, SCHEMA_ID, type VerifierAction } from "../../shared/constants";
 import { commitmentFor } from "../../shared/commitment";
 import { fromUtcSeconds } from "../../shared/credential-profile";
 import { sameAddress } from "../../shared/did-pkh";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../../shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain, presentationMessage } from "../../shared/eip712";
+import { decodeDisclosure, sdHash } from "../../shared/sd-jwt";
 import { CHECK_IDS, type CheckResult, type DisclosedClaims, type VerificationResult } from "../../shared/verification";
 import { isValidContractSignature } from "../auth/contract-signature";
 import { readRecord, type Deployment } from "../chain";
@@ -30,6 +31,8 @@ export interface PresentationContext {
 
 export interface Presented {
   credentialJwt: string;
+  /** SD-JWT disclosures the holder chose to present (exactly the ones the action requests). */
+  disclosures: string[];
   salt: string;
   proof: { holder: string; commitment: string; expiresAt: number; signature: string };
 }
@@ -72,16 +75,26 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
   if (proof.expiresAt > ctx.expiresAt || proof.expiresAt <= now) {
     return fail({ id: "walletControl", status: "fail", code: "PROOF_EXPIRY_INVALID", detail: "proof expiry must be in the future and no later than the challenge expiry" });
   }
+  // The proof signs the names of the disclosed claims and the hash of the exact presentation,
+  // so the verifier rebuilds both from what was submitted. A structural decode is enough here;
+  // whether the issuer signed each disclosure is checked with the credential below.
+  let disclosedNames: string[];
+  try {
+    disclosedNames = sub.disclosures.map((d) => decodeDisclosure(d).name);
+  } catch (e) {
+    return fail({ id: "selectiveDisclosure", status: "fail", code: "DISCLOSURE_MALFORMED", detail: (e as Error).message });
+  }
   const domain = presentationDomain(ctx.chainId, ctx.registry);
-  const proofMessage = {
-    statement: presentationStatement(ctx.audience, ctx.action),
+  const proofMessage = presentationMessage({
     audience: ctx.audience,
     action: ctx.action,
     challenge: ctx.nonce,
     holder: proof.holder,
     commitment: proof.commitment,
+    disclosed: disclosedNames,
+    sdHash: sdHash(sub.credentialJwt, sub.disclosures),
     expiresAt: proof.expiresAt,
-  };
+  });
   // EOA: the signature must recover to the holder. Contract account (EIP-1271): the holder
   // contract must accept the signature for the EIP-712 digest of exactly this message.
   let recovered: string | undefined;
@@ -106,10 +119,26 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
     now,
     expectedChainId: deployment.chainId,
     expectedRegistry: deployment.registry,
+    disclosures: sub.disclosures,
   });
   checks.push(...cred.checks);
   if (!cred.ok || !cred.credential || !cred.issuer || !cred.subject) return { checks };
   const vc = cred.credential;
+
+  // Request policy: exactly the requested claims are disclosed (data minimization works both
+  // ways: missing claims fail, and so do unrequested ones), with the values the action requires.
+  const policy = ACTION_POLICIES[ctx.action as VerifierAction];
+  if (!policy) return fail({ id: "selectiveDisclosure", status: "fail", code: "UNKNOWN_ACTION", detail: "no disclosure policy for this action" });
+  const names = cred.disclosedNames ?? [];
+  const claims = (cred.disclosedClaims ?? {}) as Record<string, boolean | string>;
+  const missing = policy.requested.filter((n) => !names.includes(n));
+  if (missing.length) return fail({ id: "selectiveDisclosure", status: "fail", code: "CLAIM_NOT_DISCLOSED", detail: `requested claim(s) not disclosed: ${missing.join(", ")}` });
+  const extra = names.filter((n) => !(policy.requested as readonly string[]).includes(n));
+  if (extra.length) return fail({ id: "selectiveDisclosure", status: "fail", code: "UNREQUESTED_DISCLOSURE", detail: `claim(s) disclosed but not requested: ${extra.join(", ")}` });
+  for (const [k, v] of Object.entries(policy.require)) {
+    if (claims[k] !== v) return fail({ id: "selectiveDisclosure", status: "fail", code: "POLICY_NOT_SATISFIED", detail: `this action requires ${k} = ${String(v)}` });
+  }
+  checks.push({ id: "selectiveDisclosure", status: "pass", detail: names.length ? `disclosed: ${names.join(", ")}` : "no optional claims requested" });
 
   // 8. Holder binding: the credential subject is the wallet that signed the proof.
   if (!sameAddress(cred.subject.address, proof.holder)) {
@@ -166,6 +195,7 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
       validFrom: vc.validFrom,
       validUntil: vc.validUntil,
       credentialType: CREDENTIAL_TYPE,
+      claims,
     },
   };
 }

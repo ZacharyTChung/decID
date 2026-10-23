@@ -25,7 +25,7 @@
         { "address": "0x0000000000000000000000000000000000000000", "status": "active", "activatedAt": 1792600000 }
       ],
       "credentialTypes": ["IdentityVerifiedCredential"],
-      "schemaIds": ["0x85879d7d1c3284670dfb12c110f22f58f78d24870630e6747af5bccf086f84c6"]
+      "schemaIds": ["0x677d9a497133c8fc60e5fad9bc10c3d2b3215472699b05e8ca8d7a6fe8fa3227"]
     }
   ]
 }

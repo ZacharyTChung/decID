@@ -1,19 +1,21 @@
 import "server-only";
 import { compactVerify, decodeProtectedHeader, importJWK } from "jose";
-import { ALLOWED_JWS_ALGS, VC_JWT_CTY, VC_JWT_TYP } from "../../shared/constants";
+import { ALLOWED_JWS_ALGS, VC_CTY, VC_TYP } from "../../shared/constants";
 import { credentialTokenBytes } from "../../shared/commitment";
 import {
-  IdentityVerifiedCredentialV1,
+  IdentityVerifiedCredentialV2,
   fromUtcSeconds,
   jwtClaimMismatches,
   type IdentityVerifiedCredential,
 } from "../../shared/credential-profile";
 import { parseHolderDid, sameAddress, type PkhAccount } from "../../shared/did-pkh";
 import type { CheckResult } from "../../shared/verification";
+import { processDisclosures, type SdClaimName, type SdClaims } from "../../shared/sd-jwt";
 import { trustedKeyFor, validAt, type CredentialKeyT, type TrustedIssuerT } from "../trust";
 
 /**
- * Verifies an application/vc+jwt credential.
+ * Verifies an application/vc+sd-jwt credential: the issuer-signed JWT, then the presented
+ * disclosures against the digests in its (verified) payload.
  *
  * Decoding is not verification: the header is decoded before verification only
  * to read `alg`/`typ`/`cty`/`kid` for policy and key discovery, and the payload
@@ -29,6 +31,8 @@ export interface CredentialVerificationContext {
   now: number; // unix seconds
   expectedChainId: number;
   expectedRegistry: string;
+  /** SD-JWT disclosures presented with the token (possibly none). */
+  disclosures?: readonly string[];
 }
 
 export interface CredentialVerification {
@@ -38,6 +42,9 @@ export interface CredentialVerification {
   issuer?: TrustedIssuerT;
   key?: CredentialKeyT;
   subject?: PkhAccount;
+  /** Claims revealed by valid disclosures, and their names in presentation order. */
+  disclosedClaims?: Partial<SdClaims>;
+  disclosedNames?: SdClaimName[];
 }
 
 export async function verifyCredentialJwt(token: string, ctx: CredentialVerificationContext): Promise<CredentialVerification> {
@@ -56,8 +63,8 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
     if (!(ALLOWED_JWS_ALGS as readonly string[]).includes(header.alg)) {
       return fail("tokenFormat", "ALG_NOT_ALLOWED", `algorithm ${header.alg} is not in the allowlist`);
     }
-    if (header.typ !== VC_JWT_TYP) return fail("tokenFormat", "BAD_TYP", `typ must be ${VC_JWT_TYP}`);
-    if (header.cty !== undefined && header.cty !== VC_JWT_CTY) return fail("tokenFormat", "BAD_CTY", `cty must be ${VC_JWT_CTY}`);
+    if (header.typ !== VC_TYP) return fail("tokenFormat", "BAD_TYP", `typ must be ${VC_TYP}`);
+    if (header.cty !== undefined && header.cty !== VC_CTY) return fail("tokenFormat", "BAD_CTY", `cty must be ${VC_CTY}`);
     for (const h of FORBIDDEN_HEADERS) {
       if (h in header) return fail("tokenFormat", "FORBIDDEN_HEADER", `header parameter ${h} is not accepted`);
     }
@@ -90,7 +97,7 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
   // 4. Semantics: profile schema, issuer agreement, JWT/VC claim agreement.
   let credential: IdentityVerifiedCredential;
   try {
-    const parsed = IdentityVerifiedCredentialV1.safeParse(JSON.parse(new TextDecoder().decode(payloadBytes)));
+    const parsed = IdentityVerifiedCredentialV2.safeParse(JSON.parse(new TextDecoder().decode(payloadBytes)));
     if (!parsed.success) return fail("credentialSemantics", "SCHEMA_INVALID", parsed.error.issues.map((i) => i.path.join(".") || i.message).join("; "));
     credential = parsed.data;
   } catch {
@@ -117,6 +124,11 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
     return fail("issuerTrust", "KEY_NOT_VALID_AT_ISSUANCE", "the signing key was not active in the trust policy when this credential was issued");
   }
 
+  // Selective disclosure: every presented disclosure must be one the issuer signed a digest for.
+  // (Whether the right claims were disclosed for the request is the verifier core's decision.)
+  const sd = processDisclosures(credential.credentialSubject._sd, ctx.disclosures ?? []);
+  if (!sd.ok) return fail("selectiveDisclosure", sd.code, sd.detail);
+
   // 5. Validity window: validFrom <= now < validUntil.
   if (until <= from) return fail("validityWindow", "BAD_VALIDITY_WINDOW", "validUntil is not after validFrom");
   if (ctx.now < from) return fail("validityWindow", "NOT_YET_VALID", `valid from ${credential.validFrom}`);
@@ -141,5 +153,5 @@ export async function verifyCredentialJwt(token: string, ctx: CredentialVerifica
   }
   checks.push({ id: "deploymentBinding", status: "pass" });
 
-  return { ok: true, checks, credential, issuer: trusted.value.issuer, key: trusted.value.key, subject };
+  return { ok: true, checks, credential, issuer: trusted.value.issuer, key: trusted.value.key, subject, disclosedClaims: sd.claims, disclosedNames: sd.names };
 }

@@ -914,12 +914,21 @@
                       "properties": {
                         "version": {
                           "type": "string",
-                          "const": "did-mvp.holder-bundle/v1"
+                          "const": "did-mvp.holder-bundle/v2"
                         },
                         "credentialJwt": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 8192
+                        },
+                        "disclosures": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          }
                         },
                         "salt": {
                           "type": "string",
@@ -1016,6 +1025,7 @@
                       "required": [
                         "version",
                         "credentialJwt",
+                        "disclosures",
                         "salt",
                         "commitment",
                         "authorization",
@@ -1900,7 +1910,8 @@
                   "action": {
                     "type": "string",
                     "enum": [
-                      "access-verified-member-area"
+                      "access-verified-member-area",
+                      "access-age-restricted-area"
                     ]
                   }
                 },
@@ -1932,7 +1943,8 @@
                     "action": {
                       "type": "string",
                       "enum": [
-                        "access-verified-member-area"
+                        "access-verified-member-area",
+                        "access-age-restricted-area"
                       ]
                     },
                     "audience": {
@@ -1953,6 +1965,18 @@
                       "maximum": 9007199254740991,
                       "description": "Unix time, seconds"
                     },
+                    "requestedClaims": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "ageOver18",
+                          "ageOver21",
+                          "countryOfResidence"
+                        ]
+                      },
+                      "description": "Disclose exactly these SD-JWT claims"
+                    },
                     "statement": {
                       "type": "string"
                     }
@@ -1965,6 +1989,7 @@
                     "chainId",
                     "registry",
                     "expiresAt",
+                    "requestedClaims",
                     "statement"
                   ],
                   "additionalProperties": false
@@ -2050,6 +2075,15 @@
                     "minLength": 1,
                     "maxLength": 8192
                   },
+                  "disclosures": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
+                  },
                   "salt": {
                     "type": "string",
                     "pattern": "^0x[0-9a-fA-F]{64}$"
@@ -2087,6 +2121,7 @@
                 "required": [
                   "challengeId",
                   "credentialJwt",
+                  "disclosures",
                   "salt",
                   "proof"
                 ],
@@ -2120,6 +2155,7 @@
                               "issuerTrust",
                               "tokenSignature",
                               "credentialSemantics",
+                              "selectiveDisclosure",
                               "validityWindow",
                               "holderBinding",
                               "deploymentBinding",
@@ -2173,6 +2209,19 @@
                         },
                         "credentialType": {
                           "type": "string"
+                        },
+                        "claims": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": [
+                              "boolean",
+                              "string"
+                            ]
+                          },
+                          "description": "Selectively disclosed claims (exactly those requested)"
                         }
                       },
                       "required": [
@@ -2182,7 +2231,8 @@
                         "identityVerified",
                         "validFrom",
                         "validUntil",
-                        "credentialType"
+                        "credentialType",
+                        "claims"
                       ],
                       "additionalProperties": false
                     },
@@ -2257,6 +2307,7 @@
                               "issuerTrust",
                               "tokenSignature",
                               "credentialSemantics",
+                              "selectiveDisclosure",
                               "validityWindow",
                               "holderBinding",
                               "deploymentBinding",
@@ -2310,6 +2361,19 @@
                         },
                         "credentialType": {
                           "type": "string"
+                        },
+                        "claims": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": [
+                              "boolean",
+                              "string"
+                            ]
+                          },
+                          "description": "Selectively disclosed claims (exactly those requested)"
                         }
                       },
                       "required": [
@@ -2319,7 +2383,8 @@
                         "identityVerified",
                         "validFrom",
                         "validUntil",
-                        "credentialType"
+                        "credentialType",
+                        "claims"
                       ],
                       "additionalProperties": false
                     },

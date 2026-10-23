@@ -44,7 +44,7 @@ async function register(holder: Actor, bundle: HolderBundle) {
 async function present(holder: Actor, bundle: HolderBundle): Promise<VerificationResult> {
   const ch = await holder.call(h.postChallenge, "POST", { action: "access-verified-member-area" });
   const c = ch.body as ChallengeResponse;
-  return (await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)))).body;
+  return (await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)))).body;
 }
 
 beforeAll(async () => {

@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Contract, ContractFactory, JsonRpcProvider, type InterfaceAbi } from "ethers";
 import * as h from "@/lib/server/api/handlers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "@/generated/contracts";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "@/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain } from "@/lib/shared/eip712";
+import { preparePresentation } from "@/lib/shared/presentation";
 import type { HolderBundle } from "@/lib/shared/bundle";
 import type { ChallengeResponse } from "@/lib/shared/api";
 import type { VerificationResult } from "@/lib/shared/verification";
@@ -54,18 +55,12 @@ async function viaWallet(target: string, data: string) {
 
 async function present(signer: Actor, bundle: HolderBundle): Promise<VerificationResult> {
   const c = (await session.call(h.postChallenge, "POST", { action: "access-verified-member-area" })).body as ChallengeResponse;
-  const signature = await signer.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(c.audience, c.action),
-    audience: c.audience,
-    action: c.action,
-    challenge: c.nonce,
-    holder: walletAddress,
-    commitment: bundle.commitment,
-    expiresAt: c.expiresAt,
-  });
+  const { disclosures, message } = preparePresentation(bundle, c, walletAddress);
+  const signature = await signer.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, message);
   const res = await session.call(h.postPresentation, "POST", {
     challengeId: c.challengeId,
     credentialJwt: bundle.credentialJwt,
+    disclosures,
     salt: bundle.salt,
     proof: { holder: walletAddress, commitment: bundle.commitment, expiresAt: c.expiresAt, signature },
   });

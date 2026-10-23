@@ -18,9 +18,9 @@ A verifier decides whether a presenter controls a wallet that holds a valid "Ide
 
 ## The exchange
 
-1. **You → holder:** a challenge `{ nonce, action, audience, chainId, registry, expiresAt }`. `audience` identifies *you* (an origin or URN); the holder's wallet shows it.
-2. **Holder → you:** `{ credentialJwt, salt, proof: { holder, commitment, expiresAt, signature } }`. The signature is an EIP-712 `PresentationProof` over your challenge (see CREDENTIAL-PROFILE.md). It is an application-specific proof, not a W3C Verifiable Presentation.
-3. **You:** run every check below, then discard `credentialJwt` and `salt`. Keep at most an outcome code.
+1. **You → holder:** a challenge `{ nonce, action, audience, chainId, registry, expiresAt, requestedClaims }`. `audience` identifies *you* (an origin or URN); the holder's wallet shows it. `requestedClaims` comes from your action's disclosure policy: ask only for what the decision needs.
+2. **Holder → you:** `{ credentialJwt, disclosures, salt, proof: { holder, commitment, expiresAt, signature } }`. `credentialJwt` is the issuer-signed part of the SD-JWT. `disclosures` holds exactly the requested SD-JWT disclosures. The signature is an EIP-712 `PresentationProof` over your challenge, the disclosed claim names and the `sdHash` of the exact presentation (see CREDENTIAL-PROFILE.md). It is an application-specific proof, not a W3C Verifiable Presentation or a KB-JWT.
+3. **You:** run every check below, then discard `credentialJwt`, the disclosures and `salt`. Keep at most an outcome code.
 
 ## Checks you must not skip
 
@@ -30,12 +30,13 @@ All of them are in `core.ts`, in this order. Each one fails with a stable code:
 2. **Token format.** A compact JWS, `typ: vc+jwt`, alg `Ed25519` only. Reject any header that carries keys (`jwk`, `jku`, `x5u`, …).
 3. **Issuer trust.** The signing DID is a trusted issuer's key that was active (not compromised) at issuance, and did:key resolution matches the pinned JWK. **Never** verify with a key the presenter supplies.
 4. **Signature,** then **semantics.** The exact profile with minimal subject claims, and JWT claims that agree with VC fields.
-5. **Validity window,** **deployment binding** (chain + registry) and **holder binding** (subject DID = presenter).
-6. **Commitment.** Recompute it from the exact token bytes and salt. Never re-serialize the token.
-7. **Live registry.** The record exists, is active, and matches holder, trusted signer, schema and validity window. This is the only place revocation shows up. A perfectly signed token can still be revoked.
+5. **Selective disclosure.** Every disclosure's digest is in the *signed* `_sd`, with no duplicates and only allowed claim names and values. The disclosed set equals your request exactly, and the values meet your policy (e.g. `ageOver18 = true`).
+6. **Validity window,** **deployment binding** (chain + registry) and **holder binding** (subject DID = presenter).
+7. **Commitment.** Recompute it from the exact issuer-signed JWT bytes and salt. Never re-serialize the token.
+8. **Live registry.** The record exists, is active, and matches holder, trusted signer, schema and validity window. This is the only place revocation shows up. A perfectly signed token can still be revoked.
 
 ## Privacy obligations
 
 - Do not store tokens, salts or proofs. The reference verifier keeps only `{ challenge reference, action, time, outcome code }`.
 - A presentation reveals the holder's wallet address and on-chain record to you. Repeated presentations are linkable, so don't build cross-service profiles from them.
-- You learn `identityVerified: true` and the issuer, nothing more. The issuer is **simulated** in this prototype: a pass does not mean a real-world identity was checked.
+- You learn `identityVerified: true`, the issuer, and the optional claims you requested, nothing more. The disclosures and issuer-signed JWT are the same in every presentation, so do not use them to correlate a holder across services. The issuer is **simulated** in this prototype: a pass does not mean a real-world identity was checked.

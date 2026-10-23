@@ -3,8 +3,8 @@
 A working prototype of a privacy-conscious credential flow with three roles:
 
 - **Holder**: controls an Ethereum wallet, receives an “Identity Verified” credential, keeps it off-chain, registers a randomized commitment on a local EVM chain, presents it, and uses a contract-gated action.
-- **Issuer**: a *simulated* identity office. An authorized operator approves requests. The backend signs a minimal W3C Verifiable Credential and an EIP-712 registration authorization, and can revoke on-chain.
-- **Verifier**: issues single-use challenges and checks the credential signature, issuer trust, wallet control, holder binding, commitment and live registry status, each reported separately.
+- **Issuer**: a *simulated* identity office. An authorized operator approves requests. The backend signs a minimal W3C Verifiable Credential (SD-JWT, with selectively disclosable `ageOver18`, `ageOver21` and `countryOfResidence`) and an EIP-712 registration authorization, and can revoke on-chain.
+- **Verifier**: issues single-use challenges and checks the credential signature, issuer trust, wallet control, selective disclosures against its action's policy (e.g. an 18+ area receives only `ageOver18`), holder binding, commitment and live registry status, each reported separately.
 
 > **Prototype only.** Synthetic data, local Hardhat chain, no real identity verification, not audited, not production-ready. No public-chain deployment, no paid services, no external identity provider.
 
@@ -16,7 +16,7 @@ A working prototype of a privacy-conscious credential flow with three roles:
 | Backend | Next.js route handlers → separate `auth`, `issuer`, `verifier`, `credential` modules (`src/lib/server`) |
 | Chain | Solidity 0.8.37 (solc-js from npm), Hardhat 3 local node, OpenZeppelin Contracts 5.6 (AccessControl, EIP712, ECDSA) |
 | EVM client | ethers v6 |
-| Credentials | W3C VC Data Model 2.0 secured as `application/vc+jwt` (VC-JOSE-COSE) with `jose`; issuer `did:key` (Ed25519) via `@digitalbazaar/did-method-key`; holder `did:pkh:eip155` |
+| Credentials | W3C VC Data Model 2.0 secured as `application/vc+sd-jwt` (VC-JOSE-COSE with SD-JWT, RFC 9901) with `jose`; issuer `did:key` (Ed25519) via `@digitalbazaar/did-method-key`; holder `did:pkh:eip155` |
 | Sign-in | ERC-4361 SIWE via `siwe`, server-side sessions |
 | Storage | SQLite via `better-sqlite3` |
 | Tests | Hardhat + Mocha/Chai and Solidity fuzz tests (contracts), Vitest (credentials, API, integration), scripted headless demo, Playwright UI test |
@@ -49,7 +49,7 @@ npm run test:contracts   # 37 Hardhat example-based tests (registry + gate secur
 npm run test:fuzz        # Solidity property tests: 8 fuzz tests x 1,000 inputs, 4 stateful invariants
                          # over random register/revoke/remove/re-add/time/replay sequences
 npm run test:coverage    # contract line/statement coverage (currently 100%)
-npm run test:app         # 83 Vitest tests (starts its own Hardhat node on 8547)
+npm run test:app         # 94 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
@@ -75,7 +75,7 @@ Without an injected wallet, the UI says so and does not pretend to sign. Use `np
 ## Red-team campaign
 
 ```bash
-npm run redteam      # ~2 min: 43 attacks against a fresh live stack; exits 1 if any defense fails
+npm run redteam      # ~2 min: 53 attacks against a fresh live stack; exits 1 if any defense fails
 ```
 
 Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../../generated/contracts";
 import { appConfig, readJsonFile } from "./config";
 import { ApiError } from "./http";
+import { SCHEMA_ID } from "../shared/constants";
 
 /**
  * Deployment record written by `npm run deploy` (scripts/deploy.ts).
@@ -33,6 +34,10 @@ export function loadDeployment(): Deployment {
   const parsed = DeploymentSchema.safeParse(raw);
   if (!parsed.success) throw new ApiError(503, "NOT_DEPLOYED", "deployment record is outdated or invalid: run `npm run deploy`");
   const d = parsed.data;
+  // The gate is deployed for one credential schema; after a profile upgrade it must be redeployed.
+  if (d.schemaId.toLowerCase() !== SCHEMA_ID.toLowerCase()) {
+    throw new ApiError(503, "NOT_DEPLOYED", "deployment was made for an older credential profile: run `npm run deploy`");
+  }
   return { ...d, registry: getAddress(d.registry), gate: getAddress(d.gate) };
 }
 

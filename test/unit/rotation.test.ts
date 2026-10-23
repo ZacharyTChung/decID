@@ -63,7 +63,7 @@ async function issueAndRegister(holderIndex: number): Promise<{ holder: Actor; b
 async function present(holder: Actor, bundle: HolderBundle): Promise<VerificationResult> {
   const ch = await holder.call(h.postChallenge, "POST", { action: "access-verified-member-area" });
   const c = ch.body as ChallengeResponse;
-  const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle.commitment)));
+  const res = await holder.call(h.postPresentation, "POST", submission(c, bundle, await signPresentation(holder, c, bundle)));
   return res.body as VerificationResult;
 }
 

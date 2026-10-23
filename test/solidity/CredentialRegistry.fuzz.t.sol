@@ -13,7 +13,7 @@ contract CredentialRegistryFuzzTest is Test {
     DemoGate internal gate;
     uint256 internal constant ISSUER_KEY = 0xA11CE;
     address internal issuer;
-    bytes32 internal constant SCHEMA = keccak256("https://did-mvp.invalid/schemas/identity-verified/v1.json");
+    bytes32 internal constant SCHEMA = keccak256("https://did-mvp.invalid/schemas/identity-verified/v2.json");
     uint64 internal constant T0 = 1_800_000_000;
 
     function setUp() public {

@@ -13,7 +13,8 @@ import os from "node:os";
 import path from "node:path";
 import { Contract } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contracts";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../src/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain } from "../src/lib/shared/eip712";
+import { preparePresentation } from "../src/lib/shared/presentation";
 import type { HolderBundle } from "../src/lib/shared/bundle";
 import type { ChallengeResponse } from "../src/lib/shared/api";
 import type { VerificationResult } from "../src/lib/shared/verification";
@@ -42,17 +43,17 @@ async function timed<T>(fn: () => Promise<T>): Promise<[T, number]> {
   return [r, performance.now() - t];
 }
 
-async function signProof(a: HttpActor, c: ChallengeResponse, commitment: string) {
-  const signature = await a.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(c.audience, c.action),
-    audience: c.audience,
-    action: c.action,
-    challenge: c.nonce,
-    holder: a.address,
-    commitment,
-    expiresAt: c.expiresAt,
-  });
-  return { holder: a.address, commitment, expiresAt: c.expiresAt, signature };
+/** Holder side: the disclosures the challenge requests and the signed proof (not timed). */
+async function presentation(a: HttpActor, c: ChallengeResponse, bundle: HolderBundle) {
+  const { disclosures, message } = preparePresentation(bundle, c, a.address);
+  const signature = await a.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, message);
+  return {
+    challengeId: c.challengeId,
+    credentialJwt: bundle.credentialJwt,
+    disclosures,
+    salt: bundle.salt,
+    proof: { holder: a.address, commitment: bundle.commitment, expiresAt: c.expiresAt, signature },
+  };
 }
 
 async function main() {
@@ -121,10 +122,8 @@ async function main() {
           const [ch, t1] = await timed(() => h.actor.call("POST", "/api/verifier/challenges", { action: "access-verified-member-area" }));
           challengeMs.push(t1);
           const challenge = ch.body as ChallengeResponse;
-          const proof = await signProof(h.actor, challenge, h.bundle.commitment); // client-side; not timed
-          const [res, t2] = await timed(() =>
-            h.actor.call("POST", "/api/verifier/presentations", { challengeId: challenge.challengeId, credentialJwt: h.bundle.credentialJwt, salt: h.bundle.salt, proof }),
-          );
+          const body = await presentation(h.actor, challenge, h.bundle); // client-side; not timed
+          const [res, t2] = await timed(() => h.actor.call("POST", "/api/verifier/presentations", body));
           presentMs.push(t2);
           if (res.status !== 200 || !(res.body as VerificationResult).verified) bad++;
         }
@@ -147,12 +146,7 @@ async function main() {
   rows.push(`| Revoke (send + mine transaction, automine) | ${fmt(revMs)} | – | – | 1 |`);
   // After revocation the same holder must be rejected: correctness check at the end of the load.
   const ch = (await h0.actor.call("POST", "/api/verifier/challenges", { action: "access-verified-member-area" })).body as ChallengeResponse;
-  const after = await h0.actor.call("POST", "/api/verifier/presentations", {
-    challengeId: ch.challengeId,
-    credentialJwt: h0.bundle.credentialJwt,
-    salt: h0.bundle.salt,
-    proof: await signProof(h0.actor, ch, h0.bundle.commitment),
-  });
+  const after = await h0.actor.call("POST", "/api/verifier/presentations", await presentation(h0.actor, ch, h0.bundle));
   if (after.status !== 422) failures.push("revoked credential still verified");
 
   const [audit, auditMs] = await timed(() => issuer.call("GET", "/api/issuer/audit"));

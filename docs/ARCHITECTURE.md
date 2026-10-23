@@ -72,7 +72,8 @@ sequenceDiagram
   Hd->>Iss: synthetic application (holder = session address)
   Op->>App: SIWE sign-in (role=issuer, allowlisted)
   Op->>Iss: approve
-  Iss->>Iss: build minimal VC → sign vc+jwt (Ed25519 did:key)
+  Iss->>Iss: derive ageOver18/ageOver21/country → SD-JWT disclosures + 8 digests (decoys)
+  Iss->>Iss: build minimal VC with _sd → sign vc+sd-jwt (Ed25519 did:key)
   Iss->>Iss: salt ← CSPRNG(32), commitment = H(domain, salt, H(token))
   Iss->>Reg: (read issuer epoch)
   Iss->>Iss: EIP-712 RegistrationAuthorization signed by EVM attestation key
@@ -82,10 +83,10 @@ sequenceDiagram
   Reg-->>Hd: CredentialRegistered(commitment, holder, issuer, schema, window)
 
   Hd->>App: POST /api/verifier/challenges
-  App-->>Hd: {challengeId, nonce, audience, action, chain, registry, expiresAt}
-  Hd->>Hd: consent → EIP-712 PresentationProof
-  Hd->>App: token + salt + proof
-  App->>App: consume challenge atomically, verify proof, JOSE, trust, semantics, binding, commitment
+  App-->>Hd: {challengeId, nonce, audience, action, chain, registry, expiresAt, requestedClaims}
+  Hd->>Hd: pick requested disclosures; consent → EIP-712 PresentationProof (names + sdHash)
+  Hd->>App: issuer-signed JWT + disclosures + salt + proof
+  App->>App: consume challenge atomically, verify proof, JOSE, trust, semantics, disclosures vs policy, binding, commitment
   App->>Reg: getRecord / credentialStatus / isCredentialValid
   App-->>Hd: per-check result, minimal disclosed claims
   Hd->>Gate: checkIn(commitment)
@@ -153,7 +154,7 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Request status, holder address/DID, timestamps, reject reason, recovery link (lost wallet address) | SQLite `issuer_requests` | Issuer; the holder sees their own | Until `npm run reset` |
 | Issuance log: commitment, credential id, holder DID, validity, authorizing signer, superseded-by-recovery | SQLite `issuer_credentials` | Issuer | Until reset |
 | Issuer audit log: sequence, time, operator address, action, subject (commitment or request id), details (credential id, holder DID, signer, tx hash, reject reason), previous hash, hash | SQLite `issuer_audit` | Issuer | Append-only; until reset |
-| Holder bundle (token, salt, authorization) awaiting pickup | SQLite `issuer_bundle_pickup` | That holder only | Deleted at pickup, or after 24 h |
+| Holder bundle (issuer-signed JWT, SD-JWT disclosures of ageOver18/ageOver21/countryOfResidence, salt, authorization) awaiting pickup | SQLite `issuer_bundle_pickup` | That holder only | Deleted at pickup, or after 24 h |
 | Holder bundle after pickup | Browser tab memory | The holder | Until reload or wallet switch |
 | Encrypted backup file | Wherever the holder saves it | Anyone with the password | Holder-controlled |
 | Device vault (same encrypted envelope) | Browser IndexedDB, keyed by wallet address | Anyone with the passphrase and access to that browser profile | Until the holder removes it or clears site data |

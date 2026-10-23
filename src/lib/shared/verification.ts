@@ -11,6 +11,7 @@ export const CHECK_IDS = [
   "issuerTrust",
   "tokenSignature",
   "credentialSemantics",
+  "selectiveDisclosure",
   "validityWindow",
   "holderBinding",
   "deploymentBinding",
@@ -26,6 +27,7 @@ export const CHECK_LABELS: Record<CheckId, string> = {
   issuerTrust: "Issuer DID and key are in the trusted issuer policy",
   tokenSignature: "Issuer signature over the credential",
   credentialSemantics: "Credential profile, schema and JWT/VC claim agreement",
+  selectiveDisclosure: "Disclosures signed by the issuer, and exactly the claims this action requests",
   validityWindow: "Credential currently inside validFrom / validUntil",
   holderBinding: "Credential subject DID matches the presenting wallet",
   deploymentBinding: "Credential bound to this chain and registry",
@@ -50,6 +52,8 @@ export interface DisclosedClaims {
   validFrom: string;
   validUntil: string;
   credentialType: string;
+  /** Selectively disclosed claims (only those the verifier's action requested). */
+  claims: Record<string, boolean | string>;
 }
 
 export interface VerificationResult {

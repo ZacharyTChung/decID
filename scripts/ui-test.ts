@@ -219,6 +219,22 @@ async function run(stack: LocalStack) {
     await audit(holder, "verifier (verified result)");
     step("verifier accepted the consented presentation");
 
+    // Selective disclosure: the 18+ action requests ageOver18 only; consent text names it, result shows it.
+    await holder.getByLabel("Action").selectOption("access-age-restricted-area");
+    await holder.getByRole("button", { name: "New verification request" }).click();
+    await holder.getByText(/only ageOver18 = true\. Your other optional claims stay hidden\./).waitFor({ timeout: 10_000 });
+    await holder.getByLabel(/I consent to share/).check();
+    await holder.getByRole("button", { name: "Sign and present" }).click();
+    await holder.getByText(/^Verified\./).waitFor({ timeout: 20_000 });
+    const disclosedText = await holder.locator("dd", { hasText: "ageOver18" }).first().innerText();
+    if (!/ageOver18:\s*true/.test(disclosedText) || /countryOfResidence|ageOver21/.test(await holder.locator("main").innerText().then((t) => t.split("Disclosed claims")[1] ?? ""))) {
+      throw new Error(`unexpected disclosed claims: ${disclosedText}`);
+    }
+    await holder.screenshot({ path: `${SHOTS}/03b-verifier-age.png`, fullPage: true });
+    await audit(holder, "verifier (18+, selective disclosure)");
+    await holder.getByLabel("Action").selectOption("access-verified-member-area");
+    step("18+ action: consent names only ageOver18, verifier shows ageOver18 = true and nothing else");
+
     await issuer.reload();
     await issuer.getByRole("button", { name: "Revoke" }).click({ timeout: 15_000 });
     await issuer.getByRole("button", { name: "Confirm revoke" }).click();

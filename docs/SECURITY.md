@@ -40,6 +40,8 @@ Issuer operators are separate from issuer keys. Operators sign in with their own
 | Malicious credential content (huge, odd JSON, remote contexts) | 8 KiB token cap, 32 KiB body cap, strict schema, contexts never fetched | — |
 | Issuer key compromise | `npm run rotate-keys -- --compromised`: the trust policy marks the key compromised (all its credentials rejected); a compromised EVM signer is removed on-chain (epoch); `adminRevoke` | Holders of affected credentials must be reissued; trust-policy distribution to other verifiers is out of scope |
 | Routine key rotation breaking existing credentials | Trust policy v2: retired keys keep credentials issued while active valid; retired EVM keys are kept only for revocation | Rotation is a local file + registry operation, not a published key history (e.g. did:web) |
+| Holder discloses more than the verifier needs, or a relay adds/strips disclosures | Verifier refuses unrequested disclosures (`UNREQUESTED_DISCLOSURE`); the EIP-712 proof signs the disclosed claim names and `sdHash` of the exact presentation | The holder's wallet shows the claim names in plain text, but a malicious holder UI could still ask the user to over-share with a verifier that does request more |
+| Forging or borrowing an optional claim (e.g. an under-18 holder claiming `ageOver18 = true`) | Every disclosure's digest must appear in the issuer-signed `_sd`; values are salted per credential, so another holder's disclosure does not match (red team S3, S4) | — |
 | Learning private data from the chain | Only a salted commitment and status are on-chain; a regression scan checks calldata/events/records for sentinel values, token and salt | See *Disclosure* below |
 
 ## Privacy: what is disclosed
@@ -48,7 +50,7 @@ This MVP is **data-minimized and pseudonymous, not anonymous and not zero-knowle
 
 - **The issuer** sees the synthetic application until it decides. It retains the holder's address, DID and commitment in its issuance log.
 - **The chain (everyone)** sees the holder address, issuer attestation address, schema id (the credential *kind*), validity timestamps, registration time, revocation and every gate check-in. All of this is **linkable** to the wallet's other activity, permanently.
-- **The verifier** sees the full minimal credential (holder DID, issuer DID, dates, `identityVerified`), the commitment and the salt. It can link the presentation to the on-chain record and to the wallet. Repeated presentations of the same credential, to one verifier or to colluding verifiers, are linkable through the holder DID, the commitment and the token itself.
+- **The verifier** sees the always-disclosed credential (holder DID, issuer DID, dates, `identityVerified`), the eight salted digests, the commitment and the salt. Of the optional claims (`ageOver18`, `ageOver21`, `countryOfResidence`) it sees **only those its action requests**: it refuses unrequested disclosures, and the holder's signature binds the exact set. Undisclosed claims cannot be confirmed by guessing a value, because each is salted with 128 random bits. The fixed number of digests (decoys included) hides how many optional claims exist. It can link the presentation to the on-chain record and to the wallet. Repeated presentations of the same credential, to one verifier or to colluding verifiers, are linkable through the holder DID, the commitment and the token itself.
 - Deleting local data (`npm run reset`) does not erase anything already on a blockchain.
 
 ### Privacy regression check, and its limits
@@ -61,9 +63,11 @@ The registry publishes one record per credential, keyed by commitment and holder
 
 Alternatives, all roadmap: W3C **Bitstring Status List** (verifiers fetch a compressed list and the holder's index hides among many), cryptographic accumulators, or ZK non-revocation proofs. Each improves holder privacy but loses something: simple on-chain composability, instant status for contracts, or implementation simplicity.
 
-## “Over 18” and other predicates
+## “Over 18” and other predicates (implemented: issuer-signed, selectively disclosed)
 
-An issuer could sign a predicate claim such as `ageOver18: true` in exactly this profile. The verifier would learn only the predicate, but it would trust the issuer's assertion. That is an **issuer-signed predicate**, not a zero-knowledge proof. A ZK approach (proving a predicate over a signed birth date without revealing it) or a selective-disclosure cryptosuite (SD-JWT VC, BBS) is not implemented here.
+The credential carries `ageOver18` and `ageOver21` as **issuer-signed predicates**, computed by the issuer from the birth date at issuance. The birth date itself never enters the credential. They are selectively disclosable with SD-JWT: the 18+ verifier action learns `ageOver18 = true` and nothing about age 21 or country.
+
+This is **not a zero-knowledge proof**. The verifier trusts the issuer's assertion, and the predicate is fixed at issuance: someone who was 17 when the credential was issued stays `ageOver18 = false` until it is reissued. SD-JWT presentations are also **linkable**: the same issuer-signed JWT, digests and disclosures are shown to every verifier. Unlinkable selective disclosure needs BBS-style signatures or ZK proofs (roadmap).
 
 ## Reusing the architecture for a health or vaccination credential (not built)
 
@@ -71,7 +75,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 
 ## Roadmap (not implemented)
 
-1. **Stronger disclosure privacy:** SD-JWT VC or BBS selective disclosure, and ZK predicates.
+1. **Stronger disclosure privacy:** SD-JWT selective disclosure is implemented (profile v2). Still to do: *unlinkable* selective disclosure (BBS cryptosuites) and ZK predicates over a signed birth date, so predicates stay current without reissuance.
 2. **Unlinkability:** pairwise or rotating holder identifiers, privacy-preserving status (Bitstring Status List or ZK non-revocation), no per-credential public record.
 3. **Issuer key rotation (partly implemented):** done: multiple keys per issuer with lifecycles, `npm run rotate-keys`. Still to do: publishing key history through an updatable DID method (e.g. did:web) so verifiers learn rotations without a local policy file. This was deliberately not built here: did:web requires HTTPS on a real domain, and resolving it over plain `http://localhost` would contradict the trust model (verifiers never fetch keys over unauthenticated channels).
 4. **Account recovery (implemented for the simulated issuer):** reissue to a new wallet after re-verification, revoking or cancelling the old wallet's credentials first. Smart-account holders (EIP-1271) are supported for sign-in, presentation, registration and the gate. Social-recovery wallets therefore work if their contract implements EIP-1271.
@@ -82,7 +86,7 @@ The same pieces would apply with a different type and schema: a new `credentialT
 
 | Implemented | Future work |
 | --- | --- |
-| VC 2.0 + vc+jwt, Ed25519 allowlist, trust policy pinning, did:key resolution cross-check | Selective disclosure, ZK predicates |
+| VC 2.0 + vc+sd-jwt (SD-JWT selective disclosure, decoy digests, per-action disclosure policy), Ed25519 allowlist, trust policy pinning, did:key resolution cross-check | Unlinkable disclosure (BBS), ZK predicates |
 | Salted commitment over exact token bytes | Privacy-preserving status |
 | EIP-712 registration with holder binding, deadline, epoch, one-time commitments | Relayers / gasless registration |
 | SIWE sessions, origin checks, rate limits, server-side roles, nonce CSP + security headers | Production session infrastructure |

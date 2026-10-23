@@ -13,10 +13,10 @@ import { keccak256, toUtf8Bytes } from "ethers";
 export const PROTOCOL_NAMESPACE = "https://did-mvp.invalid";
 
 export const VC_V2_CONTEXT = "https://www.w3.org/ns/credentials/v2";
-export const IDENTITY_CONTEXT_URI = `${PROTOCOL_NAMESPACE}/contexts/identity-verified/v1`;
+export const IDENTITY_CONTEXT_URI = `${PROTOCOL_NAMESPACE}/contexts/identity-verified/v2`;
 
 export const CREDENTIAL_TYPE = "IdentityVerifiedCredential";
-export const CREDENTIAL_SCHEMA_URI = `${PROTOCOL_NAMESPACE}/schemas/identity-verified/v1.json`;
+export const CREDENTIAL_SCHEMA_URI = `${PROTOCOL_NAMESPACE}/schemas/identity-verified/v2.json`;
 export const CREDENTIAL_SCHEMA_TYPE = "JsonSchema";
 export const CREDENTIAL_STATUS_TYPE = "EvmCredentialRegistryStatus2026";
 
@@ -27,19 +27,27 @@ export const SCHEMA_ID = keccak256(toUtf8Bytes(CREDENTIAL_SCHEMA_URI));
 export const COMMITMENT_DOMAIN_LABEL = "did-mvp:credential-commitment:v1";
 export const COMMITMENT_DOMAIN = keccak256(toUtf8Bytes(COMMITMENT_DOMAIN_LABEL));
 
-/** JOSE securing profile (W3C VC-JOSE-COSE, JWS compact serialization). */
-export const VC_JWT_TYP = "vc+jwt";
-export const VC_JWT_CTY = "vc";
-export const VC_MEDIA_TYPE = "application/vc+jwt";
+/** Securing profile: W3C VC-JOSE-COSE "With SD-JWT" (issuer-signed JWS compact serialization + disclosures). */
+export const VC_TYP = "vc+sd-jwt";
+export const VC_CTY = "vc";
+export const VC_MEDIA_TYPE = "application/vc+sd-jwt";
 /** Algorithm allowlist. Fully-specified Ed25519 (RFC 9864). Nothing else is accepted. */
 export const ALLOWED_JWS_ALGS = ["Ed25519"] as const;
 
 /** Upper bound on a compact credential token. Larger inputs are rejected before parsing. */
 export const MAX_CREDENTIAL_TOKEN_BYTES = 8 * 1024;
 
-export const HOLDER_BUNDLE_VERSION = "did-mvp.holder-bundle/v1";
+export const HOLDER_BUNDLE_VERSION = "did-mvp.holder-bundle/v2";
 export const ENCRYPTED_BUNDLE_VERSION = "did-mvp.encrypted-holder-bundle/v1";
 
-/** The only verifier action this prototype supports. */
-export const VERIFIER_ACTIONS = ["access-verified-member-area"] as const;
+/**
+ * Verifier actions and what each requires the holder to disclose. `requested` claims must be
+ * disclosed (and nothing else); `require` constrains their values. Every action also requires
+ * the always-disclosed identityVerified=true credential itself.
+ */
+export const VERIFIER_ACTIONS = ["access-verified-member-area", "access-age-restricted-area"] as const;
 export type VerifierAction = (typeof VERIFIER_ACTIONS)[number];
+export const ACTION_POLICIES: Record<VerifierAction, { label: string; requested: readonly ("ageOver18" | "ageOver21" | "countryOfResidence")[]; require: Record<string, boolean | string> }> = {
+  "access-verified-member-area": { label: "Verified member area", requested: [], require: {} },
+  "access-age-restricted-area": { label: "Age-restricted area (18+)", requested: ["ageOver18"], require: { ageOver18: true } },
+};

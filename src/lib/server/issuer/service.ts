@@ -6,8 +6,9 @@ import { HOLDER_BUNDLE_VERSION, SCHEMA_ID } from "../../shared/constants";
 import { commitmentFor, randomSalt } from "../../shared/commitment";
 import { buildIdentityCredential } from "../../shared/credential-profile";
 import { deriveHolderDid } from "../../shared/did-pkh";
+import { createDisclosures, type SdClaims } from "../../shared/sd-jwt";
 import { registryDomain, REGISTRATION_TYPES, type RegistrationAuthorization } from "../../shared/eip712";
-import { HolderBundleV1, type HolderBundle } from "../../shared/bundle";
+import { HolderBundleV2, type HolderBundle } from "../../shared/bundle";
 import type { HolderRequestView, SyntheticApplicationT } from "../../shared/api";
 import { credentialLifetimeSeconds, issuerSecrets } from "../config";
 import { assertLiveDeployment, loadDeployment, onChain, provider, readRecord } from "../chain";
@@ -111,7 +112,7 @@ export function pickupBundle(session: Session, requestId: string): HolderBundle 
     .get(requestId, session.address, nowSeconds()) as { bundle_json: string } | undefined;
   // The same error for "not yours" and "does not exist" avoids leaking other holders' request ids.
   if (!row) throw new ApiError(404, "BUNDLE_NOT_AVAILABLE", "no bundle awaiting pickup for this request");
-  return HolderBundleV1.parse(JSON.parse(row.bundle_json));
+  return HolderBundleV2.parse(JSON.parse(row.bundle_json));
 }
 
 // ---------------------------------------------------------------- issuer side
@@ -217,6 +218,18 @@ export interface IssuanceResult {
   superseded?: SupersedeResult;
 }
 
+/**
+ * The selectively disclosable claims, computed once at issuance from the application. The birth
+ * date itself is never put in the credential; only the age predicates as of issuance are.
+ */
+export function deriveDisclosableClaims(app: Pick<SyntheticApplicationT, "dateOfBirth" | "country">, at: number): SdClaims {
+  const [y, m, d] = app.dateOfBirth.split("-").map(Number) as [number, number, number];
+  const now = new Date(at * 1000);
+  let age = now.getUTCFullYear() - y;
+  if (now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d)) age--;
+  return { ageOver18: age >= 18, ageOver21: age >= 21, countryOfResidence: app.country };
+}
+
 export async function approveRequest(issuer: Session, requestId: string): Promise<IssuanceResult> {
   const d = db();
   const now = nowSeconds();
@@ -224,9 +237,9 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
   const claimed = d
     .prepare(
       `UPDATE issuer_requests SET status = 'approved', reviewed_at = ?, reviewed_by = ?
-       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id, recovery_of`,
+       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id, recovery_of, synthetic_json`,
     )
-    .get(now, issuer.address, requestId) as { holder_address: string; chain_id: number; recovery_of: string | null } | undefined;
+    .get(now, issuer.address, requestId) as { holder_address: string; chain_id: number; recovery_of: string | null; synthetic_json: string | null } | undefined;
   if (!claimed) throw new ApiError(409, "NOT_PENDING", "request is not pending");
 
   try {
@@ -249,7 +262,10 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     const validFrom = now;
     const validUntil = now + credentialLifetimeSeconds();
 
-    // 1. Minimal VC, signed with the credential key.
+    // 1. Minimal VC with selectively disclosable claims derived from the (synthetic) application,
+    //    signed with the credential key. Only digests go into the signed payload.
+    if (!claimed.synthetic_json) throw new ApiError(409, "APPLICATION_ERASED", "the application data is no longer available");
+    const { disclosures, sd } = createDisclosures(deriveDisclosableClaims(JSON.parse(claimed.synthetic_json) as SyntheticApplicationT, now));
     const vc = buildIdentityCredential({
       credentialId,
       issuerDid: keys.did,
@@ -258,6 +274,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       validUntil,
       chainId: deployment.chainId,
       registry: deployment.registry,
+      sd,
     });
     const credentialJwt = await signCredentialJwt(vc, keys.secrets.credentialPrivateJwk, keys.kid);
 
@@ -283,9 +300,10 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       authorization,
     );
 
-    const bundle: HolderBundle = HolderBundleV1.parse({
+    const bundle: HolderBundle = HolderBundleV2.parse({
       version: HOLDER_BUNDLE_VERSION,
       credentialJwt,
+      disclosures,
       salt,
       commitment,
       authorization,

@@ -1,6 +1,7 @@
 import { Contract, JsonRpcProvider, type HDNodeWallet } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "@/generated/contracts";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "@/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain, presentationMessage } from "@/lib/shared/eip712";
+import { decodeDisclosure, sdHash, selectDisclosures } from "@/lib/shared/sd-jwt";
 import type { ChallengeResponse } from "@/lib/shared/api";
 import type { HolderBundle } from "@/lib/shared/bundle";
 import { devWallet } from "../../../scripts/lib/dev-accounts";
@@ -50,26 +51,44 @@ export function contracts(provider: JsonRpcProvider, deployment: { registry: str
   };
 }
 
-export async function signPresentation(actor: Actor, challenge: ChallengeResponse, commitment: string, overrides: Partial<{ audience: string; action: string; nonce: string; expiresAt: number }> = {}) {
-  const audience = overrides.audience ?? challenge.audience;
-  const action = overrides.action ?? challenge.action;
+/**
+ * Signs a presentation proof the way a holder wallet does (preparePresentation), optionally
+ * with fields overridden to build attacks. `credentialJwt` / `disclosures` overrides change
+ * what the signed sdHash covers; pass the same overrides to submission() to submit them.
+ */
+export async function signPresentation(
+  actor: Actor,
+  challenge: ChallengeResponse,
+  bundle: HolderBundle,
+  overrides: Partial<{ audience: string; action: string; nonce: string; expiresAt: number; credentialJwt: string; disclosures: string[] }> = {},
+) {
+  const credentialJwt = overrides.credentialJwt ?? bundle.credentialJwt;
+  const disclosures = overrides.disclosures ?? selectDisclosures(bundle.disclosures, challenge.requestedClaims);
   const expiresAt = overrides.expiresAt ?? challenge.expiresAt;
-  const signature = await actor.wallet.signTypedData(presentationDomain(challenge.chainId, challenge.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(audience, action),
-    audience,
-    action,
+  const message = presentationMessage({
+    audience: overrides.audience ?? challenge.audience,
+    action: overrides.action ?? challenge.action,
     challenge: overrides.nonce ?? challenge.nonce,
     holder: actor.address,
-    commitment,
+    commitment: bundle.commitment,
+    disclosed: disclosures.map((d) => decodeDisclosure(d).name),
+    sdHash: sdHash(credentialJwt, disclosures),
     expiresAt,
   });
-  return { holder: actor.address, commitment, expiresAt, signature };
+  const signature = await actor.wallet.signTypedData(presentationDomain(challenge.chainId, challenge.registry), PRESENTATION_TYPES, message);
+  return { holder: actor.address, commitment: bundle.commitment, expiresAt, signature };
 }
 
-export function submission(challenge: ChallengeResponse, bundle: HolderBundle, proof: Awaited<ReturnType<typeof signPresentation>>, overrides: Partial<{ credentialJwt: string; salt: string }> = {}) {
+export function submission(
+  challenge: ChallengeResponse,
+  bundle: HolderBundle,
+  proof: Awaited<ReturnType<typeof signPresentation>>,
+  overrides: Partial<{ credentialJwt: string; salt: string; disclosures: string[] }> = {},
+) {
   return {
     challengeId: challenge.challengeId,
     credentialJwt: overrides.credentialJwt ?? bundle.credentialJwt,
+    disclosures: overrides.disclosures ?? selectDisclosures(bundle.disclosures, challenge.requestedClaims),
     salt: overrides.salt ?? bundle.salt,
     proof,
   };

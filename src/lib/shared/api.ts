@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { VERIFIER_ACTIONS } from "./constants";
+import { MAX_DISCLOSURE_LENGTH, SD_CLAIM_NAMES } from "./sd-jwt";
 
 /**
  * Request schemas shared by the route handlers (validation) and the browser
@@ -58,6 +59,7 @@ export const ChallengeRequest = z.strictObject({ action: z.enum(VERIFIER_ACTIONS
 export const PresentationSubmission = z.strictObject({
   challengeId: z.string().uuid(),
   credentialJwt: z.string().min(1).max(8192),
+  disclosures: z.array(z.string().min(1).max(MAX_DISCLOSURE_LENGTH)).max(SD_CLAIM_NAMES.length),
   salt: Hex32,
   proof: z.strictObject({
     holder: Address,
@@ -76,6 +78,8 @@ export interface ChallengeResponse {
   chainId: number;
   registry: string;
   expiresAt: number;
+  /** Selectively disclosable claims this action requires the holder to disclose (exactly these). */
+  requestedClaims: string[];
   statement: string;
 }
 

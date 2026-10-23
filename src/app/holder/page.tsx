@@ -6,7 +6,8 @@ import { Contract } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "@/generated/contracts";
 import { api } from "@/lib/client/api";
 import type { HolderRequestView } from "@/lib/shared/api";
-import { HolderBundleV1, type HolderBundle } from "@/lib/shared/bundle";
+import { HolderBundleV2, type HolderBundle } from "@/lib/shared/bundle";
+import { decodeDisclosure } from "@/lib/shared/sd-jwt";
 import { MIN_EXPORT_PASSWORD_LENGTH, decryptBundle, encryptBundle } from "@/lib/shared/bundle-crypto";
 import { deleteFromVault, loadFromVault, saveToVault } from "@/lib/client/vault";
 import { useApp } from "@/components/providers";
@@ -145,7 +146,7 @@ function RequestSection({ onBundle }: { onBundle: (b: HolderBundle) => void }) {
                   onClick={() =>
                     pickup.run(async () => {
                       const res = await api<{ bundle: HolderBundle }>("POST", `/api/holder/requests/${r.id}/bundle`, {});
-                      onBundle(HolderBundleV1.parse(res.bundle));
+                      onBundle(HolderBundleV2.parse(res.bundle));
                       await load();
                     })
                   }
@@ -287,7 +288,22 @@ function CredentialSection({ bundle }: { bundle: HolderBundle }) {
             <dd>{String(payload?.validUntil ?? "")}</dd>
           </div>
         </dl>
-        <p className="mt-3 text-[11px] text-slate-300">No name, birth date, document number or photo is in this credential.</p>
+        {bundle.disclosures.length > 0 && (
+          <div className="mt-3 border-t border-slate-600 pt-3 text-xs">
+            <div className="text-slate-400">Optional claims (hidden unless a verifier requests one and you approve)</div>
+            <ul className="mt-1 flex flex-wrap gap-2">
+              {bundle.disclosures.map((d) => {
+                const { name, value } = decodeDisclosure(d);
+                return (
+                  <li key={name} className="rounded bg-slate-800 px-2 py-0.5">
+                    {name}: <strong>{String(value)}</strong>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-slate-300">No name, birth date, document number or photo is in this credential. The signed credential holds only salted digests of the optional claims.</p>
       </div>
       {statusError && <div className="mt-2"><Notice tone="error">{statusError}</Notice></div>}
       <ExpiryNotice validUntil={typeof payload?.validUntil === "string" ? payload.validUntil : undefined} />

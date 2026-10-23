@@ -1,5 +1,5 @@
 import { ENCRYPTED_BUNDLE_VERSION } from "./constants";
-import { EncryptedBundleV1, HolderBundleV1, type EncryptedBundle, type HolderBundle } from "./bundle";
+import { EncryptedBundleV1, HolderBundleV2, type EncryptedBundle, type HolderBundle } from "./bundle";
 
 export const PBKDF2_ITERATIONS = 600_000;
 export const MIN_EXPORT_PASSWORD_LENGTH = 12;
@@ -42,7 +42,7 @@ export async function encryptBundle(
   if (password.length < MIN_EXPORT_PASSWORD_LENGTH) {
     throw new Error(`export password must be at least ${MIN_EXPORT_PASSWORD_LENGTH} characters`);
   }
-  const validated = HolderBundleV1.parse(bundle);
+  const validated = HolderBundleV2.parse(bundle);
   const salt = globalThis.crypto.getRandomValues(new Uint8Array(16));
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(password, salt, iterations);
@@ -79,7 +79,7 @@ export async function decryptBundle(envelope: unknown, password: string): Promis
   } catch {
     throw new BundleDecryptionError("wrong password or the file was modified");
   }
-  const bundle = HolderBundleV1.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
+  const bundle = HolderBundleV2.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
   if (!bundle.success) throw new BundleDecryptionError("decrypted content is not a valid holder bundle");
   return bundle.data;
 }

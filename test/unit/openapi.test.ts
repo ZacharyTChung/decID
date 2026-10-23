@@ -106,7 +106,7 @@ describe("real responses conform to the description", () => {
 
     const present = async () => {
       const c = (await call(holder, "postChallenge", { action: "access-verified-member-area" })).body as ChallengeResponse;
-      const proof = await signPresentation(holder, c, bundle.commitment);
+      const proof = await signPresentation(holder, c, bundle);
       return call(holder, "postPresentation", submission(c, bundle, proof));
     };
     expect((await present()).status).toBe(200);

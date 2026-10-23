@@ -15,7 +15,8 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { Contract, hexlify, toUtf8Bytes, type HDNodeWallet } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contracts";
-import { PRESENTATION_TYPES, presentationDomain, presentationStatement } from "../src/lib/shared/eip712";
+import { PRESENTATION_TYPES, presentationDomain } from "../src/lib/shared/eip712";
+import { preparePresentation } from "../src/lib/shared/presentation";
 import { SCHEMA_ID } from "../src/lib/shared/constants";
 import { encryptBundle, decryptBundle } from "../src/lib/shared/bundle-crypto";
 import type { HolderBundle } from "../src/lib/shared/bundle";
@@ -57,21 +58,15 @@ process.on("SIGINT", () => {
   process.exit(130);
 });
 
-async function present(actor: HttpActor, bundle: HolderBundle): Promise<VerificationResult> {
-  const ch = await actor.call("POST", "/api/verifier/challenges", { action: "access-verified-member-area" });
+async function present(actor: HttpActor, bundle: HolderBundle, action = "access-verified-member-area"): Promise<VerificationResult> {
+  const ch = await actor.call("POST", "/api/verifier/challenges", { action });
   const c = ch.body as ChallengeResponse;
-  const signature = await actor.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, {
-    statement: presentationStatement(c.audience, c.action),
-    audience: c.audience,
-    action: c.action,
-    challenge: c.nonce,
-    holder: actor.address,
-    commitment: bundle.commitment,
-    expiresAt: c.expiresAt,
-  });
+  const { disclosures, message } = preparePresentation(bundle, c, actor.address);
+  const signature = await actor.wallet.signTypedData(presentationDomain(c.chainId, c.registry), PRESENTATION_TYPES, message);
   const res = await actor.call("POST", "/api/verifier/presentations", {
     challengeId: c.challengeId,
     credentialJwt: bundle.credentialJwt,
+    disclosures,
     salt: bundle.salt,
     proof: { holder: actor.address, commitment: bundle.commitment, expiresAt: c.expiresAt, signature },
   });
@@ -165,6 +160,12 @@ async function main() {
   const ok = await present(holder, bundle);
   check(ok.verified, "verifier accepted the presentation", summarize(ok));
   check(ok.disclosed?.identityVerified === true && !JSON.stringify(ok).includes(SYNTHETIC.documentNumber), "only the minimal claim is disclosed");
+  const age = await present(holder, bundle, "access-age-restricted-area");
+  check(
+    age.verified && JSON.stringify(age.disclosed?.claims) === '{"ageOver18":true}',
+    "selective disclosure: the 18+ action receives ageOver18 = true and no other optional claim",
+    summarize(age),
+  );
   const stolen = await present(intruder, bundle);
   check(!stolen.verified && stolen.checks.some((c) => c.code === "SUBJECT_NOT_PRESENTER"), "a different wallet presenting the same bundle is rejected");
 
@@ -173,6 +174,8 @@ async function main() {
   writeFileSync(backupFile, JSON.stringify(encrypted));
   const cliOk = cliVerify(backupFile);
   check(cliOk.code === 0 && cliOk.out.includes("VERIFIED"), "npm run verify accepts the holder's encrypted backup", cliOk.out.slice(-300));
+  const cliAge = cliVerify(backupFile, ["--action", "access-age-restricted-area"]);
+  check(cliAge.code === 0 && cliAge.out.includes("ageOver18=true"), "the CLI verifies the 18+ action with only ageOver18 disclosed", cliAge.out.slice(-300));
   const cliWrongKey = cliVerify(backupFile, ["--holder-index", "3"]);
   check(cliWrongKey.code === 2 && cliWrongKey.out.includes("PROOF_SIGNER_MISMATCH"), "the CLI rejects a proof signed by a key that does not control the holder wallet");
 
