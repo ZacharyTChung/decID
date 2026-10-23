@@ -29,3 +29,6 @@ npm-debug.log*
 .next-bench/
 .multi-instance/
 .next-multi/
+.evidence/
+site/dist/
+.site-test/

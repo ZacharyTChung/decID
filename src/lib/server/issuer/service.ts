@@ -2,24 +2,21 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Contract, Wallet, getAddress } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI } from "../../../generated/contracts";
-import { HOLDER_BUNDLE_VERSION, SCHEMA_ID } from "../../shared/constants";
-import { commitmentFor, randomSalt } from "../../shared/commitment";
-import { buildIdentityCredential } from "../../shared/credential-profile";
 import { deriveHolderDid } from "../../shared/did-pkh";
-import { createDisclosures, type SdClaims } from "../../shared/sd-jwt";
-import { registryDomain, REGISTRATION_TYPES, type RegistrationAuthorization } from "../../shared/eip712";
 import { HolderBundleV2, type HolderBundle } from "../../shared/bundle";
 import type { HolderRequestView, SyntheticApplicationT } from "../../shared/api";
 import { credentialLifetimeSeconds, issuerSecrets } from "../config";
 import { assertLiveDeployment, loadDeployment, onChain, provider, readRecord } from "../chain";
 import { db, nowSeconds } from "../db";
 import { ApiError } from "../http";
-import { signCredentialJwt } from "../credential/sign";
 import { deriveDidKeyFromJwk } from "../did/did-key";
 import { loadTrustedIssuers } from "../trust";
 import { appendAudit } from "./audit";
+import { issueCredential } from "./issue";
 import { withIssuerTxLock } from "./tx-lock";
 import type { Session } from "../auth/session";
+
+export { deriveDisclosableClaims } from "./issue";
 
 /**
  * Simulated identity office. This is the only module that loads issuer private
@@ -30,7 +27,6 @@ import type { Session } from "../auth/session";
  * The binding between them is published in the trusted issuer policy.
  */
 
-const REGISTRATION_WINDOW = 24 * 60 * 60; // authorization must be submitted within 24 h
 const BUNDLE_PICKUP_TTL = 24 * 60 * 60;
 
 async function issuerKeys() {
@@ -219,17 +215,6 @@ export interface IssuanceResult {
   superseded?: SupersedeResult;
 }
 
-/**
- * The selectively disclosable claims, computed once at issuance from the application. The birth
- * date itself is never put in the credential; only the age predicates as of issuance are.
- */
-export function deriveDisclosableClaims(app: Pick<SyntheticApplicationT, "dateOfBirth" | "country">, at: number): SdClaims {
-  const [y, m, d] = app.dateOfBirth.split("-").map(Number) as [number, number, number];
-  const now = new Date(at * 1000);
-  let age = now.getUTCFullYear() - y;
-  if (now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d)) age--;
-  return { ageOver18: age >= 18, ageOver21: age >= 21, countryOfResidence: app.country };
-}
 
 export async function approveRequest(issuer: Session, requestId: string): Promise<IssuanceResult> {
   const d = db();
@@ -257,61 +242,20 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     // Recovery: shut down the lost wallet's credentials first; if that fails, nothing new is issued.
     const superseded = claimed.recovery_of ? await supersedeCredentials(issuer.address, claimed.recovery_of, requestId, deployment) : undefined;
 
-    const holderAddress = getAddress(claimed.holder_address);
-    const holderDid = deriveHolderDid(deployment.chainId, holderAddress);
-    const credentialId = `urn:uuid:${randomUUID()}`;
-    const validFrom = now;
-    const validUntil = now + credentialLifetimeSeconds();
-
-    // 1. Minimal VC with selectively disclosable claims derived from the (synthetic) application,
-    //    signed with the credential key. Only digests go into the signed payload.
     if (!claimed.synthetic_json) throw new ApiError(409, "APPLICATION_ERASED", "the application data is no longer available");
-    const { disclosures, sd } = createDisclosures(deriveDisclosableClaims(JSON.parse(claimed.synthetic_json) as SyntheticApplicationT, now));
-    const vc = buildIdentityCredential({
-      credentialId,
-      issuerDid: keys.did,
-      holderDid,
-      validFrom,
-      validUntil,
-      chainId: deployment.chainId,
-      registry: deployment.registry,
-      sd,
-    });
-    const credentialJwt = await signCredentialJwt(vc, keys.secrets.credentialPrivateJwk, keys.kid);
-
-    // 2. Commitment over the exact token bytes with a fresh 32-byte salt.
-    const salt = randomSalt();
-    const commitment = commitmentFor(credentialJwt, salt);
-
-    // 3. EIP-712 registration authorization, signed with the separate EVM attestation key.
-    const authorization: RegistrationAuthorization = {
-      commitment,
-      holder: holderAddress,
-      issuer: issuerAddress,
-      schemaId: SCHEMA_ID,
-      validFrom,
-      expiresAt: validUntil,
+    const holderAddress = getAddress(claimed.holder_address);
+    const credentialId = `urn:uuid:${randomUUID()}`;
+    const { bundle, holderDid, validFrom, validUntil } = await issueCredential({
+      keys: { did: keys.did, kid: keys.kid, credentialPrivateJwk: keys.secrets.credentialPrivateJwk, attestationSigner: keys.evmWallet },
+      holderAddress,
+      application: JSON.parse(claimed.synthetic_json) as SyntheticApplicationT,
+      deployment,
       issuerEpoch: Number(epoch),
-      deadline: Math.min(now + REGISTRATION_WINDOW, validUntil - 1),
-      deploymentId: deployment.deploymentId,
-    };
-    const authorizationSignature = await keys.evmWallet.signTypedData(
-      registryDomain(deployment.chainId, deployment.registry),
-      REGISTRATION_TYPES,
-      authorization,
-    );
-
-    const bundle: HolderBundle = HolderBundleV2.parse({
-      version: HOLDER_BUNDLE_VERSION,
-      credentialJwt,
-      disclosures,
-      salt,
-      commitment,
-      authorization,
-      authorizationSignature,
-      deployment: { chainId: deployment.chainId, registry: deployment.registry },
-      issuedAt: new Date(now * 1000).toISOString(),
+      now,
+      lifetimeSeconds: credentialLifetimeSeconds(),
+      credentialId,
     });
+    const { commitment } = bundle;
 
     // 4. Persist the issuance log (public values only), erase the synthetic application,
     //    and stage the private bundle for one-time pickup by the holder.

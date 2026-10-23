@@ -35,6 +35,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Browser UI test
         run: npm run test:ui
+      - name: Showcase site (build, then drive the in-browser playground in Chromium)
+        run: npm run test:site
       - if: always()
         uses: actions/upload-artifact@v4
         with:

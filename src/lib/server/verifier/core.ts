@@ -1,5 +1,5 @@
 import "server-only";
-import { TypedDataEncoder, verifyTypedData } from "ethers";
+import { TypedDataEncoder, verifyTypedData, type Provider } from "ethers";
 import { ACTION_POLICIES, CREDENTIAL_TYPE, SCHEMA_ID, type VerifierAction } from "../../shared/constants";
 import { commitmentFor } from "../../shared/commitment";
 import { fromUtcSeconds } from "../../shared/credential-profile";
@@ -41,6 +41,8 @@ export interface CoreDeps {
   deployment: Deployment;
   issuers: TrustedIssuerT[];
   now: number;
+  /** Chain access for the registry read and EIP-1271 checks. Default: the server's RPC_URL provider. */
+  provider?: Provider;
 }
 
 export interface CoreResult {
@@ -105,7 +107,7 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
   }
   if (recovered && sameAddress(recovered, proof.holder)) {
     checks.push({ id: "walletControl", status: "pass" });
-  } else if (await isValidContractSignature(proof.holder, TypedDataEncoder.hash(domain, PRESENTATION_TYPES, proofMessage), proof.signature)) {
+  } else if (await isValidContractSignature(proof.holder, TypedDataEncoder.hash(domain, PRESENTATION_TYPES, proofMessage), proof.signature, deps.provider)) {
     checks.push({ id: "walletControl", status: "pass", detail: "EIP-1271 contract wallet" });
   } else if (!recovered) {
     return fail({ id: "walletControl", status: "fail", code: "PROOF_SIGNATURE_INVALID", detail: "presentation proof signature is malformed or not accepted by the holder contract" });
@@ -161,7 +163,7 @@ export async function verifyPresentationCore(ctx: PresentationContext, sub: Pres
   // 10. Live registry state, matched field-by-field against the verified credential.
   let registryStatus: string;
   try {
-    const rec = await readRecord(recomputed, deployment, { holder: proof.holder, schemaId: SCHEMA_ID });
+    const rec = await readRecord(recomputed, deployment, { holder: proof.holder, schemaId: SCHEMA_ID }, deps.provider);
     registryStatus = rec.exists ? rec.status : "NotRegistered";
     const problems: string[] = [];
     if (!rec.exists) problems.push("no registry record for this commitment");

@@ -1,5 +1,5 @@
 import "server-only";
-import { Contract } from "ethers";
+import { Contract, type Provider } from "ethers";
 import { provider } from "../chain";
 
 /**
@@ -13,11 +13,11 @@ import { provider } from "../chain";
 const EIP1271_ABI = ["function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"];
 const EIP1271_MAGIC = "0x1626ba7e";
 
-export async function isValidContractSignature(address: string, hash: string, signature: string): Promise<boolean> {
+export async function isValidContractSignature(address: string, hash: string, signature: string, p: Provider = provider()): Promise<boolean> {
   try {
-    const code = await provider().getCode(address);
+    const code = await p.getCode(address);
     if (code === "0x") return false;
-    const result = (await new Contract(address, EIP1271_ABI, provider()).getFunction("isValidSignature")(hash, signature)) as string;
+    const result = (await new Contract(address, EIP1271_ABI, p).getFunction("isValidSignature")(hash, signature)) as string;
     return result.toLowerCase() === EIP1271_MAGIC;
   } catch {
     return false;

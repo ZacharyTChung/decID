@@ -1,0 +1,1888 @@
+{
+  "generatedAt": "2026-10-23T06:30:51.813Z",
+  "commit": "c4465b6",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux 6.18.44-fc-v153",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz × 4"
+  },
+  "coverage": [
+    {
+      "file": "contracts/testing/SimpleSmartWallet.sol",
+      "line": "100.00",
+      "statement": "100.00"
+    },
+    {
+      "file": "contracts/CredentialRegistry.sol",
+      "line": "100.00",
+      "statement": "100.00"
+    },
+    {
+      "file": "contracts/DemoGate.sol",
+      "line": "100.00",
+      "statement": "100.00"
+    }
+  ],
+  "accessibility": [
+    {
+      "state": "holder (no wallet)",
+      "violations": 0,
+      "rulesPassed": 21
+    },
+    {
+      "state": "holder (signed in, request pending)",
+      "violations": 0,
+      "rulesPassed": 23
+    },
+    {
+      "state": "issuer (credential issued)",
+      "violations": 0,
+      "rulesPassed": 22
+    },
+    {
+      "state": "holder (credential, technical details open)",
+      "violations": 0,
+      "rulesPassed": 25
+    },
+    {
+      "state": "verifier (verified result)",
+      "violations": 0,
+      "rulesPassed": 28
+    },
+    {
+      "state": "verifier (18+, selective disclosure)",
+      "violations": 0,
+      "rulesPassed": 28
+    },
+    {
+      "state": "holder (revoked, gate refused)",
+      "violations": 0,
+      "rulesPassed": 25
+    },
+    {
+      "state": "home",
+      "violations": 0,
+      "rulesPassed": 20
+    }
+  ],
+  "screenshots": [
+    "00-no-wallet.png",
+    "01-issuer-issued.png",
+    "02-holder-valid.png",
+    "03-verifier-pass.png",
+    "03b-verifier-age.png",
+    "04-verifier-revoked.png",
+    "05-holder-revoked.png"
+  ],
+  "redteam": [
+    {
+      "id": "A1",
+      "category": "Credential forgery",
+      "attack": "Thief edits the subject DID inside a real credential (signature kept)",
+      "expected": "BAD_SIGNATURE",
+      "observed": "BAD_SIGNATURE",
+      "held": true
+    },
+    {
+      "id": "A2",
+      "category": "Credential forgery",
+      "attack": "Self-issued credential from the attacker's own did:key (perfect format)",
+      "expected": "ISSUER_NOT_TRUSTED",
+      "observed": "ISSUER_NOT_TRUSTED",
+      "held": true
+    },
+    {
+      "id": "A3",
+      "category": "Credential forgery",
+      "attack": "Unsigned token (alg \"none\")",
+      "expected": "UNSIGNED_TOKEN",
+      "observed": "UNSIGNED_TOKEN",
+      "held": true
+    },
+    {
+      "id": "A4",
+      "category": "Credential forgery",
+      "attack": "Algorithm confusion: HS256 keyed with the issuer's PUBLIC key",
+      "expected": "ALG_NOT_ALLOWED",
+      "observed": "ALG_NOT_ALLOWED",
+      "held": true
+    },
+    {
+      "id": "A5",
+      "category": "Credential forgery",
+      "attack": "Embedded attacker key in the header (jwk) with the trusted kid",
+      "expected": "FORBIDDEN_HEADER",
+      "observed": "FORBIDDEN_HEADER",
+      "held": true
+    },
+    {
+      "id": "A6",
+      "category": "Credential forgery",
+      "attack": "Trusted issuer kid, but signed with the attacker's key",
+      "expected": "BAD_SIGNATURE",
+      "observed": "BAD_SIGNATURE",
+      "held": true
+    },
+    {
+      "id": "A7",
+      "category": "Credential forgery",
+      "attack": "Re-serialized payload (same claims, different JSON bytes) with the original signature",
+      "expected": "BAD_SIGNATURE",
+      "observed": "BAD_SIGNATURE",
+      "held": true
+    },
+    {
+      "id": "A8",
+      "category": "Credential forgery",
+      "attack": "Deprecated alg identifier \"EdDSA\" (valid signature by attacker)",
+      "expected": "ALG_NOT_ALLOWED",
+      "observed": "ALG_NOT_ALLOWED",
+      "held": true
+    },
+    {
+      "id": "A9",
+      "category": "Credential forgery",
+      "attack": "Oversized token (12 KB) to stress the parser",
+      "expected": "HTTP 400 before any parsing",
+      "observed": "HTTP 400 VALIDATION_FAILED",
+      "held": true
+    },
+    {
+      "id": "B1",
+      "category": "Impersonation & replay",
+      "attack": "Thief presents the holder's stolen bundle, signing as themselves",
+      "expected": "SUBJECT_NOT_PRESENTER",
+      "observed": "SUBJECT_NOT_PRESENTER",
+      "held": true
+    },
+    {
+      "id": "B2",
+      "category": "Impersonation & replay",
+      "attack": "Thief claims to BE the holder's wallet but signs with their own key",
+      "expected": "PROOF_SIGNER_MISMATCH",
+      "observed": "PROOF_SIGNER_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "B3",
+      "category": "Impersonation & replay",
+      "attack": "Replay of a captured, valid presentation",
+      "expected": "CHALLENGE_REUSED",
+      "observed": "CHALLENGE_REUSED",
+      "held": true
+    },
+    {
+      "id": "B4",
+      "category": "Impersonation & replay",
+      "attack": "Holder's proof made for a different verifier (audience) relayed here",
+      "expected": "PROOF_SIGNER_MISMATCH",
+      "observed": "PROOF_SIGNER_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "B5",
+      "category": "Impersonation & replay",
+      "attack": "Proof that claims a validity far beyond the challenge expiry",
+      "expected": "PROOF_EXPIRY_INVALID",
+      "observed": "PROOF_EXPIRY_INVALID",
+      "held": true
+    },
+    {
+      "id": "B6",
+      "category": "Impersonation & replay",
+      "attack": "Race: the same valid submission fired 8 times concurrently",
+      "expected": "exactly 1 accepted",
+      "observed": "1 accepted, 7 CHALLENGE_REUSED",
+      "held": true
+    },
+    {
+      "id": "B7",
+      "category": "Impersonation & replay",
+      "attack": "Guessed challenge id",
+      "expected": "CHALLENGE_UNKNOWN",
+      "observed": "CHALLENGE_UNKNOWN",
+      "held": true
+    },
+    {
+      "id": "B8",
+      "category": "Impersonation & replay",
+      "attack": "SIWE sign-in replay with a captured message + signature",
+      "expected": "NONCE_INVALID",
+      "observed": "HTTP 401 NONCE_INVALID",
+      "held": true
+    },
+    {
+      "id": "B9",
+      "category": "Impersonation & replay",
+      "attack": "SIWE role escalation: holder edits /roles/holder → /roles/issuer before signing",
+      "expected": "HTTP 401",
+      "observed": "HTTP 401 SIWE_MESSAGE_ALTERED",
+      "held": true
+    },
+    {
+      "id": "C1",
+      "category": "Commitment, registry & chain",
+      "attack": "Real credential with a guessed salt",
+      "expected": "COMMITMENT_MISMATCH",
+      "observed": "COMMITMENT_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "C2",
+      "category": "Commitment, registry & chain",
+      "attack": "Commitment substitution: A's token with another credential's (B's) commitment",
+      "expected": "COMMITMENT_MISMATCH",
+      "observed": "COMMITMENT_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "C3",
+      "category": "Commitment, registry & chain",
+      "attack": "Valid, correctly signed credential that was never registered on-chain",
+      "expected": "NOT_REGISTERED",
+      "observed": "NOT_REGISTERED",
+      "held": true
+    },
+    {
+      "id": "C4",
+      "category": "Commitment, registry & chain",
+      "attack": "Front-running: thief submits holder B's registration transaction",
+      "expected": "revert SenderNotHolder",
+      "observed": "SenderNotHolder",
+      "held": true
+    },
+    {
+      "id": "C5",
+      "category": "Commitment, registry & chain",
+      "attack": "Thief rewrites B's authorization to name themselves as holder",
+      "expected": "revert SignerNotIssuer",
+      "observed": "SignerNotIssuer",
+      "held": true
+    },
+    {
+      "id": "C6",
+      "category": "Commitment, registry & chain",
+      "attack": "Holder re-registers an already registered commitment",
+      "expected": "revert AlreadyRegistered",
+      "observed": "AlreadyRegistered",
+      "held": true
+    },
+    {
+      "id": "C7",
+      "category": "Commitment, registry & chain",
+      "attack": "Thief calls the gated action with the holder's (public) commitment",
+      "expected": "revert AccessDenied",
+      "observed": "AccessDenied",
+      "held": true
+    },
+    {
+      "id": "C8",
+      "category": "Commitment, registry & chain",
+      "attack": "Attacker deploys their OWN registry, makes themselves issuer, registers a self-issued credential",
+      "expected": "ISSUER_NOT_TRUSTED (rogue registry never consulted)",
+      "observed": "ISSUER_NOT_TRUSTED",
+      "held": true
+    },
+    {
+      "id": "C9",
+      "category": "Commitment, registry & chain",
+      "attack": "Holder's proof bound to another deployment (rogue registry address in the EIP-712 domain)",
+      "expected": "PROOF_SIGNER_MISMATCH",
+      "observed": "PROOF_SIGNER_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "D1",
+      "category": "API & auth abuse",
+      "attack": "Approve a request with no session",
+      "expected": "HTTP 401",
+      "observed": "HTTP 401",
+      "held": true
+    },
+    {
+      "id": "D2",
+      "category": "API & auth abuse",
+      "attack": "Holder session calls the issuer approval and revocation endpoints",
+      "expected": "HTTP 403",
+      "observed": "approve HTTP 403, revoke HTTP 403",
+      "held": true
+    },
+    {
+      "id": "D3",
+      "category": "API & auth abuse",
+      "attack": "Non-operator wallet asks for the issuer role",
+      "expected": "HTTP 403 NOT_ISSUER_OPERATOR",
+      "observed": "HTTP 403 NOT_ISSUER_OPERATOR",
+      "held": true
+    },
+    {
+      "id": "D4",
+      "category": "API & auth abuse",
+      "attack": "Cross-site request (CSRF) carrying the holder's cookie from evil.example",
+      "expected": "HTTP 403 BAD_ORIGIN",
+      "observed": "HTTP 403 BAD_ORIGIN",
+      "held": true
+    },
+    {
+      "id": "D5",
+      "category": "API & auth abuse",
+      "attack": "Mass assignment: request smuggles holderAddress=victim",
+      "expected": "HTTP 400 VALIDATION_FAILED",
+      "observed": "HTTP 400 VALIDATION_FAILED",
+      "held": true
+    },
+    {
+      "id": "D6",
+      "category": "API & auth abuse",
+      "attack": "Real-looking document number (not SYN-); is it echoed back?",
+      "expected": "HTTP 400, value not echoed",
+      "observed": "HTTP 400, not echoed",
+      "held": true
+    },
+    {
+      "id": "D7",
+      "category": "API & auth abuse",
+      "attack": "Another holder tries to pick up holder C's issued bundle",
+      "expected": "HTTP 404 (then the owner still gets it)",
+      "observed": "thief HTTP 404, owner HTTP 200",
+      "held": true
+    },
+    {
+      "id": "D8",
+      "category": "API & auth abuse",
+      "attack": "Oversized request body (40 KB)",
+      "expected": "HTTP 413",
+      "observed": "HTTP 413 BODY_TOO_LARGE",
+      "held": true
+    },
+    {
+      "id": "D9",
+      "category": "API & auth abuse",
+      "attack": "Flood: 40 sign-in challenges per minute from one client (others unaffected)",
+      "expected": "HTTP 429 for the flooder only",
+      "observed": "10/40 throttled; bystander HTTP 200",
+      "held": true
+    },
+    {
+      "id": "D10",
+      "category": "API & auth abuse",
+      "attack": "Recovery hijack: thief files a recovery request naming the victim's wallet",
+      "expected": "request only queued; victim stays valid until an issuer re-verifies (accepted risk)",
+      "observed": "queued with recovery warning=true; victim still verified=true; rejected by issuer",
+      "held": true
+    },
+    {
+      "id": "S0",
+      "category": "Selective disclosure",
+      "attack": "Control: adult holder discloses ageOver18 to the 18+ area",
+      "expected": "VERIFIED with exactly { ageOver18: true }",
+      "observed": "VERIFIED {\"ageOver18\":true}",
+      "held": true
+    },
+    {
+      "id": "S1",
+      "category": "Selective disclosure",
+      "attack": "Adult holder withholds the requested ageOver18 claim",
+      "expected": "CLAIM_NOT_DISCLOSED",
+      "observed": "CLAIM_NOT_DISCLOSED",
+      "held": true
+    },
+    {
+      "id": "S2",
+      "category": "Selective disclosure",
+      "attack": "Under-18 holder honestly discloses ageOver18=false",
+      "expected": "POLICY_NOT_SATISFIED",
+      "observed": "POLICY_NOT_SATISFIED",
+      "held": true
+    },
+    {
+      "id": "S3",
+      "category": "Selective disclosure",
+      "attack": "Under-18 holder flips their disclosure to true (same salt, signs it)",
+      "expected": "DISCLOSURE_NOT_REFERENCED",
+      "observed": "DISCLOSURE_NOT_REFERENCED",
+      "held": true
+    },
+    {
+      "id": "S4",
+      "category": "Selective disclosure",
+      "attack": "Under-18 holder borrows the adult's genuine ageOver18=true disclosure",
+      "expected": "DISCLOSURE_NOT_REFERENCED",
+      "observed": "DISCLOSURE_NOT_REFERENCED",
+      "held": true
+    },
+    {
+      "id": "S5",
+      "category": "Selective disclosure",
+      "attack": "Over-disclosure: country disclosed to an action that requests nothing",
+      "expected": "UNREQUESTED_DISCLOSURE",
+      "observed": "UNREQUESTED_DISCLOSURE",
+      "held": true
+    },
+    {
+      "id": "S6",
+      "category": "Selective disclosure",
+      "attack": "Relay strips the disclosure the holder signed for (to make the holder fail)",
+      "expected": "PROOF_SIGNER_MISMATCH",
+      "observed": "PROOF_SIGNER_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "S7",
+      "category": "Selective disclosure",
+      "attack": "Relay appends a disclosure the holder did not consent to (country)",
+      "expected": "PROOF_SIGNER_MISMATCH",
+      "observed": "PROOF_SIGNER_MISMATCH",
+      "held": true
+    },
+    {
+      "id": "S8",
+      "category": "Selective disclosure",
+      "attack": "The same disclosure presented twice",
+      "expected": "DISCLOSURE_DUPLICATE",
+      "observed": "DISCLOSURE_DUPLICATE",
+      "held": true
+    },
+    {
+      "id": "S9",
+      "category": "Selective disclosure",
+      "attack": "Inspect the signed credential for the hidden claims (plaintext or guessable digests)",
+      "expected": "only salted digests; same count for every holder",
+      "observed": "no plaintext, 8 vs 8 digests",
+      "held": true
+    },
+    {
+      "id": "E1",
+      "category": "Privacy probes",
+      "attack": "Look for issuer secrets in the public config endpoint and page HTML",
+      "expected": "no secret material",
+      "observed": "none found",
+      "held": true
+    },
+    {
+      "id": "E2",
+      "category": "Privacy probes",
+      "attack": "Mine the verifier activity log for holder addresses or commitments",
+      "expected": "only reference, action, time, outcome",
+      "observed": "no identifiers",
+      "held": true
+    },
+    {
+      "id": "E3",
+      "category": "Privacy probes",
+      "attack": "Inspect a successful verification response for application data",
+      "expected": "only identityVerified + DIDs + dates",
+      "observed": "verified=true; 0 private value(s) in response",
+      "held": true
+    },
+    {
+      "id": "E4",
+      "category": "Privacy probes",
+      "attack": "Check the page CSP an XSS payload would face",
+      "expected": "per-request nonce, no 'unsafe-inline'",
+      "observed": "fresh nonce per response, no unsafe-inline",
+      "held": true
+    },
+    {
+      "id": "E5",
+      "category": "Privacy probes",
+      "attack": "Malformed JSON to provoke a stack trace",
+      "expected": "stable error code, no internals",
+      "observed": "HTTP 400 INVALID_JSON",
+      "held": true
+    },
+    {
+      "id": "E6",
+      "category": "Privacy probes",
+      "attack": "Scan every transaction and event on the chain for identity data, tokens and salts",
+      "expected": "nothing private on-chain",
+      "observed": "10 blocks scanned; 0 private value(s) found",
+      "held": true
+    }
+  ],
+  "multiInstance": [
+    {
+      "name": "a session created on one instance is valid on the other",
+      "ok": true
+    },
+    {
+      "name": "60/60 presentations verify when challenge and submission hit different instances",
+      "ok": true
+    },
+    {
+      "name": "4 concurrent revocations on one instance all succeed",
+      "ok": true
+    },
+    {
+      "name": "8 concurrent revocations split across both instances all succeed",
+      "ok": true
+    },
+    {
+      "name": "...and all 8 are Revoked on-chain",
+      "ok": true
+    },
+    {
+      "name": "the shared audit chain is intact",
+      "ok": true
+    }
+  ],
+  "bench": {
+    "environment": "Intel(R) Xeon(R) Processor @ 2.80GHz × 4, Node v22.22.0, linux",
+    "latency": [
+      {
+        "Operation": "Submit synthetic request",
+        "p50": "4.9",
+        "p95": "13.3",
+        "max": "13.3",
+        "n": "12"
+      },
+      {
+        "Operation": "Approve (sign VC + EIP-712 authorization)",
+        "p50": "28.8",
+        "p95": "101.3",
+        "max": "101.3",
+        "n": "12"
+      },
+      {
+        "Operation": "One-time bundle pickup",
+        "p50": "4.9",
+        "p95": "9.3",
+        "max": "9.3",
+        "n": "12"
+      },
+      {
+        "Operation": "Revoke (send + mine transaction, automine)",
+        "p50": "61.9",
+        "p95": "–",
+        "max": "–",
+        "n": "1"
+      },
+      {
+        "Operation": "Audit chain verification (13 entries)",
+        "p50": "8.3",
+        "p95": "–",
+        "max": "–",
+        "n": "1"
+      }
+    ],
+    "load": [
+      {
+        "Concurrency": "1",
+        "n": "240",
+        "challenge p50": "4.4",
+        "present p50": "22.0",
+        "present p95": "30.4",
+        "present p99": "38.0",
+        "verifications/s": "33.4"
+      },
+      {
+        "Concurrency": "8",
+        "n": "240",
+        "challenge p50": "18.3",
+        "present p50": "97.2",
+        "present p95": "141.6",
+        "present p99": "186.6",
+        "verifications/s": "63.7"
+      },
+      {
+        "Concurrency": "32",
+        "n": "240",
+        "challenge p50": "64.6",
+        "present p50": "351.4",
+        "present p95": "434.6",
+        "present p99": "1155.1",
+        "verifications/s": "71.9"
+      }
+    ],
+    "gas": [
+      {
+        "Transaction": "`register`",
+        "Paid by": "holder",
+        "Gas": "140008"
+      },
+      {
+        "Transaction": "`DemoGate.checkIn` (first)",
+        "Paid by": "holder",
+        "Gas": "69387"
+      },
+      {
+        "Transaction": "`revoke`",
+        "Paid by": "issuer",
+        "Gas": "54825"
+      }
+    ]
+  },
+  "suites": [
+    {
+      "id": "contracts",
+      "name": "Contract tests (Hardhat + Mocha)",
+      "command": "npm run test:contracts",
+      "ok": true,
+      "seconds": 4.5,
+      "groups": [
+        {
+          "name": "CredentialRegistry › constants",
+          "tests": [
+            {
+              "name": "exposes the same commitment domain separator as the off-chain code",
+              "ok": true
+            },
+            {
+              "name": "computes the same EIP-712 struct hash and domain as ethers",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › admin and issuer management",
+          "tests": [
+            {
+              "name": "rejects issuer management and admin revocation by non-admins",
+              "ok": true
+            },
+            {
+              "name": "rejects zero/duplicate issuer additions and removing an inactive issuer",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › registration",
+          "tests": [
+            {
+              "name": "registers an authorized credential, emits a minimal event and gates access",
+              "ok": true
+            },
+            {
+              "name": "rejects registration submitted by anyone other than the authorized holder",
+              "ok": true
+            },
+            {
+              "name": "rejects authorizations from an address that was never authorized as issuer",
+              "ok": true
+            },
+            {
+              "name": "rejects a trusted issuer address signed by a different key",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed commitment was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed holder was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed issuer was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed schemaId was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed validFrom was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed expiresAt was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization whose signed deadline was altered",
+              "ok": true
+            },
+            {
+              "name": "rejects signatures over the wrong EIP-712 chain id or registry address",
+              "ok": true
+            },
+            {
+              "name": "rejects malformed and malleable (high-s) signatures via OpenZeppelin ECDSA",
+              "ok": true
+            },
+            {
+              "name": "enforces the submission deadline, inclusive of the deadline second",
+              "ok": true
+            },
+            {
+              "name": "rejects replay: a commitment can be registered only once",
+              "ok": true
+            },
+            {
+              "name": "rejects invalid validity windows, already-expired credentials and zero values",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › validity and gate enforcement",
+          "tests": [
+            {
+              "name": "treats a nonexistent record as invalid everywhere",
+              "ok": true
+            },
+            {
+              "name": "rejects a different wallet using someone else's valid credential",
+              "ok": true
+            },
+            {
+              "name": "rejects a valid credential of the wrong schema at the gate",
+              "ok": true
+            },
+            {
+              "name": "enforces validFrom and expiresAt at the exact boundaries",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › revocation",
+          "tests": [
+            {
+              "name": "lets the issuing issuer revoke, after which status and the gate fail",
+              "ok": true
+            },
+            {
+              "name": "rejects revocation by the holder, another trusted issuer, or for unknown records",
+              "ok": true
+            },
+            {
+              "name": "supports an explicit, evented admin override revocation",
+              "ok": true
+            },
+            {
+              "name": "keeps a revoked credential unusable: re-registration is rejected",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › issuer removal policy",
+          "tests": [
+            {
+              "name": "invalidates credentials on removal and does not restore them when the issuer is re-added",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › defensive input checks",
+          "tests": [
+            {
+              "name": "rejects a zero admin, zero holder/issuer, and admin revocation of unknown records",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › authorization cancellation (account recovery)",
+          "tests": [
+            {
+              "name": "lets the issuer withdraw an unregistered authorization, permanently",
+              "ok": true
+            },
+            {
+              "name": "is scoped to the cancelling issuer and refused for non-issuers and registered records",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › smart-account holders (EIP-1271 wallet as msg.sender)",
+          "tests": [
+            {
+              "name": "registers and uses the gate through a contract wallet; the wallet validates its owner's signatures",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › deployment binding",
+          "tests": [
+            {
+              "name": "rejects a zero deploymentId at construction",
+              "ok": true
+            },
+            {
+              "name": "rejects an authorization naming another deploymentId",
+              "ok": true
+            },
+            {
+              "name": "blocks replay into a fresh deployment at the same address (local chain restart)",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistry › privacy of on-chain data",
+          "tests": [
+            {
+              "name": "never places the credential token or salt in calldata or events",
+              "ok": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fuzz",
+      "name": "Solidity fuzz and invariant tests",
+      "command": "npm run test:fuzz",
+      "ok": true,
+      "seconds": 3.2,
+      "groups": [
+        {
+          "name": "CredentialRegistryFuzzTest",
+          "tests": [
+            {
+              "name": "testFuzz_ValidityWindowIsHalfOpen(uint32,uint32,uint64) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_ValidityIsBoundToHolderAndSchema(bytes32,address,address,bytes32) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_RevocationIsPermanent(bytes32,uint64) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_OnlyTheIssuerRevokes(bytes32,address) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_OnlyTheIssuerKeyAuthorizes(uint256,bytes32) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_MissingRecordIsNeverValid(bytes32,address,bytes32) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_CommitmentIsSingleUse(bytes32,address,address) (runs: 1000)",
+              "ok": true
+            },
+            {
+              "name": "testFuzz_CancellationIsScopedToTheCancellingIssuer(bytes32,address) (runs: 1000)",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "CredentialRegistryInvariantTest",
+          "tests": [
+            {
+              "name": "invariant_ValidImpliesAllConditions() (runs: 128)",
+              "ok": true
+            },
+            {
+              "name": "invariant_RevokedIsNeverValid() (runs: 128)",
+              "ok": true
+            },
+            {
+              "name": "invariant_RemovalIsNeverUndone() (runs: 128)",
+              "ok": true
+            },
+            {
+              "name": "invariant_NoReRegistration() (runs: 128)",
+              "ok": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "app",
+      "name": "App tests (Vitest: credentials, API, interop, W3C conformance, resilience)",
+      "command": "npm run test:app",
+      "ok": true,
+      "seconds": 20,
+      "groups": [
+        {
+          "name": "test/unit/api-flow.test.ts",
+          "tests": [
+            {
+              "name": "authentication and authorization › rejects unauthenticated access to holder and issuer routes",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › rejects cross-origin state-changing requests and non-JSON bodies",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › signs in with SIWE, and a nonce cannot be reused",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › rejects a signed SIWE message that differs from the one the server issued",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › returns stable 4xx codes for a bad address checksum and ignores malformed cookies",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › rejects a SIWE signature from a different wallet and the wrong chain",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "authentication and authorization › refuses the issuer role to wallets not on the operator allowlist (privilege escalation)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › lets the holder submit a synthetic request bound to the session wallet",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › lets only an issuer operator see and approve requests",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › erases the synthetic application once decided",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › does not let another holder pick up the bundle, and pickup is one-time",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › rejects presentation before on-chain registration",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuance lifecycle › registers on-chain only from the holder wallet",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › selective disclosure: the 18+ action requests ageOver18 and reveals nothing else",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › the bundle carries one disclosure per optional claim, and the token none of their values",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › verifies a valid presentation and discloses only the minimal claim",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › works without any issuer private key in the verifier's environment",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › rejects a replayed challenge",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › lets only one of many concurrent submissions consume a challenge",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › does not burn a challenge when the verifier is misconfigured",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › rejects an expired challenge",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › rejects proofs bound to the wrong audience, action, nonce or wallet",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › rejects a wrong salt or altered token bytes",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "presentation and verification › allows the gated action for the holder only",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "revocation › rejects revocation by a holder session",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "revocation › revokes via the issuer, after which verification and the gate fail",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "verifier activity log › reports outcomes with stable codes and nothing about the presenter",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "privacy regression check › keeps raw identity fields, tokens and salts out of the chain and verifier storage",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/bundle-crypto.test.ts",
+          "tests": [
+            {
+              "name": "encrypted holder bundle export (PBKDF2-SHA256 + AES-256-GCM) › round-trips with the right password and never contains plaintext",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "encrypted holder bundle export (PBKDF2-SHA256 + AES-256-GCM) › uses fresh randomness per export",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "encrypted holder bundle export (PBKDF2-SHA256 + AES-256-GCM) › rejects an incorrect password",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "encrypted holder bundle export (PBKDF2-SHA256 + AES-256-GCM) › rejects modified ciphertext, IV, KDF salt or iteration count",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "encrypted holder bundle export (PBKDF2-SHA256 + AES-256-GCM) › rejects short passwords and unknown file formats",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/commitment-did.test.ts",
+          "tests": [
+            {
+              "name": "credential commitment › matches the pinned deterministic test vector",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "credential commitment › changes with a different salt or any altered token byte",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "credential commitment › hashes exact token bytes and rejects anything that is not a compact JWS",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "credential commitment › requires exactly 32-byte salts and generates random ones",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "did:pkh holder identifiers › derives a checksummed eip155 did:pkh and maps it back to account and chain",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "did:pkh holder identifiers › rejects other methods, namespaces, bad checksums, DID URLs and malformed chains",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "did:key issuer identifiers (Digital Bazaar resolver) › round-trips a public JWK through did:key derivation and resolution",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "did:key issuer identifiers (Digital Bazaar resolver) › rejects malformed and unsupported did:key values",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/credential.test.ts",
+          "tests": [
+            {
+              "name": "vc+sd-jwt issuance › produces a minimal VC 2.0 payload with the VC-JOSE-COSE header",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › accepts a valid credential from a trusted issuer",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects tampered claims (payload changed after signing)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects malformed tokens",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects unsigned (alg none) and unsupported algorithms",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects wrong typ/cty and presenter-supplied keys in the header",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects a self-issued DID that is not in the trust policy",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects a token signed by another key but claiming the trusted issuer's kid",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects issuer DID / key binding mismatches in the trust policy",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects credentials whose issuer property differs from the signing key's DID",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects disagreement between JWT registered claims and VC properties",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects schema violations, including extra subject claims (minimal disclosure policy)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › enforces the validity window (not yet valid, expired, boundary)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects credentials bound to another chain or registry",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › rejects oversized tokens before parsing",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › key rotation (trust policy lifecycle) › keeps credentials issued before retirement valid, and rejects ones issued after",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › key rotation (trust policy lifecycle) › rejects everything signed by a compromised key, whatever its claimed issuance date",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › key rotation (trust policy lifecycle) › rejects credentials dated before the key was activated",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › key rotation (trust policy lifecycle) › trusts both the retired and the new key of one logical issuer",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "vc+sd-jwt verification › key rotation (trust policy lifecycle) › evaluates EVM attestation signers by the same lifecycle",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT disclosures (verified against the signed digests) › reveals exactly the presented claims",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT disclosures (verified against the signed digests) › rejects disclosures the issuer did not sign, duplicates, edits and malformed input",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT disclosures (verified against the signed digests) › refuses issuer-signed disclosures that would overwrite or invent claims",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT disclosures (verified against the signed digests) › rejects payloads that leak a disclosable claim in plaintext or change the digest layout",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/interop.test.ts",
+          "tests": [
+            {
+              "name": "SD-JWT: OpenWallet Foundation @sd-jwt/core › verifies the issuer signature and reconstructs exactly the presented claim",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT: OpenWallet Foundation @sd-jwt/core › reconstructs all optional claims from the full set of disclosures",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT: OpenWallet Foundation @sd-jwt/core › computes the same digests as decID for every disclosure",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-712, commitment and SIWE: viem › registration authorization recovers to the trusted attestation signer",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-712, commitment and SIWE: viem › presentation proof v2 recovers to the holder; sdHash is SHA-256 of the compact SD-JWT",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-712, commitment and SIWE: viem › commitment recomputes as keccak256(abi.encode(domain, salt, keccak256(token)))",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-712, commitment and SIWE: viem › the server's sign-in message is valid ERC-4361 for its domain and expiry only",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "JWS and did:key: independent of jose › Node's raw Ed25519 verifies the issuer-signed JWT with the pinned key",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "JWS and did:key: independent of jose › Python `cryptography` decodes did:key by hand and verifies the JWS (no JS crypto)",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/openapi.test.ts",
+          "tests": [
+            {
+              "name": "OpenAPI description matches the code › describes exactly the routes that exist",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "OpenAPI description matches the code › names every operation after its handler",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "OpenAPI description matches the code › docs/openapi.json is up to date (npm run openapi)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "real responses conform to the description › full lifecycle, success paths",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "real responses conform to the description › error paths",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "real responses conform to the description › exercised every operation",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/playground-world.test.ts",
+          "tests": [
+            {
+              "name": "in-page chain runs the real contracts › registers only from the holder wallet, with real gas",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "in-page chain runs the real contracts › verifies with the production verifier core, reading the registry through the in-page RPC",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "in-page chain runs the real contracts › selective disclosure: 18+ passes for the adult with only ageOver18, fails for the minor",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "in-page chain runs the real contracts › rejects the attacks the site lets you try",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "in-page chain runs the real contracts › gate, revocation and expiry behave as on the real chain",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/rate-limit.test.ts",
+          "tests": [
+            {
+              "name": "rate limiting › cannot be bypassed by rotating a spoofed X-Forwarded-For header",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "rate limiting › buckets per forwarded client only when a trusted proxy is configured",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/recovery.test.ts",
+          "tests": [
+            {
+              "name": "account recovery › rejects a recovery that names the requester's own wallet",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "account recovery › revokes the lost wallet's registered credential and cancels its unregistered one before issuing anew",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "account recovery › is idempotent: a second recovery of the same wallet finds nothing left to shut down",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › records every issuer action in a hash chain that verifies",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › never stores application data, tokens or salts",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › detects tampering › an edited entry",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › detects tampering › an edited entry whose hash was recomputed (breaks the next link)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › detects tampering › a deleted entry",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › detects tampering › reordered entries",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer audit log › detects tampering › but not truncation of the newest entries, which is why the head hash must be kept elsewhere",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/resilience.test.ts",
+          "tests": [
+            {
+              "name": "chain outage › verifier fails closed with RPC_UNAVAILABLE, after every offline check passed",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "chain outage › issuer approval fails with 503 and leaves the request pending (no half-issued credential)",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "chain outage › verification works again once the RPC is back",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/rotation.test.ts",
+          "tests": [
+            {
+              "name": "issuer key rotation › retiring both keys keeps earlier credentials valid and revocable",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer key rotation › a compromised credential key invalidates what it signed; issuance continues with the replacement",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer key rotation › refuses to issue with keys that are no longer active in the policy",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/sd-jwt.test.ts",
+          "tests": [
+            {
+              "name": "SD-JWT primitives › matches the RFC 9901 example disclosure digest",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT primitives › issues one disclosure per claim, fixed-size sorted digests with decoys, fresh salts",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT primitives › sdHash is SHA-256 of the exact compact presentation",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "SD-JWT primitives › selects exactly the requested disclosures and refuses unknown names",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer-derived claims › computes age predicates as of issuance, with birthdays handled exactly",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/smart-wallet.test.ts",
+          "tests": [
+            {
+              "name": "EIP-1271 smart-account holder › signs in only with a signature the wallet contract accepts",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-1271 smart-account holder › receives a credential for the contract's did:pkh, registers and checks in through the wallet",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "EIP-1271 smart-account holder › verifies a presentation via EIP-1271 and rejects one signed by another key",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/tx-lock.test.ts",
+          "tests": [
+            {
+              "name": "issuer transaction lease › never lets two holders run at once, even without the in-process queue",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer transaction lease › releases on failure, and a stale lease from a crashed process expires",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "issuer transaction lease › withIssuerTxLock combines the in-process queue with the lease",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        },
+        {
+          "name": "test/unit/w3c-conformance.test.ts",
+          "tests": [
+            {
+              "name": "W3C VC 2.0 conformance (official context and schema) › expands in JSON-LD safe mode: no undefined terms, nothing dropped",
+              "ok": true,
+              "skipped": false
+            },
+            {
+              "name": "W3C VC 2.0 conformance (official context and schema) › validates against the W3C VC 2.0 JSON Schema",
+              "ok": true,
+              "skipped": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo",
+      "name": "Headless lifecycle demo",
+      "command": "npm run demo",
+      "ok": true,
+      "seconds": 15.2,
+      "groups": [
+        {
+          "name": "Prepare local infrastructure",
+          "tests": [
+            {
+              "name": "Hardhat node on http://127.0.0.1:8546 (chain 31337)",
+              "ok": true
+            },
+            {
+              "name": "Issuer keys generated: did:key:z6MkhFaufWSh1K9TYapQ… / EVM 0x0EcDAA8d4Cb9de36b40927543FF65f494C1C145B",
+              "ok": true
+            },
+            {
+              "name": "Contracts deployed: registry 0x5FbDB2315678afecb367f032d93F642f64180aa3, gate 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+              "ok": true
+            },
+            {
+              "name": "App server on http://localhost:3100",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "1. Holder proves wallet control (SIWE) and submits a synthetic request",
+          "tests": [
+            {
+              "name": "holder 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC signed in",
+              "ok": true
+            },
+            {
+              "name": "synthetic verification request submitted",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "2. Issuer authorization is enforced server-side",
+          "tests": [
+            {
+              "name": "holder session cannot approve",
+              "ok": true
+            },
+            {
+              "name": "non-operator wallet cannot obtain the issuer role",
+              "ok": true
+            },
+            {
+              "name": "issuer operator 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 signed in",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "3. Issuer reviews and approves; backend signs VC, computes commitment, signs EIP-712 authorization",
+          "tests": [
+            {
+              "name": "request visible to the issuer",
+              "ok": true
+            },
+            {
+              "name": "request approved and credential issued",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "4. Holder picks up the private bundle (one-time) and makes an encrypted backup",
+          "tests": [
+            {
+              "name": "another wallet signs in as holder",
+              "ok": true
+            },
+            {
+              "name": "another holder cannot pick up this bundle",
+              "ok": true
+            },
+            {
+              "name": "holder received the bundle",
+              "ok": true
+            },
+            {
+              "name": "server no longer holds the bundle after pickup",
+              "ok": true
+            },
+            {
+              "name": "encrypted export round-trips",
+              "ok": true
+            },
+            {
+              "name": "wrong export password is rejected",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "5. Registration: only the holder can submit the issuer-authorized commitment",
+          "tests": [
+            {
+              "name": "intruder cannot register the holder's authorization",
+              "ok": true
+            },
+            {
+              "name": "registered on-chain in block 5",
+              "ok": true
+            },
+            {
+              "name": "registry reports the credential valid for this holder and schema",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "6. Presentation: fresh challenge, consented EIP-712 proof, full verification",
+          "tests": [
+            {
+              "name": "verifier accepted the presentation",
+              "ok": true
+            },
+            {
+              "name": "only the minimal claim is disclosed",
+              "ok": true
+            },
+            {
+              "name": "selective disclosure: the 18+ action receives ageOver18 = true and no other optional claim",
+              "ok": true
+            },
+            {
+              "name": "a different wallet presenting the same bundle is rejected",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "6b. Standalone verifier CLI (no issuer secrets, encrypted backup as input)",
+          "tests": [
+            {
+              "name": "npm run verify accepts the holder's encrypted backup",
+              "ok": true
+            },
+            {
+              "name": "the CLI verifies the 18+ action with only ageOver18 disclosed",
+              "ok": true
+            },
+            {
+              "name": "the CLI rejects a proof signed by a key that does not control the holder wallet",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "7. Gated on-chain action",
+          "tests": [
+            {
+              "name": "gate rejects a wallet that does not hold the credential",
+              "ok": true
+            },
+            {
+              "name": "holder performed the gated check-in",
+              "ok": true
+            },
+            {
+              "name": "gate recorded one check-in",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "8. Issuer revokes the credential",
+          "tests": [
+            {
+              "name": "revocation transaction 0xe22ad8001eb08f6a857963501704264a0305689dab7871e8ba5b75eb4fff8cee",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "9. After revocation, verification and the gated action fail",
+          "tests": [
+            {
+              "name": "fresh verification is rejected with registry status Revoked",
+              "ok": true
+            },
+            {
+              "name": "gated action is rejected",
+              "ok": true
+            },
+            {
+              "name": "the revoked commitment cannot be re-registered",
+              "ok": true
+            },
+            {
+              "name": "the standalone verifier also sees the revocation",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "9b. Issuer audit log is an intact hash chain covering this session's actions",
+          "tests": [
+            {
+              "name": "audit chain intact (2 entries, head 465cc886cbc58e7e…)",
+              "ok": true
+            },
+            {
+              "name": "issuance and revocation of this credential are both logged",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "name": "10. Privacy regression scan of every transaction and event on the demo chain",
+          "tests": [
+            {
+              "name": "no synthetic identity field or credential token in calldata or events",
+              "ok": true
+            },
+            {
+              "name": "commitment salt never appears on-chain",
+              "ok": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui",
+      "name": "Browser UI test (Playwright + axe)",
+      "command": "npm run test:ui",
+      "ok": true,
+      "seconds": 41.4,
+      "groups": [
+        {
+          "name": "Holder → issuer → verifier, in Chromium with an injected EIP-1193 wallet",
+          "tests": [
+            {
+              "name": "pages carry a per-request nonce CSP without 'unsafe-inline'",
+              "ok": true
+            },
+            {
+              "name": "an injected inline event handler is blocked by the CSP",
+              "ok": true
+            },
+            {
+              "name": "without a wallet the UI says so instead of simulating one",
+              "ok": true
+            },
+            {
+              "name": "holder connected, derived its did:pkh, signed in with SIWE and submitted a synthetic request",
+              "ok": true
+            },
+            {
+              "name": "issuer operator signed in and approved",
+              "ok": true
+            },
+            {
+              "name": "a non-operator wallet is refused the issuer role by the server",
+              "ok": true
+            },
+            {
+              "name": "holder received the bundle, registered it on-chain and used the gated action",
+              "ok": true
+            },
+            {
+              "name": "encrypted backup exported",
+              "ok": true
+            },
+            {
+              "name": "credential saved to the device vault; IndexedDB holds only the encrypted envelope",
+              "ok": true
+            },
+            {
+              "name": "verifier accepted the consented presentation",
+              "ok": true
+            },
+            {
+              "name": "18+ action: consent names only ageOver18, verifier shows ageOver18 = true and nothing else",
+              "ok": true
+            },
+            {
+              "name": "issuer revoked on-chain",
+              "ok": true
+            },
+            {
+              "name": "fresh verification fails with REVOKED",
+              "ok": true
+            },
+            {
+              "name": "after a reload the device vault unlocks only with the right passphrase",
+              "ok": true
+            },
+            {
+              "name": "after reload: wrong backup password rejected, import works, gate refuses the revoked credential",
+              "ok": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "redteam",
+      "name": "Red-team campaign",
+      "command": "npm run redteam",
+      "ok": true,
+      "seconds": 21.5,
+      "groups": []
+    },
+    {
+      "id": "multi",
+      "name": "Two app instances, one database and issuer key",
+      "command": "npm run test:multi-instance",
+      "ok": true,
+      "seconds": 19.5,
+      "groups": []
+    },
+    {
+      "id": "bench",
+      "name": "Benchmark (correctness-checked)",
+      "command": "npm run bench",
+      "ok": true,
+      "seconds": 37.8,
+      "groups": []
+    }
+  ]
+}

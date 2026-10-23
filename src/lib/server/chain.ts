@@ -1,9 +1,9 @@
 import "server-only";
-import { Contract, Interface, JsonRpcProvider, getAddress } from "ethers";
+import { Contract, Interface, JsonRpcProvider, getAddress, type Provider } from "ethers";
 import { z } from "zod";
 import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../../generated/contracts";
 import { appConfig, readJsonFile } from "./config";
-import { ApiError } from "./http";
+import { ApiError } from "./errors";
 import { SCHEMA_ID } from "../shared/constants";
 
 /**
@@ -53,8 +53,8 @@ export function provider(): JsonRpcProvider {
   return cached.provider;
 }
 
-export function registryContract(d: Deployment = loadDeployment()): Contract {
-  return new Contract(d.registry, CREDENTIAL_REGISTRY_ABI, provider());
+export function registryContract(d: Deployment = loadDeployment(), p: Provider = provider()): Contract {
+  return new Contract(d.registry, CREDENTIAL_REGISTRY_ABI, p);
 }
 
 export function gateContract(d: Deployment = loadDeployment()): Contract {
@@ -125,9 +125,14 @@ export interface OnChainRecord {
  * Reads the record and its status (and optionally `isCredentialValid` for a holder) in one
  * consistent block: one round trip for the block number, then one batched round trip.
  */
-export async function readRecord(commitment: string, d: Deployment = loadDeployment(), validFor?: { holder: string; schemaId: string }): Promise<OnChainRecord> {
-  const registry = registryContract(d);
-  const blockTag = await provider().getBlockNumber();
+export async function readRecord(
+  commitment: string,
+  d: Deployment = loadDeployment(),
+  validFor?: { holder: string; schemaId: string },
+  p: Provider = provider(),
+): Promise<OnChainRecord> {
+  const registry = registryContract(d, p);
+  const blockTag = await p.getBlockNumber();
   const [r, status, valid] = await Promise.all([
     registry.getFunction("getRecord")(commitment, { blockTag }),
     registry.getFunction("credentialStatus")(commitment, { blockTag }),

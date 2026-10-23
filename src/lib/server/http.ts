@@ -9,15 +9,9 @@ import { db, nowSeconds, purgeExpired } from "./db";
  * the Next.js server, the API tests and the headless demo.
  */
 
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { ApiError } from "./errors";
+
+export { ApiError };
 
 export function json(body: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);

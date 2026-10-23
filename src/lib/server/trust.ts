@@ -3,7 +3,7 @@ import { getAddress } from "ethers";
 import { z } from "zod";
 import { CREDENTIAL_TYPE, SCHEMA_ID } from "../shared/constants";
 import { appConfig, readJsonFile } from "./config";
-import { ApiError } from "./http";
+import { ApiError } from "./errors";
 import { resolveDidKeyAssertionKey, type Ed25519PublicJwk } from "./did/did-key";
 import { TrustFileSchema, validAt, type CredentialKeyT, type TrustedIssuerT } from "./trust-schema";
 

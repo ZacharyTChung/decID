@@ -91,6 +91,33 @@ npm run verify -- backup.json --json                   # full per-check result
 
 This runs the same checks as the verifier API (`src/lib/server/verifier/core.ts`) with public inputs only: trust policy, deployment record and RPC. Issuer secrets are removed from the environment first. A Hardhat dev key stands in for the holder's wallet (`--holder-index`). See [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md).
 
+## Showcase site and in-browser playground
+
+```bash
+npm run site:evidence   # ~4 min: runs every suite and records results in site/data/evidence.json
+npm run site            # builds site/dist/ (index.html, playground.js, screenshots)
+npm run test:site       # builds, then drives the playground in Chromium (22 checks, phone + dark mode)
+```
+
+The site shows three things:
+
+- **Verdict:** a readiness assessment by component.
+- **Evidence:** every result, by name, as recorded from the commands that produced it.
+- **Playground:** runs decID's own issuer (`issuer/issue.ts`, the same function the server's approval calls), holder (`preparePresentation`) and production verifier core in the browser. It uses the real `CredentialRegistry` and `DemoGate` bytecode on an in-page EVM (`site/src/in-page-chain.ts`, ethereumjs). The only substitution is the chain.
+
+`test/unit/playground-world.test.ts` runs the same engine in Node.
+
+### Real-world readiness, in short
+
+The protocol works and interoperates: independent libraries accept the credentials, and the defenses hold. The deployment is a prototype. Before real identities, it would need:
+
+- real identity proofing (the issuer is simulated);
+- HSM-held issuer keys;
+- an audited contract, and probably privacy-preserving status instead of a public per-credential record;
+- wallet-standard protocols (OpenID4VCI and OpenID4VP);
+- a database server for multi-host deployments;
+- a trust framework and a legal basis.
+
 ## Performance and gas
 
 ```bash

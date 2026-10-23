@@ -38,6 +38,7 @@
     "test/unit/**/*.ts",
     "test/types/**/*.d.ts",
     "scripts/**/*.ts",
+    "site/**/*.ts",
     "vitest.config.ts",
     ".next-demo/types/**/*.ts",
     ".next-demo/dev/types/**/*.ts",

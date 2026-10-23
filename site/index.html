@@ -1,0 +1,434 @@
+<title>decID Evaluation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="decID, a privacy-preserving credential prototype: an independent evaluation, a playground running the real code in your browser, and every test result.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: an inspection report. One reading column for verdict and evidence; the playground breaks
+   out to a three-pane bench (cast, verifier, activity). Security-print teal on a cool, tinted paper. */
+:root {
+  --paper: #f3f6f5;
+  --surface: #ffffff;
+  --sunk: #e9efed;
+  --ink: #11201d;
+  --muted: #566763;
+  --line: #d3dcd9;
+  --accent: #0a5c55;
+  --accent-ink: #ffffff;
+  --accent-soft: #d9ece8;
+  --ok: #19713f;
+  --ok-soft: #dcf1e3;
+  --bad: #b3261e;
+  --bad-soft: #fbe3e0;
+  --warn: #8a5a00;
+  --warn-soft: #faedcf;
+  --skip: #7d8b88;
+  --skip-soft: #e7ecea;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.6rem;
+  --step-3: clamp(2rem, 1.4rem + 2.6vw, 3.1rem);
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0c1413; --surface: #121c1b; --sunk: #0f1918; --ink: #e2ebe8; --muted: #93a6a1; --line: #243331;
+    --accent: #52c3b5; --accent-ink: #062320; --accent-soft: #143430;
+    --ok: #57c886; --ok-soft: #123020; --bad: #f2786a; --bad-soft: #3b1714; --warn: #e3ae45; --warn-soft: #33270c; --skip: #7f908c; --skip-soft: #1b2625;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0c1413; --surface: #121c1b; --sunk: #0f1918; --ink: #e2ebe8; --muted: #93a6a1; --line: #243331;
+  --accent: #52c3b5; --accent-ink: #062320; --accent-soft: #143430;
+  --ok: #57c886; --ok-soft: #123020; --bad: #f2786a; --bad-soft: #3b1714; --warn: #e3ae45; --warn-soft: #33270c; --skip: #7f908c; --skip-soft: #1b2625;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body.busy { cursor: progress; }
+.wrap { max-width: 1160px; margin: 0 auto; }
+.read { max-width: 72ch; }
+h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: var(--step-2); font-weight: 700; }
+h3 { font-size: var(--step-1); font-weight: 700; }
+h4 { font-size: var(--step-0); font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); }
+code, .mono, pre { font-family: var(--font-mono); font-size: 0.9em; }
+.small { font-size: var(--step--1); }
+.muted { color: var(--muted); }
+.eyebrow { font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- top bar */
+.top { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between; padding-block: 18px; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; letter-spacing: -0.01em; }
+.brand span { color: var(--accent); }
+.nav { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: var(--step--1); font-weight: 600; }
+.nav a { color: var(--ink); text-decoration: none; }
+.nav a:hover { color: var(--accent); }
+
+/* ---------- hero */
+.hero { display: grid; gap: 28px; padding-block: 40px 28px; }
+.hero h1 { font-size: var(--step-3); font-weight: 700; letter-spacing: -0.02em; max-width: 22ch; }
+.lede { font-size: var(--step-1); color: var(--muted); max-width: 60ch; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.stat-v { font-family: var(--font-display); font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+.stat-l { font-weight: 600; }
+.stat-n { font-size: var(--step--1); color: var(--muted); }
+.mrz { font-family: var(--font-mono); font-size: clamp(0.62rem, 0.45rem + 0.7vw, 0.95rem); letter-spacing: 0.14em; line-height: 1.5; color: var(--muted); background: var(--sunk); border-radius: 6px; padding: 10px 14px; white-space: pre; overflow-x: auto; margin: 0; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- sections */
+section { padding-block: 36px; border-top: 1px solid var(--line); scroll-margin-top: 12px; }
+.sec-head { display: grid; gap: 6px; margin-bottom: 20px; }
+
+/* ---------- verdict */
+.answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+.answer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 8px; align-content: start; }
+.answer h3 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 760px) { .answers { grid-template-columns: minmax(0, 1fr); } }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+table.matrix td, table.matrix th, table.data td, table.data th { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+table.matrix th, table.data th { font-size: var(--step--1); color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+table.matrix td:first-child { font-weight: 600; min-width: 11rem; }
+table.matrix td { font-size: 0.94rem; }
+table.matrix td:nth-child(2) { white-space: nowrap; }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.findings { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; counter-reset: f; }
+.findings li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.findings li > :first-child { grid-row: span 2; }
+.findings .how { font-size: var(--step--1); color: var(--muted); }
+
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip-ok { background: var(--ok-soft); color: var(--ok); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); }
+.chip-skip { background: var(--skip-soft); color: var(--skip); }
+.chip-accent { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- playground */
+.pg-note { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; font-size: var(--step--1); color: var(--muted); margin-bottom: 14px; }
+.chainbar { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: var(--step--1); background: var(--sunk); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+.chainbar b { font-weight: 600; color: var(--muted); margin-right: 6px; }
+.bench { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr) minmax(0, 0.8fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.pane > h3 { font-size: var(--step-0); }
+.person { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 6px; }
+.person header { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.addr { color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font: inherit; font-size: var(--step--1); font-weight: 600; border-radius: 7px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 6px 12px; cursor: pointer; }
+.btn:hover { filter: brightness(1.08); }
+.btn-quiet { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-big { font-size: var(--step-0); padding: 9px 16px; }
+.field { display: grid; gap: 4px; font-size: var(--step--1); font-weight: 600; min-width: 0; }
+select { font: inherit; font-size: 0.92rem; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; min-width: 0; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin: 0; display: grid; gap: 4px; min-width: 0; }
+legend { font-size: var(--step--1); font-weight: 600; padding: 0 4px; }
+fieldset label { font-size: 0.9rem; display: flex; gap: 8px; align-items: baseline; }
+.controls-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.controls-grid .field-wide { grid-column: 1 / -1; }
+.result-body { display: grid; gap: 8px; }
+@media (max-width: 560px) { .controls-grid { grid-template-columns: minmax(0, 1fr); } }
+.verdict { padding: 10px 12px; border-radius: 8px; }
+.verdict-ok { background: var(--ok-soft); color: var(--ok); }
+.verdict-bad { background: var(--bad-soft); color: var(--bad); }
+.verdict span { color: var(--ink); }
+.consent { font-style: italic; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.check { display: grid; grid-template-columns: 1.2rem 1fr auto; gap: 8px; align-items: baseline; font-size: 0.9rem; padding: 4px 6px; border-radius: 6px; }
+.check code { font-size: 0.78rem; color: var(--bad); }
+.check-pass .check-mark { color: var(--ok); font-weight: 700; }
+.check-fail { background: var(--bad-soft); }
+.check-fail .check-mark { color: var(--bad); font-weight: 700; }
+.check-skipped { color: var(--skip); }
+.loglist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; max-height: 34rem; overflow-y: auto; }
+.log { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; font-size: 0.86rem; }
+.log-tx { border-color: var(--accent); }
+.log-verify { border-color: var(--ok); }
+.log-bad { border-color: var(--bad); }
+.log-detail { color: var(--muted); font-size: 0.78rem; overflow-wrap: anywhere; }
+.inspector { margin-top: 16px; }
+.inspector .kv { display: grid; gap: 4px; }
+.inspector .kv > div:first-child { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
+pre { background: var(--sunk); border-radius: 8px; padding: 10px 12px; margin: 0; overflow-x: auto; font-size: 0.78rem; line-height: 1.45; }
+.disc { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.disc li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.inspect-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 860px) { .inspect-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- evidence */
+[role=tablist] { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+[role=tab] { font: inherit; font-size: 0.92rem; font-weight: 600; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 12px; cursor: pointer; }
+[role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+.suite { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
+.suite summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 14px; cursor: pointer; }
+.suite-name { font-weight: 600; }
+.suite-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.suite-body { padding: 0 14px 14px; display: grid; gap: 12px; }
+.tgroup-name { font-size: var(--step--1); font-weight: 600; color: var(--muted); font-family: var(--font-mono); }
+.tlist { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 2px; }
+.tlist li, #multi li { display: grid; grid-template-columns: 1.1rem 1fr; gap: 6px; font-size: 0.88rem; }
+.tmark { font-weight: 700; }
+.t-ok .tmark { color: var(--ok); }
+.t-bad .tmark { color: var(--bad); }
+.t-skip .tmark { color: var(--skip); }
+#multi { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pill { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.pill-on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#interop { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.io { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.io-area { font-size: var(--step--1); color: var(--muted); font-weight: 600; }
+.bars-head, .bar-row { display: grid; grid-template-columns: 5.5rem minmax(0, 1.4fr) 7.5rem minmax(0, 1fr) 4rem; gap: 10px; align-items: center; }
+.bars-head { font-size: var(--step--1); color: var(--muted); margin: 10px 0 4px; }
+.bars { display: grid; gap: 8px; margin-bottom: 18px; }
+.bar-label, .bar-val { font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.bar-track { position: relative; height: 16px; background: var(--sunk); border-radius: 4px; }
+.bar { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.bar-p95, .key-p95 { background: var(--accent-soft); }
+.bar-p50, .key-p50 { background: var(--accent); }
+.bar-rate, .key-rate { background: var(--ok); }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 6px; vertical-align: -1px; }
+@media (max-width: 640px) { .bars-head, .bar-row { grid-template-columns: 4.2rem minmax(0, 1fr) 6.6rem; } .bars-head span:nth-child(n+4), .bar-row > :nth-child(n+4) { display: none; } }
+.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.shot { margin: 0; display: grid; gap: 6px; }
+.shot img { border: 1px solid var(--line); border-radius: 8px; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; width: 100%; background: var(--surface); }
+.shot figcaption { font-size: var(--step--1); color: var(--muted); }
+.cols-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 760px) { .cols-2 { grid-template-columns: minmax(0, 1fr); } }
+.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; overflow-x: auto; }
+footer { padding-block: 28px 40px; border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: grid; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">dec<span>ID</span></div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#verdict">Verdict</a>
+      <a href="#playground">Playground</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#design">How it works</a>
+      <a href="https://github.com/ZacharyTChung/decID" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="eyebrow">Independent evaluation · privacy-preserving identity credentials</div>
+    <h1>It works, it interoperates, and it is not ready for real identities yet.</h1>
+    <p class="lede">decID lets a person prove “a trusted office verified my identity”, or just “I am over 18”, without handing over their name or birth date. This page tests that claim three ways. You can run the system yourself below, read every automated result, and see what is still missing before it could carry real identities.</p>
+    <div class="stats" id="stats" aria-live="polite"><div class="stat"><div class="stat-v">…</div><div class="stat-l">Loading results</div></div></div>
+    <pre class="mrz" id="mrz" aria-label="Machine-readable summary of the results, in passport MRZ style">VC&lt;DECID&lt;&lt;IDVERIFIED&lt;SDJWT&lt;ED25519&lt;&lt;31337</pre>
+  </div>
+
+  <!-- ===================================================== VERDICT -->
+  <section id="verdict">
+    <div class="sec-head">
+      <div class="eyebrow">Verdict</div>
+      <h2>Could this be used in the real world?</h2>
+    </div>
+    <div class="answers">
+      <div class="answer">
+        <h3>The protocol: yes <span class="chip chip-ok">works and interoperates</span></h3>
+        <p>The credential format, signatures, selective disclosure and on-chain checks do what they claim. Independent libraries with no shared code accept the credentials: the OpenWallet Foundation SD-JWT library, viem, Python’s <code>cryptography</code>, and the official W3C schema and context. 53 attacks run against a live stack were all stopped by the specific defense meant to stop them.</p>
+      </div>
+      <div class="answer">
+        <h3>The deployment: not as it stands <span class="chip chip-warn">prototype</span></h3>
+        <p>The issuer is simulated. It approves synthetic applications and checks no real documents. Keys live in an environment file, not a hardware module. The chain is a local test network. Nothing has been audited, and there is no trust framework, legal basis or wallet-standard integration. Each of these is buildable, but each is real work.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:10px">Readiness by component</h3>
+    <div class="scroll">
+      <table class="matrix">
+        <thead><tr><th scope="col">Component</th><th scope="col">State</th><th scope="col">What was shown</th><th scope="col">Needed for real use</th></tr></thead>
+        <tbody>
+          <tr><td>Credential format</td><td><span class="chip chip-ok">works</span></td><td>W3C VC 2.0 secured as SD-JWT with Ed25519. Accepted by the OWF SD-JWT library. Valid against the official W3C schema, and expands under JSON-LD safe mode.</td><td>An issuance protocol wallets speak (OpenID4VCI), and probably the IETF SD-JWT VC profile for wallet ecosystems.</td></tr>
+          <tr><td>Selective disclosure</td><td><span class="chip chip-ok">works</span></td><td>An 18+ verifier learns only <code>ageOver18</code>. Forged, borrowed, stripped or extra disclosures are rejected (red team S0–S9).</td><td>Presentations are linkable across verifiers, and age is fixed at issuance. Unlinkable proofs need BBS signatures or zero-knowledge circuits.</td></tr>
+          <tr><td>Holder wallet</td><td><span class="chip chip-warn">works, with limits</span></td><td>Any Ethereum wallet signs the presentation, including smart accounts via EIP-1271. Backups and the device vault are encrypted.</td><td>A real wallet app, a presentation protocol (OpenID4VP), and recovery that does not depend on the issuer. MetaMask itself was not exercised.</td></tr>
+          <tr><td>Identity proofing</td><td><span class="chip chip-bad">simulated</span></td><td>An operator approves synthetic applications. Nothing checks that a person is who they claim.</td><td>Document and liveness verification, operator procedures, audits. This is the part that gives a credential its meaning.</td></tr>
+          <tr><td>Issuer keys</td><td><span class="chip chip-warn">works, with limits</span></td><td>Rotation, compromise handling and a tamper-evident audit log are all tested.</td><td>Keys in an HSM or KMS behind a signing service. A published key history, such as did:web.</td></tr>
+          <tr><td>On-chain registry</td><td><span class="chip chip-warn">works, locally</span></td><td>100% line coverage, fuzz and invariant tests, and a red team. About 134k gas to register one credential.</td><td>An external audit. A public per-credential record links a wallet to “holds a credential from this issuer”, so privacy-preserving status (a status list or ZK) would be preferable.</td></tr>
+          <tr><td>Verifier</td><td><span class="chip chip-ok">works</span></td><td>Fails closed when the chain is unreachable. Roughly 20 ms per verification and 70–80 per second on 4 shared cores, with a stateless core.</td><td>A trust-list distribution mechanism and a standard request format (OpenID4VP / DCQL).</td></tr>
+          <tr><td>Operations</td><td><span class="chip chip-warn">works, with limits</span></td><td>Two app instances can share one database and issuer key (after a fix found during this evaluation).</td><td>A database server instead of SQLite for multi-host deployments, HTTPS, monitoring and edge rate limiting.</td></tr>
+          <tr><td>Governance and law</td><td><span class="chip chip-bad">not built</span></td><td>None.</td><td>A trust framework, data-protection basis (for example GDPR or eIDAS 2), liability and accreditation.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:28px 0 10px">Problems found by testing, and fixed</h3>
+    <ol class="findings">
+      <li><span class="chip chip-accent">this evaluation</span><strong>Two app instances could leave a revoked credential active.</strong><span class="how">Two servers sharing one issuer key revoked at the same time and raced for the transaction nonce. 2 of 4 revocations failed, under a misleading “chain unreachable” error. Now a cross-process lease serializes them: 8 of 8 succeed (<code>npm run test:multi-instance</code>, in CI).</span></li>
+      <li><span class="chip chip-accent">this evaluation</span><strong>JSON-LD-aware verifiers rejected the credential.</strong><span class="how">The W3C VC v2 context defines <code>iss</code>, <code>sub</code>, <code>iat</code> and <code>exp</code> but not <code>jti</code>, and it has no fallback vocabulary. The credential’s own context now defines <code>jti</code>, and a test expands every credential in safe mode against the vendored W3C context.</span></li>
+      <li><span class="chip chip-skip">earlier</span><strong>The rate limiter could be bypassed with a spoofed header.</strong><span class="how">Found by the red team: rotating <code>X-Forwarded-For</code> passed 10 of 10 requests over the limit. The header is now trusted only behind a declared proxy.</span></li>
+      <li><span class="chip chip-skip">earlier</span><strong>Verification took 51 ms, of which 3 ms was cryptography.</strong><span class="how">Found by the benchmark: a 10 ms default delay in ethers’ RPC batching, paid three times in a row. It now takes about 20 ms.</span></li>
+    </ol>
+  </section>
+
+  <!-- ===================================================== PLAYGROUND -->
+  <section id="playground">
+    <div class="sec-head">
+      <div class="eyebrow">Playground</div>
+      <h2>Run it yourself</h2>
+      <p class="read muted">This runs decID’s own issuer, holder and verifier code in this tab, against the real compiled smart contracts on an Ethereum virtual machine inside the page. The only substitution is the chain: an in-page EVM instead of a node. Keys are generated fresh and kept in memory. All data is synthetic.</p>
+    </div>
+    <p class="pg-note" id="pg-status" role="status">Loading the playground…</p>
+    <div class="chainbar small">
+      <span><b>block</b><span class="mono" id="chain-block">–</span></span>
+      <span><b>chain date</b><span class="mono" id="chain-time">–</span></span>
+      <span><b>registry</b><span class="mono" id="chain-registry">–</span></span>
+      <span><b>gate</b><span class="mono" id="chain-gate">–</span></span>
+      <span><b>issuer</b><span class="mono" id="chain-issuer">–</span></span>
+    </div>
+    <div class="bench">
+      <div class="pane">
+        <h3>People</h3>
+        <div id="people" class="small muted">Alex is an adult, Sam is 16, and Mallory is an attacker with a wallet but no credential.</div>
+        <div class="pg-controls row">
+          <button class="btn btn-quiet" id="pg-revoke" disabled>Issuer revokes Alex</button>
+          <button class="btn btn-quiet" id="pg-ff" disabled>Fast-forward one year</button>
+        </div>
+      </div>
+
+      <div class="pane">
+        <h3>Verifier</h3>
+        <div class="pg-controls controls-grid">
+          <label class="field field-wide" for="pg-action">Access to<select id="pg-action" disabled><option>Verified member area</option></select></label>
+          <label class="field" for="pg-presenter">Presented by<select id="pg-presenter" disabled><option>Alex (adult)</option></select></label>
+          <label class="field" for="pg-cred">Using<select id="pg-cred" disabled><option>Alex's credential</option></select></label>
+        </div>
+        <fieldset class="pg-controls">
+          <legend>Tamper with the presentation</legend>
+          <label><input type="radio" name="pg-attack" value="none" checked disabled> Nothing, present honestly</label>
+          <label><input type="radio" name="pg-attack" value="flip" disabled> Flip the <code>ageOver18</code> disclosure (keep its salt)</label>
+          <label><input type="radio" name="pg-attack" value="token" disabled> Edit the issuer’s signature</label>
+          <label><input type="radio" name="pg-attack" value="extra" disabled> Over-share <code>countryOfResidence</code></label>
+          <label><input type="radio" name="pg-attack" value="replay" disabled> Replay the previous submission</label>
+        </fieldset>
+        <div class="pg-controls row">
+          <button class="btn btn-big" id="pg-present" disabled>Request and present</button>
+          <button class="btn btn-quiet" id="pg-tour" disabled>Play the guided tour</button>
+          <button class="btn btn-quiet" id="pg-reset" disabled>Start over</button>
+        </div>
+        <div id="result" class="small muted" aria-live="polite">The verifier’s result appears here, check by check.</div>
+      </div>
+
+      <div class="pane">
+        <h3>Activity</h3>
+        <ol class="loglist" id="log" aria-live="polite"></ol>
+      </div>
+    </div>
+
+    <div class="pane inspector">
+      <h3 id="inspect-title">Credential inspector</h3>
+      <div id="inspect" class="inspect-grid small"><p class="muted">Choose “Inspect” on a person to see their credential: the signed payload, its private disclosures, the commitment and the registration authorization.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== EVIDENCE -->
+  <section id="evidence">
+    <div class="sec-head">
+      <div class="eyebrow">Evidence</div>
+      <h2>Every result, from the commands that produced it</h2>
+      <p class="read muted small">Collected by <code>npm run site:evidence</code> at commit <code id="gen-commit">…</code>, <span id="gen-date">…</span>, on <span id="gen-env">…</span>. Nothing here is typed in by hand.</p>
+    </div>
+    <div role="tablist" aria-label="Evidence">
+      <button role="tab" id="tab-suites" aria-controls="panel-suites" aria-selected="true">Test suites</button>
+      <button role="tab" id="tab-red" aria-controls="panel-red" aria-selected="false" tabindex="-1">Red team</button>
+      <button role="tab" id="tab-io" aria-controls="panel-io" aria-selected="false" tabindex="-1">Interoperability</button>
+      <button role="tab" id="tab-load" aria-controls="panel-load" aria-selected="false" tabindex="-1">Load &amp; gas</button>
+      <button role="tab" id="tab-ops" aria-controls="panel-ops" aria-selected="false" tabindex="-1">Deployment</button>
+      <button role="tab" id="tab-ui" aria-controls="panel-ui" aria-selected="false" tabindex="-1">Browser walkthrough</button>
+    </div>
+    <div role="tabpanel" id="panel-suites" aria-labelledby="tab-suites"><div id="suites"></div></div>
+    <div role="tabpanel" id="panel-red" aria-labelledby="tab-red" hidden>
+      <p class="read muted small" style="margin-bottom:10px">Each attack names the defense it expects. A scenario passes only if that specific defense fires, not merely if the attack fails somewhere.</p>
+      <div class="pills" id="rt-filter"></div>
+      <div class="scroll"><table class="data"><thead><tr><th scope="col">ID</th><th scope="col">Attack</th><th scope="col">Expected</th><th scope="col">Observed</th><th scope="col">Result</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
+    </div>
+    <div role="tabpanel" id="panel-io" aria-labelledby="tab-io" hidden>
+      <p class="read muted small" style="margin-bottom:12px">The real issuer’s output, checked only with third-party implementations that share no code with decID.</p>
+      <ul id="interop"></ul>
+    </div>
+    <div role="tabpanel" id="panel-load" aria-labelledby="tab-load" hidden><div id="bench"></div></div>
+    <div role="tabpanel" id="panel-ops" aria-labelledby="tab-ops" hidden>
+      <div class="cols-2">
+        <div><h4 style="margin-bottom:8px">Two app instances, one database and issuer key</h4><ul id="multi"></ul></div>
+        <div><h4 style="margin-bottom:8px">Accessibility (axe, WCAG 2.1 A/AA)</h4><div class="scroll"><table class="data"><thead><tr><th scope="col">UI state</th><th scope="col" class="num">Rules passed</th><th scope="col">Result</th></tr></thead><tbody id="axe"></tbody></table></div></div>
+      </div>
+    </div>
+    <div role="tabpanel" id="panel-ui" aria-labelledby="tab-ui" hidden>
+      <p class="read muted small" style="margin-bottom:12px">Screenshots from the automated browser test of the full app (Next.js production build, Chromium, an injected wallet signing with local test keys).</p>
+      <div class="shots" id="shots"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== DESIGN -->
+  <section id="design">
+    <div class="sec-head">
+      <div class="eyebrow">How it works</div>
+      <h2>Three parties, one chain, and very little on it</h2>
+    </div>
+    <div class="cols-2">
+      <div class="read" style="display:grid;gap:12px">
+        <p>The <strong>issuer</strong> checks an application, then signs a credential that says “identity verified” plus three optional claims. Each optional claim is hidden behind a salted hash. The holder’s wallet address is the credential’s subject.</p>
+        <p>The <strong>holder</strong> registers a random-looking commitment to that credential on-chain, from their own wallet. The chain never sees the credential, the claims or the salt.</p>
+        <p>A <strong>verifier</strong> sends a one-time challenge. The holder signs it with their wallet and reveals only the claims the verifier asked for. The verifier checks the issuer’s signature, the disclosures, the wallet signature and the commitment, then reads the live registry. Revocation and expiry show up there.</p>
+        <p>The <strong>gate</strong> is a smart contract that lets a wallet through only while its credential is valid on-chain.</p>
+      </div>
+      <pre class="mermaid">sequenceDiagram
+  participant I as Issuer
+  participant H as Holder wallet
+  participant C as Registry (chain)
+  participant V as Verifier
+  H->>I: synthetic application
+  I->>H: SD-JWT credential + disclosures, EIP-712 authorization
+  H->>C: register(commitment)
+  V->>H: challenge (nonce, action, requested claims)
+  H->>V: credential + requested disclosures + wallet signature
+  V->>C: record and status at one block
+  V-->>H: verified, check by check
+  I->>C: revoke(commitment)</pre>
+    </div>
+    <h3 style="margin:24px 0 10px">What lives where</h3>
+    <div class="scroll">
+      <table class="matrix">
+        <thead><tr><th scope="col">Data</th><th scope="col">Where</th><th scope="col">Who can see it</th></tr></thead>
+        <tbody>
+          <tr><td>Name, birth date, document number</td><td>Issuer database until the decision, then erased</td><td>Issuer operators</td></tr>
+          <tr><td>Credential and disclosures</td><td>The holder’s device (encrypted backup or vault)</td><td>The holder, plus each verifier for exactly what it requested</td></tr>
+          <tr><td>Commitment, wallet address, validity, revoked flag</td><td>Public chain</td><td>Everyone, permanently</td></tr>
+          <tr><td>Verification outcomes</td><td>Verifier: reference, time and outcome code only</td><td>The verifier</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span>decID is a prototype: synthetic data, a local test chain, a simulated issuer. Not audited, and not suitable for real identities.</span>
+    <span>Source: <a href="https://github.com/ZacharyTChung/decID" target="_blank" rel="noopener">github.com/ZacharyTChung/decID</a></span>
+  </footer>
+</div>
+
+<script type="module" src="playground.js"></script>

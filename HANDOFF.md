@@ -37,6 +37,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
   1. `jti` was an undefined JSON-LD term, so JSON-LD safe mode rejected the credential.
   2. Concurrent issuer transactions from two app instances raced for the nonce (2 of 4 revocations failed, reported as an RPC outage). They now use a cross-process lease in the database (`issuer/tx-lock.ts`, `npm run test:multi-instance`).
   A chain outage makes the verifier fail closed (`resilience.test.ts`).
+- **Showcase site (`site/`):** verdict, evidence and an in-browser playground running the real issuance function (`issuer/issue.ts`, extracted from `approveRequest`), the holder code and the production verifier core. The verifier core now accepts an injected `provider`. `ApiError` moved to `errors.ts`, so the core no longer pulls in the database. The chain is an in-page ethereumjs EVM running the compiled contracts. `npm run test:site` drives it in Chromium (in CI). Evidence comes from `npm run site:evidence`.
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)
