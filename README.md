@@ -68,7 +68,7 @@ npm run test:ui          # browser test of all three views + axe accessibility a
 4. **Holder** page: connect, sign in, submit synthetic data. **Issuer** page: switch the wallet to account #1, sign in, approve. **Holder** page: switch back, select *Receive credential*, then *Register*, then *Check in*, then *Export backup*. **Verifier** page: *New verification request*, then consent and present. **Issuer**: *Revoke*. Presenting and checking in now fail.
 5. **Changing roles or accounts:** switching wallet account or chain drops the server session, so you sign in again. Add more issuer operators by editing `ISSUER_OPERATOR_ADDRESSES` in `.env.local` (comma-separated) and restarting `npm run dev`.
 
-**Reload behaviour:** the holder's credential bundle lives only in the tab's memory, and the server deletes its copy at pickup. A reload forgets it, so export the encrypted backup first and import it after reloading. MetaMask caches nonces per chain. If you restart `npm run chain`, use MetaMask's *Clear activity tab data* for the account.
+**Reload behaviour:** the holder's credential bundle lives in the tab's memory, and the server deletes its copy at pickup. To survive reloads, either save it in the **device vault** (stored in IndexedDB, encrypted with a passphrase; unlock after each reload) or download the encrypted backup file and import it later. Nothing is ever stored in plaintext. MetaMask caches nonces per chain. If you restart `npm run chain`, use MetaMask's *Clear activity tab data* for the account.
 
 Without an injected wallet, the UI says so and does not pretend to sign. Use `npm run demo` instead.
 

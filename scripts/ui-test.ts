@@ -189,6 +189,27 @@ async function run(stack: LocalStack) {
     await download.saveAs(backup);
     step("encrypted backup exported");
 
+    await holder.getByLabel("Vault passphrase").fill("vault-passphrase-1");
+    await holder.getByRole("button", { name: "Save encrypted on this device" }).click();
+    await holder.getByText("Saved, encrypted, on this device.").waitFor();
+    // What is actually at rest in IndexedDB: an encrypted envelope, never the token or salt.
+    const atRest = await holder.evaluate(
+      () =>
+        new Promise<string>((resolve, reject) => {
+          const open = indexedDB.open("did-mvp-vault", 1);
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const all = open.result.transaction("bundles").objectStore("bundles").getAll();
+            all.onsuccess = () => resolve(JSON.stringify(all.result));
+            all.onerror = () => reject(all.error);
+          };
+        }),
+    );
+    if (!atRest.includes("did-mvp.encrypted-holder-bundle/v1") || atRest.includes("eyJ") || /0x[0-9a-f]{64}/i.test(atRest)) {
+      throw new Error("the device vault stores something other than ciphertext");
+    }
+    step("credential saved to the device vault; IndexedDB holds only the encrypted envelope");
+
     await holder.getByRole("link", { name: "Go to the verifier →" }).click();
     await holder.getByRole("button", { name: "New verification request" }).click();
     await holder.getByLabel(/I consent to share/).check();
@@ -213,6 +234,19 @@ async function run(stack: LocalStack) {
 
     await holder.goto(`${BASE}/holder`);
     await holder.getByText("No credential loaded").waitFor();
+    await holder.getByLabel("Unlock passphrase").fill("not-the-passphrase");
+    await holder.getByRole("button", { name: "Unlock saved credential" }).click();
+    await holder.getByText(/wrong password or the file was modified/).waitFor();
+    await holder.getByLabel("Unlock passphrase").fill("vault-passphrase-1");
+    await holder.getByRole("button", { name: "Unlock saved credential" }).click();
+    await holder.getByText("Revoked", { exact: true }).waitFor({ timeout: 20_000 });
+    step("after a reload the device vault unlocks only with the right passphrase");
+    await holder.getByRole("button", { name: "Remove from this device" }).click();
+    await holder.getByText("Removed from this device.").waitFor();
+
+    await holder.goto(`${BASE}/holder`);
+    await holder.getByText("No credential loaded").waitFor();
+    await holder.getByText("Nothing saved on this device for this wallet.").waitFor();
     await holder.getByLabel("Backup file").setInputFiles(backup);
     await holder.getByLabel("Backup password").fill("wrong-password-123");
     await holder.getByRole("button", { name: "Import backup" }).click();

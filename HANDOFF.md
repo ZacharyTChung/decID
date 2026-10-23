@@ -28,6 +28,7 @@ State as of 2026-10-22. No secrets or credential payloads are in this file.
 - **Smart-account holders:** SIWE and presentation proofs fall back to EIP-1271 `isValidSignature`; signatures may exceed 65 bytes. `SimpleSmartWallet` is a test-only fixture.
 - **Verifier activity log** (`GET /api/verifier/history`): reference, action, time and outcome code only. **Holder expiry notice** within 30 days of expiry.
 - **Verifier core + CLI:** presentation checks live in stateless `verifier/core.ts`, shared by the API and `npm run verify` (public inputs only; exercised by `npm run demo`).
+- **Device vault:** the holder can save the bundle in IndexedDB encrypted with a passphrase (same envelope as the export) and unlock it after a reload; the UI test checks that only ciphertext is at rest.
 - **CSP:** `src/proxy.ts` sets a per-request nonce CSP without `'unsafe-inline'`; the root layout awaits `connection()` so pages render per request. API routes get a deny-all CSP from `next.config.ts`. The UI test asserts fresh nonces and that an injected inline handler is blocked.
 
 ## Verified commands and results (fresh clone, Node 22.22.0)

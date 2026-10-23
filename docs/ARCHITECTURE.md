@@ -151,6 +151,7 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Holder bundle (token, salt, authorization) awaiting pickup | SQLite `issuer_bundle_pickup` | That holder only | Deleted at pickup, or after 24 h |
 | Holder bundle after pickup | Browser tab memory | The holder | Until reload or wallet switch |
 | Encrypted backup file | Wherever the holder saves it | Anyone with the password | Holder-controlled |
+| Device vault (same encrypted envelope) | Browser IndexedDB, keyed by wallet address | Anyone with the passphrase and access to that browser profile | Until the holder removes it or clears site data |
 | Credential token and salt during verification | Verifier process memory | Verifier | Not persisted |
 | Challenge (nonce, action, audience, chain, registry, expiry, outcome code) | SQLite `verifier_challenges` | Verifier | 1 h after expiry |
 | SIWE nonces / sessions (SHA-256 of cookie, address, role) | SQLite `auth_*` | Server | Nonces 5 min, sessions 1 h |

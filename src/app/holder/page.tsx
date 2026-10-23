@@ -8,6 +8,7 @@ import { api } from "@/lib/client/api";
 import type { HolderRequestView } from "@/lib/shared/api";
 import { HolderBundleV1, type HolderBundle } from "@/lib/shared/bundle";
 import { MIN_EXPORT_PASSWORD_LENGTH, decryptBundle, encryptBundle } from "@/lib/shared/bundle-crypto";
+import { deleteFromVault, loadFromVault, saveToVault } from "@/lib/client/vault";
 import { useApp } from "@/components/providers";
 import { Badge, Button, Card, Field, Mono, Notice, Shell, SignInGate, WalletBar, inputClass, useAction } from "@/components/ui";
 
@@ -404,6 +405,109 @@ function CredentialSection({ bundle }: { bundle: HolderBundle }) {
 
 // ---------------------------------------------------------------- backup
 
+/** Encrypted device vault: survives reloads without ever storing the bundle or passphrase in plaintext. */
+function VaultSection() {
+  const app = useApp();
+  const [stored, setStored] = useState<boolean>();
+  const [savePass, setSavePass] = useState("");
+  const [unlockPass, setUnlockPass] = useState("");
+  const [note, setNote] = useState<string>();
+  const save = useAction();
+  const unlock = useAction();
+  const forget = useAction();
+  const address = app.address;
+
+  useEffect(() => {
+    setStored(undefined);
+    setNote(undefined);
+    if (!address) return;
+    let live = true;
+    void loadFromVault(address)
+      .then((v) => live && setStored(!!v))
+      .catch(() => live && setStored(false));
+    return () => {
+      live = false;
+    };
+  }, [address]);
+
+  if (!address) return null;
+  const ownsBundle = app.bundle?.authorization.holder.toLowerCase() === address.toLowerCase();
+
+  return (
+    <Card
+      title="Keep it on this device"
+      subtitle="Saves the credential in this browser, encrypted with a passphrase you choose (PBKDF2-SHA-256, 600,000 iterations → AES-256-GCM). Only ciphertext is stored; the passphrase is never stored or sent."
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        {ownsBundle && (
+          <div className="space-y-2">
+            <Field label="Vault passphrase" hint={`At least ${MIN_EXPORT_PASSWORD_LENGTH} characters. Needed after every reload.`}>
+              <input className={inputClass} type="password" autoComplete="new-password" value={savePass} onChange={(e) => setSavePass(e.target.value)} />
+            </Field>
+            <Button
+              busy={save.busy}
+              disabled={savePass.length < MIN_EXPORT_PASSWORD_LENGTH}
+              onClick={() =>
+                save.run(async () => {
+                  await saveToVault(address, await encryptBundle(app.bundle!, savePass));
+                  setSavePass("");
+                  setStored(true);
+                  setNote("Saved, encrypted, on this device.");
+                })
+              }
+            >
+              {stored ? "Replace saved credential" : "Save encrypted on this device"}
+            </Button>
+            {save.error && <Notice tone="error">{save.error}</Notice>}
+          </div>
+        )}
+        {stored && !app.bundle && (
+          <div className="space-y-2">
+            <Field label="Unlock passphrase">
+              <input className={inputClass} type="password" autoComplete="current-password" value={unlockPass} onChange={(e) => setUnlockPass(e.target.value)} />
+            </Field>
+            <Button
+              busy={unlock.busy}
+              disabled={!unlockPass}
+              onClick={() =>
+                unlock.run(async () => {
+                  const envelope = await loadFromVault(address);
+                  if (!envelope) throw new Error("Nothing saved on this device for this wallet.");
+                  app.setBundle(await decryptBundle(envelope, unlockPass));
+                  setUnlockPass("");
+                  setNote("Unlocked. The decrypted credential is kept in this tab's memory only.");
+                })
+              }
+            >
+              Unlock saved credential
+            </Button>
+            {unlock.error && <Notice tone="error">{unlock.error}</Notice>}
+          </div>
+        )}
+        {!ownsBundle && !stored && stored !== undefined && <p className="text-sm text-slate-500">Nothing saved on this device for this wallet.</p>}
+      </div>
+      {stored && (
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            busy={forget.busy}
+            onClick={() =>
+              forget.run(async () => {
+                await deleteFromVault(address);
+                setStored(false);
+                setNote("Removed from this device.");
+              })
+            }
+          >
+            Remove from this device
+          </Button>
+        </div>
+      )}
+      {note && <div className="mt-3"><Notice tone="success">{note}</Notice></div>}
+    </Card>
+  );
+}
+
 function BackupSection() {
   const app = useApp();
   const [password, setPassword] = useState("");
@@ -486,7 +590,8 @@ export default function HolderPage() {
       <SignInGate role="holder">
         <RequestSection onBundle={(b) => app.setBundle(b)} />
       </SignInGate>
-      {app.bundle ? <CredentialSection bundle={app.bundle} /> : <Card tone="muted"><p className="text-sm text-slate-600">No credential loaded. Receive one after approval, or import an encrypted backup below.</p></Card>}
+      {app.bundle ? <CredentialSection bundle={app.bundle} /> : <Card tone="muted"><p className="text-sm text-slate-600">No credential loaded. Receive one after approval, unlock one saved on this device, or import an encrypted backup below.</p></Card>}
+      <VaultSection />
       <BackupSection />
     </Shell>
   );
