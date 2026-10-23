@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-23T06:30:51.813Z",
-  "commit": "c4465b6",
+  "generatedAt": "2026-10-23T06:40:54.252Z",
+  "commit": "a2e4b79",
   "environment": {
     "node": "v22.22.0",
     "platform": "linux 6.18.44-fc-v153",
@@ -531,35 +531,35 @@
     "latency": [
       {
         "Operation": "Submit synthetic request",
-        "p50": "4.9",
+        "p50": "5.1",
         "p95": "13.3",
         "max": "13.3",
         "n": "12"
       },
       {
         "Operation": "Approve (sign VC + EIP-712 authorization)",
-        "p50": "28.8",
-        "p95": "101.3",
-        "max": "101.3",
+        "p50": "28.5",
+        "p95": "100.8",
+        "max": "100.8",
         "n": "12"
       },
       {
         "Operation": "One-time bundle pickup",
         "p50": "4.9",
-        "p95": "9.3",
-        "max": "9.3",
+        "p95": "8.5",
+        "max": "8.5",
         "n": "12"
       },
       {
         "Operation": "Revoke (send + mine transaction, automine)",
-        "p50": "61.9",
+        "p50": "64.9",
         "p95": "–",
         "max": "–",
         "n": "1"
       },
       {
         "Operation": "Audit chain verification (13 entries)",
-        "p50": "8.3",
+        "p50": "9.0",
         "p95": "–",
         "max": "–",
         "n": "1"
@@ -569,36 +569,36 @@
       {
         "Concurrency": "1",
         "n": "240",
-        "challenge p50": "4.4",
-        "present p50": "22.0",
-        "present p95": "30.4",
-        "present p99": "38.0",
-        "verifications/s": "33.4"
+        "challenge p50": "4.9",
+        "present p50": "24.5",
+        "present p95": "31.1",
+        "present p99": "33.7",
+        "verifications/s": "31.1"
       },
       {
         "Concurrency": "8",
         "n": "240",
         "challenge p50": "18.3",
-        "present p50": "97.2",
-        "present p95": "141.6",
-        "present p99": "186.6",
-        "verifications/s": "63.7"
+        "present p50": "107.2",
+        "present p95": "179.2",
+        "present p99": "195.2",
+        "verifications/s": "57.0"
       },
       {
         "Concurrency": "32",
         "n": "240",
-        "challenge p50": "64.6",
-        "present p50": "351.4",
-        "present p95": "434.6",
-        "present p99": "1155.1",
-        "verifications/s": "71.9"
+        "challenge p50": "58.6",
+        "present p50": "418.2",
+        "present p95": "492.9",
+        "present p99": "735.5",
+        "verifications/s": "64.9"
       }
     ],
     "gas": [
       {
         "Transaction": "`register`",
         "Paid by": "holder",
-        "Gas": "140008"
+        "Gas": "140020"
       },
       {
         "Transaction": "`DemoGate.checkIn` (first)",
@@ -618,7 +618,7 @@
       "name": "Contract tests (Hardhat + Mocha)",
       "command": "npm run test:contracts",
       "ok": true,
-      "seconds": 4.5,
+      "seconds": 17.6,
       "groups": [
         {
           "name": "CredentialRegistry › constants",
@@ -830,7 +830,7 @@
       "name": "Solidity fuzz and invariant tests",
       "command": "npm run test:fuzz",
       "ok": true,
-      "seconds": 3.2,
+      "seconds": 3.6,
       "groups": [
         {
           "name": "CredentialRegistryFuzzTest",
@@ -897,7 +897,7 @@
       "name": "App tests (Vitest: credentials, API, interop, W3C conformance, resilience)",
       "command": "npm run test:app",
       "ok": true,
-      "seconds": 20,
+      "seconds": 21.3,
       "groups": [
         {
           "name": "test/unit/api-flow.test.ts",
@@ -1561,7 +1561,7 @@
       "name": "Headless lifecycle demo",
       "command": "npm run demo",
       "ok": true,
-      "seconds": 15.2,
+      "seconds": 14.6,
       "groups": [
         {
           "name": "Prepare local infrastructure",
@@ -1571,7 +1571,7 @@
               "ok": true
             },
             {
-              "name": "Issuer keys generated: did:key:z6MkhFaufWSh1K9TYapQ… / EVM 0x0EcDAA8d4Cb9de36b40927543FF65f494C1C145B",
+              "name": "Issuer keys generated: did:key:z6Mkgnvej8qW7WJrSYis… / EVM 0xB7614821712DE45665cAE309260501592d4782d8",
               "ok": true
             },
             {
@@ -1732,7 +1732,7 @@
           "name": "8. Issuer revokes the credential",
           "tests": [
             {
-              "name": "revocation transaction 0xe22ad8001eb08f6a857963501704264a0305689dab7871e8ba5b75eb4fff8cee",
+              "name": "revocation transaction 0xef11aebf046cd31ce18ea45eabcf31274c7797bce47ba3808b38c9ced86d3590",
               "ok": true
             }
           ]
@@ -1762,7 +1762,7 @@
           "name": "9b. Issuer audit log is an intact hash chain covering this session's actions",
           "tests": [
             {
-              "name": "audit chain intact (2 entries, head 465cc886cbc58e7e…)",
+              "name": "audit chain intact (2 entries, head 771faf9b972dce47…)",
               "ok": true
             },
             {
@@ -1791,7 +1791,7 @@
       "name": "Browser UI test (Playwright + axe)",
       "command": "npm run test:ui",
       "ok": true,
-      "seconds": 41.4,
+      "seconds": 29.9,
       "groups": [
         {
           "name": "Holder → issuer → verifier, in Chromium with an injected EIP-1193 wallet",
@@ -1865,7 +1865,7 @@
       "name": "Red-team campaign",
       "command": "npm run redteam",
       "ok": true,
-      "seconds": 21.5,
+      "seconds": 23,
       "groups": []
     },
     {
@@ -1873,7 +1873,7 @@
       "name": "Two app instances, one database and issuer key",
       "command": "npm run test:multi-instance",
       "ok": true,
-      "seconds": 19.5,
+      "seconds": 16.9,
       "groups": []
     },
     {
@@ -1881,7 +1881,7 @@
       "name": "Benchmark (correctness-checked)",
       "command": "npm run bench",
       "ok": true,
-      "seconds": 37.8,
+      "seconds": 29.1,
       "groups": []
     }
   ]
