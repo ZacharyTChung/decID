@@ -53,7 +53,7 @@ npm run test:app         # 70 Vitest tests (starts its own Hardhat node on 8547)
 npm test                 # both
 npm run typecheck        # app + scripts + contract tests + ABI freshness
 npm run build            # production build
-npm run test:ui          # browser test of all three views (Playwright + Chromium; production build, isolated stack)
+npm run test:ui          # browser test of all three views + axe accessibility audit (WCAG 2.1 A/AA) of 7 UI states
 ```
 
 `test:ui` needs a Chromium for Playwright (`npx playwright install chromium` once). The page's wallet in that test is an injected EIP-1193 provider that signs with Hardhat's public dev keys, so its signatures and transactions are real. It is test tooling, not part of the app. CI (`.github/workflows/ci.yml`) runs every command above.

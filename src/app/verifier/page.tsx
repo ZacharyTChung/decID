@@ -93,19 +93,23 @@ function Results({ result }: { result: VerificationResult }) {
       {result.disclosed && (
         <div className="mt-4 rounded-lg bg-emerald-50 p-4 text-sm">
           <div className="font-semibold text-emerald-900">What the verifier learned (minimum disclosure)</div>
-          <dl className="mt-2 grid gap-1 text-emerald-900">
-            <div>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-emerald-900">
+            <dt className="font-medium">Claim</dt>
+            <dd>
               identityVerified: <strong>true</strong> ({result.disclosed.credentialType})
-            </div>
-            <div>
-              holder: <Mono>{result.disclosed.holderDid}</Mono>
-            </div>
-            <div>
-              issuer: {result.disclosed.issuerName} <Mono>{result.disclosed.issuerDid}</Mono>
-            </div>
-            <div>
-              valid {result.disclosed.validFrom} → {result.disclosed.validUntil}
-            </div>
+            </dd>
+            <dt className="font-medium">Holder</dt>
+            <dd>
+              <Mono>{result.disclosed.holderDid}</Mono>
+            </dd>
+            <dt className="font-medium">Issuer</dt>
+            <dd>
+              {result.disclosed.issuerName} <Mono>{result.disclosed.issuerDid}</Mono>
+            </dd>
+            <dt className="font-medium">Valid</dt>
+            <dd>
+              {result.disclosed.validFrom} → {result.disclosed.validUntil}
+            </dd>
           </dl>
           <p className="mt-2 text-xs text-emerald-800">The original application (name, birth date, document number) is not available to the verifier, and it does not keep the token or salt.</p>
         </div>

@@ -17,6 +17,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { AxeBuilder } from "@axe-core/playwright";
 import type { JsonRpcProvider } from "ethers";
 import { DEV_ROLES, devWallet } from "./lib/dev-accounts";
 import { startLocalStack, type LocalStack } from "./lib/local-stack";
@@ -85,6 +86,24 @@ function watch(page: Page, name: string) {
 
 const step = (s: string) => console.log(`  ✔ ${s}`);
 
+/**
+ * Accessibility audit (axe-core, WCAG 2.1 A/AA rules) of the page in its current state.
+ * Serious and critical violations fail the run; minor/moderate ones are printed as warnings.
+ */
+const a11ySummary: string[] = [];
+async function audit(page: Page, label: string) {
+  const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  for (const v of result.violations) {
+    const line = `${label}: [${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} node(s): ${v.nodes
+      .slice(0, 3)
+      .map((n) => n.target.join(" "))
+      .join(", ")})`;
+    if (v.impact === "serious" || v.impact === "critical") errors.push(`a11y ${line}`);
+    else console.log(`  ! a11y warning ${line}`);
+  }
+  a11ySummary.push(`${label}: ${result.violations.length} violation(s), ${result.passes.length} rule(s) passed`);
+}
+
 async function run(stack: LocalStack) {
   const BASE = stack.origin;
   const browser = await chromium.launch();
@@ -98,10 +117,11 @@ async function run(stack: LocalStack) {
     }
     step("pages carry a per-request nonce CSP without 'unsafe-inline'");
 
-    const plain = await browser.newPage();
+    const plain = await (await browser.newContext()).newPage();
     await plain.goto(`${BASE}/holder`);
     await plain.getByText("No browser wallet detected").waitFor();
     await plain.screenshot({ path: `${SHOTS}/00-no-wallet.png`, fullPage: true });
+    await audit(plain, "holder (no wallet)");
     const injected = await plain.evaluate(async () => {
       const w = window as unknown as { __injected?: boolean };
       // Classic HTML-injection XSS: markup with an inline event handler. Without 'unsafe-inline'
@@ -129,6 +149,7 @@ async function run(stack: LocalStack) {
     await holder.getByLabel(/I confirm this is synthetic/).check();
     await holder.getByRole("button", { name: "Submit request" }).click();
     await holder.getByText("pending", { exact: true }).waitFor();
+    await audit(holder, "holder (signed in, request pending)");
     step("holder connected, derived its did:pkh, signed in with SIWE and submitted a synthetic request");
 
     const issuer = await (await walletContext(browser, DEV_ROLES.issuerOperator, stack.rpc, stack.provider)).newPage();
@@ -139,6 +160,7 @@ async function run(stack: LocalStack) {
     await issuer.getByRole("button", { name: "Approve and issue" }).click();
     await issuer.getByText("Not registered yet").waitFor({ timeout: 20_000 });
     await issuer.screenshot({ path: `${SHOTS}/01-issuer-issued.png`, fullPage: true });
+    await audit(issuer, "issuer (credential issued)");
     step("issuer operator signed in and approved");
 
     const intruder = await (await walletContext(browser, DEV_ROLES.otherHolder, stack.rpc, stack.provider)).newPage();
@@ -156,6 +178,9 @@ async function run(stack: LocalStack) {
     await holder.getByRole("button", { name: "Check in to member area" }).click();
     await holder.getByText(/Checked in to the verified member area/).waitFor({ timeout: 20_000 });
     await holder.screenshot({ path: `${SHOTS}/02-holder-valid.png`, fullPage: true });
+    await holder.getByRole("button", { name: "Show technical details" }).click();
+    await audit(holder, "holder (credential, technical details open)");
+    await holder.getByRole("button", { name: "Hide technical details" }).click();
     step("holder received the bundle, registered it on-chain and used the gated action");
 
     await holder.getByLabel("Export password").fill("ui-test-password-1");
@@ -170,6 +195,7 @@ async function run(stack: LocalStack) {
     await holder.getByRole("button", { name: "Sign and present" }).click();
     await holder.getByText(/^Verified\./).waitFor({ timeout: 20_000 });
     await holder.screenshot({ path: `${SHOTS}/03-verifier-pass.png`, fullPage: true });
+    await audit(holder, "verifier (verified result)");
     step("verifier accepted the consented presentation");
 
     await issuer.reload();
@@ -197,6 +223,9 @@ async function run(stack: LocalStack) {
     await holder.getByRole("button", { name: "Check in to member area" }).click();
     await holder.getByText(/Access denied by the gate: registry status is Revoked/).waitFor({ timeout: 20_000 });
     await holder.screenshot({ path: `${SHOTS}/05-holder-revoked.png`, fullPage: true });
+    await audit(holder, "holder (revoked, gate refused)");
+    await holder.goto(`${BASE}/`);
+    await audit(holder, "home");
     step("after reload: wrong backup password rejected, import works, gate refuses the revoked credential");
   } finally {
     await browser.close();
@@ -222,6 +251,7 @@ main()
       console.error("\n✘ UI TEST FAILED: browser errors\n" + errors.join("\n"));
       process.exit(1);
     }
+    console.log(`\nAccessibility (axe, WCAG 2.1 A/AA):\n  ${a11ySummary.join("\n  ")}`);
     console.log(`\n✔ UI TEST PASSED (screenshots in ${path.relative(ROOT, SHOTS)}/)`);
     process.exit(0);
   })
