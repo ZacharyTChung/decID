@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AppProviders } from "@/components/providers";
-// Self-hosted fonts (the CSP allows fonts from this origin only).
-import "@fontsource/ibm-plex-sans/400";
-import "@fontsource/ibm-plex-sans/500";
-import "@fontsource/ibm-plex-sans/600";
+// Self-hosted fallback fonts (Apple devices use SF Pro / SF Mono; the CSP allows fonts from this origin only).
+import "@fontsource-variable/inter";
 import "@fontsource/ibm-plex-mono/400";
 import "@fontsource/ibm-plex-mono/500";
 import "@fontsource-variable/archivo/wdth";

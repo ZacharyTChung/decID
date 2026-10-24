@@ -82,13 +82,13 @@ function App() {
 
   return (
     <div className="min-h-dvh bg-ink-2 font-sans text-ink-12">
-      <header className="border-b border-ink-5 bg-white">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
+      <header className="bg-ink-2/80">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-8 gap-y-3 px-4 pb-2 pt-5 sm:px-6">
+          <div className="flex items-baseline gap-2.5">
             <DecidWordmark />
-            <span className="rounded-xs border border-ink-6 px-1.5 py-px text-meta text-ink-10">Prototype</span>
+            <span className="text-meta text-ink-10">Prototype</span>
           </div>
-          <nav aria-label="Scenario" className="flex flex-wrap gap-1">
+          <nav aria-label="Scenario" className="inline-flex rounded-[10px] bg-ink-4 p-[2px]">
             {(
               [
                 ["shop", "Online checkout", ShoppingBag],
@@ -100,22 +100,23 @@ function App() {
                 key={id}
                 onClick={() => go(id)}
                 aria-current={scene === id ? "page" : undefined}
-                className={cx("press inline-flex h-8 items-center gap-2 rounded-sm px-3 text-ui", scene === id ? "bg-ink-12 text-white" : "text-ink-11 hover:bg-ink-3")}
+                className={cx("inline-flex h-8 items-center gap-2 rounded-[8px] px-3.5 text-ui transition-colors", scene === id ? "bg-white font-medium text-ink-12 shadow-[0_1px_3px_rgb(0_0_0/0.12)]" : "text-ink-11 hover:text-ink-12")}
               >
                 <Icon size={15} strokeWidth={1.75} aria-hidden />
-                {label}
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{label.split(" ")[0]}</span>
               </button>
             ))}
           </nav>
-          <p className="ml-auto hidden max-w-sm text-meta text-ink-10 xl:block">Runs entirely in this tab: a simulated ID issuer, decID’s registry contracts on a private test network, and decID’s verification code. Reload to start over.</p>
+          <p className="ml-auto hidden max-w-sm text-meta text-ink-10 xl:block">Everything runs in this tab: a simulated ID issuer, decID’s contracts on a private test network, and decID’s verification code. Reload to start over.</p>
         </div>
         <Walkthrough cloud={cloud} sawDashboard={sawDashboard} onGo={(t) => (t === "phone" ? setMobile("phone") : go(t))} />
       </header>
 
-      <div className="sticky top-0 z-30 border-b border-ink-5 bg-ink-2/95 px-4 py-2 backdrop-blur lg:hidden">
-        <div role="tablist" aria-label="View" className="grid grid-cols-2 rounded-sm border border-ink-6 bg-white p-0.5">
+      <div className="sticky top-0 z-30 bg-ink-2/90 px-4 py-2 backdrop-blur-xl lg:hidden">
+        <div role="tablist" aria-label="View" className="grid grid-cols-2 rounded-[10px] bg-ink-4 p-[2px]">
           {(["site", "phone"] as const).map((v) => (
-            <button key={v} role="tab" aria-selected={mobile === v} onClick={() => setMobile(v)} className={cx("press h-8 rounded-xs text-ui", mobile === v ? "bg-ink-12 font-medium text-white" : "text-ink-11")}>
+            <button key={v} role="tab" aria-selected={mobile === v} onClick={() => setMobile(v)} className={cx("h-8 rounded-[8px] text-ui transition-colors", mobile === v ? "bg-white font-medium text-ink-12 shadow-[0_1px_3px_rgb(0_0_0/0.12)]" : "text-ink-11")}>
               {v === "site" ? "Website" : "Phone"}
             </button>
           ))}
@@ -175,12 +176,12 @@ function Walkthrough({ cloud, sawDashboard, onGo }: { cloud: DecidCloud; sawDash
   ];
   const next = steps.find((s) => !s.done);
   return (
-    <nav aria-label="Walkthrough" className="border-t border-ink-4 bg-ink-1">
+    <nav aria-label="Walkthrough">
       <ol className="relative mx-auto flex max-w-[1440px] gap-x-5 gap-y-1 overflow-x-auto px-4 py-2 text-ui sm:px-6">
         {steps.map((s, i) => (
           <li key={s.id} className="shrink-0">
             <button onClick={() => onGo(s.go)} data-tour={s.id} data-done={s.done || undefined} className={cx("inline-flex items-center gap-2 py-1", s === next ? "font-medium text-ink-12" : s.done ? "text-ink-10" : "text-ink-9 hover:text-ink-12")}>
-              <span className={cx("grid h-[18px] w-[18px] place-items-center rounded-full text-[11px]", s.done ? "bg-ink-12 text-white" : s === next ? "border border-ink-12 text-ink-12" : "border border-ink-6 text-ink-9")} aria-hidden>
+              <span className={cx("grid h-[18px] w-[18px] place-items-center rounded-full text-[11px]", s.done ? "bg-ok text-white" : s === next ? "bg-accent text-white" : "bg-ink-4 text-ink-10")} aria-hidden>
                 {s.done ? <Check size={11} strokeWidth={2.5} /> : i + 1}
               </span>
               {s.label}

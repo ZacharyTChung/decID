@@ -113,9 +113,9 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
   const openCheck = async (id: string) => setOpen(await p.loadCheck(id));
 
   return (
-    <div className={cx("relative flex min-h-[720px] bg-ink-1 font-sans text-ink-12", p.className)}>
-      <aside className="hidden w-[208px] shrink-0 flex-col border-r border-ink-5 bg-ink-2 md:flex">
-        <div className="flex h-12 items-center border-b border-ink-5 px-4">
+    <div className={cx("relative flex min-h-[720px] bg-ink-2 font-sans text-ink-12", p.className)}>
+      <aside className="hidden w-[216px] shrink-0 flex-col border-r border-ink-4 bg-white/70 md:flex">
+        <div className="flex h-14 items-center px-5">
           <DecidWordmark product="Verify" />
         </div>
         <label className="relative mx-3 mt-3 flex items-center">
@@ -123,7 +123,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
           <span className="pointer-events-none absolute left-2">
             <MerchantLogo merchant={p.merchant} size={20} />
           </span>
-          <select id="biz-merchant" value={p.merchant.id} onChange={(e) => p.onMerchant(e.target.value)} className="h-9 w-full appearance-none rounded-sm border border-ink-6 bg-white pl-9 pr-7 text-ui font-medium">
+          <select id="biz-merchant" value={p.merchant.id} onChange={(e) => p.onMerchant(e.target.value)} className="h-9 w-full appearance-none rounded-[10px] bg-ink-3 pl-9 pr-7 text-ui font-medium">
             {p.merchants.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -134,13 +134,13 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
         </label>
         <nav className="mt-3 flex flex-col gap-0.5 px-2" aria-label="Dashboard">
           {nav.map(([id, label, Icon]) => (
-            <button key={id} onClick={() => setPage(id)} aria-current={page === id ? "page" : undefined} className={cx("press flex h-8 items-center gap-2.5 rounded-sm px-2.5 text-ui", page === id ? "bg-white font-medium text-ink-12 shadow-[0_0_0_1px_var(--color-ink-5)]" : "text-ink-11 hover:bg-ink-3")}>
+            <button key={id} onClick={() => setPage(id)} aria-current={page === id ? "page" : undefined} className={cx("flex h-8 items-center gap-2.5 rounded-[8px] px-2.5 text-ui transition-colors", page === id ? "bg-ink-3 font-medium text-ink-12" : "text-ink-11 hover:bg-ink-2")}>
               <Icon size={15} strokeWidth={1.75} aria-hidden />
               {label}
             </button>
           ))}
         </nav>
-        <div className="mt-auto border-t border-ink-5 px-4 py-3 text-meta text-ink-10">
+        <div className="mt-auto px-5 py-4 text-meta text-ink-10">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-warn-dot" aria-hidden /> Test mode
           </span>
@@ -150,7 +150,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
       </aside>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap gap-2 border-b border-ink-5 px-4 py-2 md:hidden">
+        <div className="flex flex-wrap gap-2 px-4 py-2 md:hidden">
           <select aria-label="Business" value={p.merchant.id} onChange={(e) => p.onMerchant(e.target.value)} className="h-8 rounded-sm border border-ink-6 bg-white px-2 text-ui">
             {p.merchants.map((m) => (
               <option key={m.id} value={m.id}>
@@ -166,15 +166,15 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
             ))}
           </select>
         </div>
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-5 px-6 py-3">
+        <header className="flex flex-wrap items-end justify-between gap-3 px-6 pb-2 pt-6">
           <div>
-            <h2 className="text-lead font-medium">{nav.find((n) => n[0] === page)![1]}</h2>
+            <h2 className="font-display text-h2 font-semibold">{nav.find((n) => n[0] === page)![1]}</h2>
             <p className="text-ui text-ink-10">
               {p.merchant.name} · {p.merchant.kind === "venue" ? "Venue" : "Online store"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-xs border border-ink-5 px-2 py-1 text-meta text-ink-11 sm:inline-flex">
+            <span className="hidden items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-meta text-ink-11 shadow-card sm:inline-flex">
               <ShieldCheck size={13} strokeWidth={1.75} aria-hidden /> Personal data held: none
             </span>
             {p.simulate && (
@@ -226,7 +226,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
                   </Panel>
                 ) : (
                   <Panel title="Time to answer" description="From your request to the customer’s answer.">
-                    <p className="num text-h1 font-medium">{p.stats.medianSecondsToAnswer == null ? "–" : `${p.stats.medianSecondsToAnswer}s`}</p>
+                    <p className="num font-display text-h1 font-semibold">{p.stats.medianSecondsToAnswer == null ? "–" : `${p.stats.medianSecondsToAnswer}s`}</p>
                     <p className="mt-1 text-ui text-ink-10">Median across completed checks.</p>
                   </Panel>
                 )}
@@ -241,7 +241,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
 
           {page === "receipts" && (
             <>
-              <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-4 py-3", p.chain?.ok === false ? "border-bad/40 bg-bad-soft" : "border-ink-5 bg-white")} data-testid="chain-status">
+              <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-5 py-4 shadow-card", p.chain?.ok === false ? "bg-bad-soft" : "bg-white")} data-testid="chain-status">
                 <span className={cx("h-2 w-2 rounded-full", p.chain?.ok === false ? "bg-bad" : "bg-ok")} aria-hidden />
                 <span className="text-body font-medium">{p.chain ? (p.chain.ok ? `Chain intact · ${p.chain.count} signed receipt${p.chain.count === 1 ? "" : "s"}` : `Tampering detected at receipt ${p.chain.firstBrokenSeq}: ${p.chain.problem}`) : "Checking…"}</span>
                 {p.chain?.ok && p.chain.count > 0 && <span className="font-mono text-meta text-ink-10">head {p.chain.head.slice(0, 16)}…</span>}

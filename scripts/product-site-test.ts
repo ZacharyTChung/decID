@@ -61,7 +61,7 @@ try {
   await page.goto(base);
   await phone.getByTestId("add-id").waitFor({ timeout: 30_000 });
   check(true, `the page boots: in-page chain, contracts deployed, issuer keys created (${((Date.now() - started) / 1000).toFixed(1)} s)`);
-  check(await page.evaluate(() => document.fonts.check("14px 'IBM Plex Sans'")), "IBM Plex Sans is loaded (self-hosted)");
+  check(await page.evaluate(async () => (await document.fonts.load("14px 'Inter Variable'")).length > 0), "the fallback UI font (Inter) is embedded and loads");
   await page.screenshot({ path: path.join(SHOTS, "01-start.png") });
   await audit(page, "start");
 

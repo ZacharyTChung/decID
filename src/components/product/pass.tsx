@@ -68,7 +68,7 @@ export function LargeTitle({ title, subtitle, leading, trailing }: { title: stri
         <div>{leading}</div>
         <div>{trailing}</div>
       </div>
-      <h2 className="text-[30px] font-semibold leading-9 tracking-[-0.02em] text-ink-12">{title}</h2>
+      <h2 className="font-display text-[34px] font-bold leading-[41px] tracking-[-0.01em] text-ink-12">{title}</h2>
       {subtitle && <p className="mt-0.5 text-body text-ink-10">{subtitle}</p>}
     </header>
   );
@@ -77,8 +77,8 @@ export function LargeTitle({ title, subtitle, leading, trailing }: { title: stri
 export function Group({ title, footer, children, className }: { title?: string; footer?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cx("px-4", className)}>
-      {title && <h3 className="px-4 pb-1.5 text-ui font-medium text-ink-10">{title}</h3>}
-      <div className="divide-y divide-ink-5 overflow-hidden rounded-lg border border-ink-5 bg-white">{children}</div>
+      {title && <h3 className="px-4 pb-1.5 text-ui text-ink-10">{title}</h3>}
+      <div className="divide-y divide-ink-4 overflow-hidden rounded-[12px] bg-white">{children}</div>
       {footer && <div className="px-4 pt-1.5 text-meta text-ink-10">{footer}</div>}
     </section>
   );
@@ -89,20 +89,20 @@ export function Row({ icon, label, detail, value, onClick, chevron, tone, childr
     <>
       {icon && <span className={cx("grid h-7 w-7 shrink-0 place-items-center rounded-sm", tone === "danger" ? "text-bad" : "text-ink-11")}>{icon}</span>}
       <span className="min-w-0 flex-1">
-        <span className={cx("block text-[15px] leading-5", tone === "danger" ? "text-bad" : "text-ink-12")}>{label}</span>
+        <span className={cx("block text-[17px] leading-[22px] tracking-[-0.01em]", tone === "danger" ? "text-bad" : "text-ink-12")}>{label}</span>
         {detail && <span className="mt-0.5 block text-ui text-ink-10">{detail}</span>}
       </span>
-      {value !== undefined && <span className="shrink-0 text-[15px] text-ink-10">{value}</span>}
+      {value !== undefined && <span className="shrink-0 text-[17px] text-ink-10">{value}</span>}
       {chevron && <ChevronRight size={16} strokeWidth={1.75} className="shrink-0 text-ink-8" aria-hidden />}
       {children}
     </>
   );
   return onClick ? (
-    <button type="button" onClick={onClick} className="press flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-ink-2">
+    <button type="button" onClick={onClick} className="flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-ink-3 active:bg-ink-4">
       {body}
     </button>
   ) : (
-    <div className="flex min-h-12 items-center gap-3 px-4 py-2.5">{body}</div>
+    <div className="flex min-h-11 items-center gap-3 px-4 py-2.5">{body}</div>
   );
 }
 
@@ -115,9 +115,9 @@ export function PhoneButton({ children, onClick, busy, disabled, variant = "prim
       aria-busy={busy || undefined}
       data-testid={testId}
       className={cx(
-        "press flex h-[50px] w-full items-center justify-center gap-2 rounded-lg text-[16px] font-medium disabled:cursor-not-allowed disabled:opacity-50",
+        "press flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] text-[17px] font-semibold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-50",
         variant === "primary" && "bg-ink-12 text-white hover:bg-ink-11",
-        variant === "secondary" && "border border-ink-6 bg-white text-ink-12 hover:bg-ink-2",
+        variant === "secondary" && "bg-white text-accent hover:bg-ink-1",
         variant === "plain" && "text-accent hover:text-accent-hover",
       )}
     >
@@ -169,13 +169,13 @@ export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy,
 
         <p className="mt-4 text-[15px] leading-[22px] text-ink-11">{purpose}</p>
 
-        <h4 className="mt-5 text-ui font-medium text-ink-10">Requested</h4>
-        <div className="mt-1.5 flex items-center justify-between rounded-md border border-ink-5 px-3.5 py-3">
+        <h4 className="mt-5 text-ui text-ink-10">Requested</h4>
+        <div className="mt-1.5 flex items-center justify-between rounded-[12px] bg-ink-2 px-4 py-3.5">
           <span className="text-[15px] font-medium text-ink-12">{item}</span>
           <span className={cx("text-[15px]", answer ? "text-ink-12" : "font-medium text-bad")}>{answer ? "Yes" : "No"}</span>
         </div>
 
-        <h4 className="mt-4 text-ui font-medium text-ink-10">Not shared</h4>
+        <h4 className="mt-5 text-ui text-ink-10">Not shared</h4>
         <p className="mt-1 text-body text-ink-11">{NOT_SHARED}</p>
 
         <p className="mt-4 flex gap-2 text-ui text-ink-10">
@@ -186,7 +186,7 @@ export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy,
         </p>
 
         {(!answer || revoked) && (
-          <p className="mt-4 flex gap-2 rounded-md bg-warn-soft px-3 py-2.5 text-ui text-warn" role="status">
+          <p className="mt-4 flex gap-2 rounded-[12px] bg-warn-soft px-3.5 py-3 text-ui text-warn" role="status">
             <TriangleAlert size={15} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
             <span>{revoked ? `This ID has been revoked. ${merchant.name} will be told it is not valid.` : `Your ID says you are not ${item.toLowerCase()}. If you share, ${merchant.name} will be told “No” and nothing else.`}</span>
           </p>
@@ -216,7 +216,7 @@ export function ShareResult({ ok, merchant, item, matchCode, reason, onDone, don
   const venue = merchant.kind === "venue";
   return (
     <div className="flex min-h-full flex-col px-4 pb-8 pt-4">
-      <section className={cx("rounded-lg px-5 pb-6 pt-7 text-white", ok ? "bg-ok-solid" : "bg-ink-12")} aria-live="polite">
+      <section className={cx("rounded-[20px] px-5 pb-6 pt-7 text-white", ok ? "bg-ok-solid" : "bg-ink-12")} aria-live="polite">
         {ok ? <CheckRing /> : <X size={40} strokeWidth={1.75} aria-hidden />}
         <h3 className="mt-4 text-[26px] font-semibold leading-8 tracking-[-0.02em]">{ok ? `Shared with ${merchant.name}` : reason}</h3>
         <p className="mt-1.5 text-[15px] leading-[22px] text-white">{ok ? `${merchant.name} now knows one thing: you are ${item.toLowerCase()}.` : `${merchant.name} was told the check did not pass. Nothing else was shared.`}</p>

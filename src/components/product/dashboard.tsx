@@ -32,11 +32,11 @@ export function StatusLabel({ status, reason }: { status: CheckStatus; reason?: 
 
 export function KpiStrip({ items }: { items: { label: string; value: ReactNode; hint?: string }[] }) {
   return (
-    <dl className="grid grid-cols-2 overflow-hidden rounded-md border border-ink-5 bg-white md:grid-cols-4">
+    <dl className="grid grid-cols-2 overflow-hidden rounded-lg bg-white shadow-card md:grid-cols-4">
       {items.map((k, i) => (
-        <div key={k.label} className={cx("px-4 py-3.5", i % 2 === 1 && "border-l border-ink-5", i >= 2 && "border-t border-ink-5 md:border-t-0", i >= 1 && "md:border-l")}>
+        <div key={k.label} className={cx("px-5 py-4", i % 2 === 1 && "border-l border-ink-4", i >= 2 && "border-t border-ink-4 md:border-t-0", i >= 1 && "md:border-l")}>
           <dt className="text-ui text-ink-10">{k.label}</dt>
-          <dd className="num mt-1 text-h2 font-medium text-ink-12">{k.value}</dd>
+          <dd className="num mt-1 font-display text-h1 font-semibold text-ink-12">{k.value}</dd>
           {k.hint && <dd className="mt-0.5 text-meta text-ink-9">{k.hint}</dd>}
         </div>
       ))}
@@ -46,15 +46,15 @@ export function KpiStrip({ items }: { items: { label: string; value: ReactNode; 
 
 export function Panel({ title, description, actions, children, flush }: { title: string; description?: string; actions?: ReactNode; children: ReactNode; flush?: boolean }) {
   return (
-    <section className="min-w-0 rounded-md border border-ink-5 bg-white">
-      <header className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3.5">
+    <section className="min-w-0 rounded-lg bg-white shadow-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
         <div className="min-w-0">
-          <h3 className="text-body font-medium text-ink-12">{title}</h3>
+          <h3 className="text-lead font-semibold tracking-[-0.01em] text-ink-12">{title}</h3>
           {description && <p className="mt-0.5 text-ui text-ink-10">{description}</p>}
         </div>
         {actions}
       </header>
-      <div className={flush ? "mt-3" : "px-4 pb-4 pt-3"}>{children}</div>
+      <div className={flush ? "mt-3" : "px-5 pb-5 pt-3"}>{children}</div>
     </section>
   );
 }
@@ -66,12 +66,12 @@ export function Button({ children, onClick, variant = "secondary", disabled, bus
       disabled={disabled || busy}
       data-testid={testId}
       className={cx(
-        "press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-medium disabled:cursor-not-allowed disabled:opacity-50",
-        size === "md" ? "h-8 px-3 text-ui" : "h-7 px-2.5 text-meta",
-        variant === "primary" && "bg-ink-12 text-white hover:bg-ink-11",
-        variant === "secondary" && "border border-ink-6 bg-white text-ink-12 hover:bg-ink-2",
-        variant === "danger" && "border border-ink-6 bg-white text-bad hover:bg-bad-soft",
-        variant === "ghost" && "text-ink-11 hover:bg-ink-3",
+        "press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-medium disabled:cursor-not-allowed disabled:opacity-50",
+        size === "md" ? "h-8 px-4 text-ui" : "h-7 px-3 text-meta",
+        variant === "primary" && "bg-accent text-white hover:bg-accent-hover",
+        variant === "secondary" && "bg-ink-3 text-ink-12 hover:bg-ink-4",
+        variant === "danger" && "bg-bad-soft text-bad hover:bg-[#ffe3e3]",
+        variant === "ghost" && "text-accent hover:bg-accent-soft",
       )}
     >
       {busy && <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" aria-hidden />}
@@ -83,14 +83,14 @@ export function Button({ children, onClick, variant = "secondary", disabled, bus
 /** Segmented filter control. */
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { id: T; label: string; count?: number }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-sm border border-ink-6 bg-ink-2 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-[10px] bg-ink-4 p-[2px]">
       {options.map((o) => (
         <button
           key={o.id}
           role="radio"
           aria-checked={value === o.id}
           onClick={() => onChange(o.id)}
-          className={cx("press h-7 rounded-xs px-2.5 text-ui", value === o.id ? "bg-white font-medium text-ink-12 shadow-[0_0_0_1px_var(--color-ink-6)]" : "text-ink-10 hover:text-ink-12")}
+          className={cx("h-7 rounded-[8px] px-3 text-ui transition-colors", value === o.id ? "bg-white font-medium text-ink-12 shadow-[0_1px_3px_rgb(0_0_0/0.12)]" : "text-ink-11 hover:text-ink-12")}
         >
           {o.label}
           {o.count !== undefined && <span className="num ml-1.5 text-ink-9">{o.count}</span>}
@@ -100,8 +100,8 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   );
 }
 
-export const th = "sticky top-0 z-[1] border-b border-ink-5 bg-ink-1 px-4 py-2 text-left text-meta font-medium text-ink-10";
-export const td = "border-b border-ink-4 px-4 py-2.5 text-ui text-ink-12";
+export const th = "sticky top-0 z-[1] border-b border-ink-4 bg-white px-5 py-2 text-left text-meta font-medium text-ink-10";
+export const td = "border-b border-ink-3 px-5 py-3 text-ui text-ink-12";
 
 export function EmptyRow({ colSpan, children }: { colSpan: number; children: ReactNode }) {
   return (
@@ -117,13 +117,13 @@ export function EmptyRow({ colSpan, children }: { colSpan: number; children: Rea
 export function Drawer({ title, subtitle, onClose, children }: { title: string; subtitle?: ReactNode; onClose: () => void; children: ReactNode }) {
   return (
     <div className="absolute inset-0 z-20 flex justify-end bg-ink-12/20 animate-fade-in" onClick={onClose}>
-      <aside className="flex h-full w-full max-w-[440px] flex-col border-l border-ink-6 bg-white shadow-float animate-sheet-in" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <header className="flex items-start justify-between gap-3 border-b border-ink-5 px-5 py-4">
+      <aside className="flex h-full w-full max-w-[440px] flex-col bg-white shadow-float animate-sheet-in" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-start justify-between gap-3 border-b border-ink-4 px-5 py-4">
           <div className="min-w-0">
-            <h3 className="text-lead font-medium text-ink-12">{title}</h3>
+            <h3 className="text-lead font-semibold text-ink-12">{title}</h3>
             {subtitle && <div className="mt-0.5 text-ui text-ink-10">{subtitle}</div>}
           </div>
-          <button onClick={onClose} className="press grid h-8 w-8 place-items-center rounded-sm text-ink-10 hover:bg-ink-3" aria-label="Close">
+          <button onClick={onClose} className="press grid h-8 w-8 place-items-center rounded-full bg-ink-3 text-ink-10 hover:bg-ink-4" aria-label="Close">
             <X size={16} strokeWidth={1.75} />
           </button>
         </header>
@@ -227,5 +227,5 @@ export function TimingChart({ points }: { points: { id: string; ms: number; ok: 
 }
 
 function ChartEmpty({ children }: { children: ReactNode }) {
-  return <div className="grid h-28 place-items-center rounded-sm border border-dashed border-ink-6 text-ui text-ink-10">{children}</div>;
+  return <div className="grid h-28 place-items-center rounded-md bg-ink-2 text-ui text-ink-10">{children}</div>;
 }

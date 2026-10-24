@@ -67,7 +67,7 @@ try {
   watch(home, "home");
   await home.goto(`${base}/`);
   check(await home.getByRole("heading", { name: "Prove you’re 21. Nothing else." }).isVisible(), "product home renders");
-  check(await home.evaluate(() => document.fonts.check("16px 'IBM Plex Sans'")), "IBM Plex Sans loads (self-hosted, allowed by the CSP)");
+  check(await home.evaluate(async () => (await document.fonts.load("16px 'Inter Variable'")).length > 0), "the fallback UI font (Inter) loads, self-hosted and allowed by the CSP");
   await home.screenshot({ path: path.join(SHOTS, "00-home.png"), fullPage: true });
   await audit(home, "product home");
 

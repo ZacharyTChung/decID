@@ -70,7 +70,7 @@ export function Credential({ holder, ageOver18, ageOver21, issuer, validUntil, d
     <div
       ref={card}
       onPointerMove={move}
-      className="credential relative aspect-[1.586] w-full overflow-hidden rounded-xl border border-ink-6 bg-print-paper text-ink-12 shadow-[0_1px_0_rgb(23_27_32/0.04),0_10px_24px_-14px_rgb(23_27_32/0.35)]"
+      className="credential relative aspect-[1.586] w-full overflow-hidden text-left rounded-xl border border-ink-6 bg-print-paper text-ink-12 shadow-[0_1px_0_rgb(23_27_32/0.04),0_10px_24px_-14px_rgb(23_27_32/0.35)]"
       aria-label={`decID Pass for ${holder}: ${primary}`}
       role="group"
     >

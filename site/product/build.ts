@@ -3,7 +3,7 @@
  *
  *   index.html   the page as published (an Artifact: body content only, CSS inlined)
  *   app.js       the bundle: React UI + decID's own src/ modules + the compiled contracts
- *   fonts/       the woff2 files (IBM Plex Sans/Mono, Archivo, Big Shoulders Display), also embedded in the CSS
+ *   fonts/       the woff2 files (Inter and IBM Plex Mono as fallbacks for SF Pro / SF Mono; Archivo; Big Shoulders Display), also embedded in the CSS
  *   local.html   the same page with a document skeleton, for local testing (npm run test:product-site)
  *
  * Needs `npm run compile` first (the contracts' bytecode is bundled).
@@ -48,9 +48,7 @@ const result = await build({
 
 // Fonts are self-hosted next to the page (the CSS refers to fonts/*.woff2).
 const FONTS: [string, string][] = [
-  ["@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2", "ibm-plex-sans-400.woff2"],
-  ["@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2", "ibm-plex-sans-500.woff2"],
-  ["@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2", "ibm-plex-sans-600.woff2"],
+  ["@fontsource-variable/inter/files/inter-latin-wght-normal.woff2", "inter.woff2"],
   ["@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2", "ibm-plex-mono-400.woff2"],
   ["@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2", "ibm-plex-mono-500.woff2"],
   ["@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2", "archivo-wdth.woff2"],

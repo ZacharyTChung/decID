@@ -29,7 +29,7 @@ This redesign replaces those defaults with decisions taken from shipped identity
   - Secondary text is `ink-10`; primary text is `ink-12`.
 - **Accent: ultramarine #3552BC.** It is used only for links, focus, selection and charts. Primary buttons are near-black (`ink-12`), as in Apple's and Polaris's primary actions.
 - **Verdict colours: green #1E7A3C and red #B42318**, used for the verdict alone. Elsewhere, status is a 6–8 px dot plus a text label.
-- **Type: IBM Plex Sans** (400/500/600) and **IBM Plex Mono** for codes, IDs, hashes and numbers that line up.
+- **Type: the system face (SF Pro / SF Mono on Apple devices)**, with self-hosted Inter and IBM Plex Mono as fallbacks elsewhere. Apple-style large titles (34 px bold on the phone, 48–72 px on the product page).
   - Sizes: 12/16, 13/18 (dashboard UI), 14/20 (body), 16/24, 20/28, 24/32, 32/40, 40/48.
   - Tracking is −0.01em from 20 px and −0.02em from 32 px. Sentence case everywhere except printed credential labels.
 - **Radii:** 4 (badges), 6 (buttons, inputs), 8 (panels), 12 (sheets), 16 (credential), plus full circles for dots.

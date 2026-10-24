@@ -41,28 +41,28 @@ export default function Stage() {
   const current = SCENES.find((s) => s.id === scene)!;
   return (
     <div className="min-h-dvh bg-ink-2 font-sans text-ink-12">
-      <header className="border-b border-ink-5 bg-white">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
+      <header>
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-8 gap-y-3 px-6 pb-2 pt-5">
           <div className="flex items-center gap-3">
             <DecidWordmark />
-            <span className="rounded-xs border border-ink-6 px-1.5 py-px text-meta text-ink-10">Demo stage</span>
+            <span className="text-meta text-ink-10">Demo stage</span>
           </div>
-          <nav aria-label="Scenario" className="flex flex-wrap gap-1">
+          <nav aria-label="Scenario" className="inline-flex rounded-[10px] bg-ink-4 p-[2px]">
             {SCENES.map(({ id, label, Icon }) => (
-              <button key={id} onClick={() => setScene(id)} aria-current={scene === id ? "page" : undefined} className={`press inline-flex h-8 items-center gap-2 rounded-sm px-3 text-ui ${scene === id ? "bg-ink-12 text-white" : "text-ink-11 hover:bg-ink-3"}`}>
+              <button key={id} onClick={() => setScene(id)} aria-current={scene === id ? "page" : undefined} className={`inline-flex h-8 items-center gap-2 rounded-[8px] px-3.5 text-ui transition-colors ${scene === id ? "bg-white font-medium text-ink-12 shadow-[0_1px_3px_rgb(0_0_0/0.12)]" : "text-ink-11 hover:text-ink-12"}`}>
                 <Icon size={15} strokeWidth={1.75} aria-hidden />
                 {label}
               </button>
             ))}
           </nav>
-          <button className="ml-auto text-ui text-ink-10 underline underline-offset-2" onClick={() => setPhoneSrc(`/pass?t=${Date.now()}`)}>
+          <button className="ml-auto text-ui text-accent hover:underline" onClick={() => setPhoneSrc(`/pass?t=${Date.now()}`)}>
             Phone home
           </button>
         </div>
-        <ol className="relative mx-auto flex max-w-[1440px] gap-x-5 overflow-x-auto border-t border-ink-4 bg-ink-1 px-6 py-2 text-ui text-ink-10" aria-label="Script">
+        <ol className="relative mx-auto flex max-w-[1440px] gap-x-5 overflow-x-auto px-6 py-2 text-ui text-ink-10" aria-label="Script">
           {SCRIPT.map((s, i) => (
             <li key={s} className="inline-flex shrink-0 items-center gap-2">
-              <span className="grid h-[18px] w-[18px] place-items-center rounded-full border border-ink-6 text-[11px]" aria-hidden>
+              <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-ink-4 text-[11px]" aria-hidden>
                 {i + 1}
               </span>
               {s}

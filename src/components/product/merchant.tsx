@@ -86,22 +86,24 @@ export function CanArt({ label, band, ink = "#141414", accent, size = 64 }: { la
 /** A minimal browser window, so the demo stage reads as "this is the business's own website". */
 export function BrowserFrame({ url, children, onReload }: { url: string; children: ReactNode; onReload?: () => void }) {
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-ink-6 bg-white shadow-float">
-      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-ink-5 bg-ink-3 px-3">
-        <span className="flex gap-1.5" aria-hidden>
-          <span className="h-2.5 w-2.5 rounded-full bg-ink-6" />
-          <span className="h-2.5 w-2.5 rounded-full bg-ink-6" />
-          <span className="h-2.5 w-2.5 rounded-full bg-ink-6" />
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[14px] bg-white shadow-float ring-1 ring-black/5">
+      <div className="grid h-11 shrink-0 grid-cols-[60px_minmax(0,1fr)_60px] items-center gap-3 border-b border-ink-4 bg-ink-1 px-3.5">
+        <span className="flex gap-2" aria-hidden>
+          <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+          <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+          <span className="h-3 w-3 rounded-full bg-[#28c840]" />
         </span>
-        <div className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-sm bg-white px-2.5 text-ui text-ink-10">
-          <Lock size={12} strokeWidth={2} aria-hidden />
+        <div className="mx-auto flex h-7 w-full max-w-[420px] min-w-0 items-center justify-center gap-1.5 rounded-[8px] bg-ink-3 px-3 text-ui text-ink-11">
+          <Lock size={11} strokeWidth={2.25} className="shrink-0 text-ink-10" aria-hidden />
           <span className="truncate">{url}</span>
         </div>
-        {onReload && (
-          <button onClick={onReload} className="press grid h-7 w-7 place-items-center rounded-sm text-ink-10 hover:bg-ink-4" aria-label="Reload page">
-            <RotateCw size={14} strokeWidth={1.75} />
-          </button>
-        )}
+        <span className="flex justify-end">
+          {onReload && (
+            <button onClick={onReload} className="press grid h-7 w-7 place-items-center rounded-full text-ink-10 hover:bg-ink-3" aria-label="Reload page">
+              <RotateCw size={14} strokeWidth={1.75} />
+            </button>
+          )}
+        </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
