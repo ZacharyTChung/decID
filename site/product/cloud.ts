@@ -12,6 +12,7 @@ import { failureCode, finalize, verifyPresentationCore } from "../../src/lib/ser
 import { World, type Holder } from "../src/world";
 import { detectRisk, riskForCheck, type CheckRecord, type RiskAlert } from "../../src/lib/shared/risk";
 import { answerQuestion, type AssistantAnswer } from "../../src/lib/shared/assistant";
+import { HEALTH_FACTS, issueHealthRecord, presentHealthFact, verifyHealthFact, type HealthCheckResult, type HealthFact, type HealthRecord } from "../../src/lib/shared/health";
 import { buildRequest, decryptResponse, newReaderKey, sessionTranscript } from "../../src/lib/shared/mdl/annex-c";
 import { verifyMdlResponse } from "../../src/lib/shared/mdl/verify";
 import { answerRequest, createTestAuthority, provisionTestLicence, type TestAuthority, type TestWallet } from "../../src/lib/shared/mdl/test-wallet";
@@ -53,6 +54,8 @@ export interface Person {
   issuerName: string;
   claims: Record<string, boolean | string>;
   status: string;
+  /** A health record from the demo clinic: each fact shared one at a time. */
+  health?: HealthRecord;
   /** Face ID / fingerprint turned on for this Pass (simulated in the hosted prototype). */
   unlock?: boolean;
   history: { at: number; merchant: string; shared: string; outcome: "verified" | "rejected"; failureCode: string | null; matchCode: string | null }[];
@@ -296,6 +299,50 @@ export class DecidCloud {
   }
 
   // ---------------------------------------------------------------- decID Verify (business side)
+
+  // ---------------------------------------------------------------- decID Health (synthetic)
+
+  readonly clinicName = "Riverside Clinic (demo)";
+  private clinic?: { key: CryptoKey; jwk: Awaited<ReturnType<typeof exportJWK>>; kid: string };
+  private healthChecks = new Map<string, { id: string; fact: HealthFact; nonce: string; audience: string; result: HealthCheckResult | null }>();
+
+  /** The demo clinic issues a synthetic health record to the person's phone key. */
+  async addHealthRecord(person: Person): Promise<void> {
+    if (!this.clinic) {
+      const { privateKey, publicKey } = await generateKeyPair("Ed25519", { extractable: true });
+      const jwk = await exportJWK(publicKey);
+      this.clinic = { key: privateKey, jwk, kid: await calculateJwkThumbprint(jwk) };
+    }
+    // Synthetic facts: Sam's measles immunity is not on record, to show a "No".
+    const facts = { measlesImmune: person.label !== "Sam", tbScreenClear: true, fluVaccine: person.label === "Alex", sportsClearance: true };
+    person.health = await issueHealthRecord({ clinicKey: this.clinic.key, clinicKid: this.clinic.kid, clinic: this.clinicName, holder: person.holder.wallet.address, facts, now: this.now() });
+    this.changed();
+  }
+
+  /** A school's health office asks one question. */
+  createHealthCheck(fact: HealthFact): string {
+    const id = crypto.randomUUID();
+    this.healthChecks.set(id, { id, fact, nonce: hexlify(randomBytes(16)), audience: "urn:decid:merchant:lakeside", result: null });
+    this.changed();
+    return id;
+  }
+
+  healthCheck(id: string) {
+    const c = this.healthChecks.get(id);
+    if (!c) throw new Error("this request does not exist");
+    return { ...c, label: HEALTH_FACTS[c.fact].label, question: HEALTH_FACTS[c.fact].question };
+  }
+
+  /** The person shares that one fact; the school verifies it (clinic signature, digest, phone signature). */
+  async shareHealth(person: Person, id: string): Promise<HealthCheckResult> {
+    const c = this.healthChecks.get(id);
+    if (!c || c.result) throw new Error("this request was already answered");
+    if (!person.health || !this.clinic) throw new Error("add a health record first");
+    const p = await presentHealthFact(person.health, c.fact, person.holder.wallet, c);
+    c.result = await verifyHealthFact(p, { clinicJwk: this.clinic.jwk, fact: c.fact, audience: c.audience, nonce: c.nonce, now: this.now() });
+    this.changed();
+    return c.result;
+  }
 
   /** Turns on (simulated) Face ID / fingerprint for a Pass. */
   enableUnlock(person: Person): void {

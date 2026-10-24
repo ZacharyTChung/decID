@@ -32,6 +32,8 @@ npm run product            # one command: chain, keys, contracts, demo businesse
 
 See [docs/TRUST-FEATURES.md](docs/TRUST-FEATURES.md).
 
+**Health records (demo):** the same idea for health facts. A demo clinic signs a record whose facts are each hidden behind a digest. A college health office asks one question, such as "Measles (MMR) immunity on record?", and receives one verified yes or no, never the record. The answer is signed by the holder's phone for that one request. This is in the hosted prototype ("Health check") and `src/lib/shared/health.ts`. It uses synthetic data only: real health data carries legal duties such as HIPAA.
+
 More docs:
 - [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors (including TruAge and wallet IDs), business model (labelled assumptions), risks and roadmap.
 - [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md): getting a Pass from a mobile driver's licence, and what going live needs.

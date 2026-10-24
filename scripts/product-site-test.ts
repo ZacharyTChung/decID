@@ -111,6 +111,21 @@ try {
   await page.getByRole("button", { name: "Codes match · next guest" }).click();
   await phone.getByRole("button", { name: "Back to Neon Hall" }).click();
 
+  // decID Health: Lakeside College asks one health fact; the Pass adds a demo clinic record and shares only that.
+  await page.getByRole("navigation", { name: "Scenario" }).getByRole("button", { name: /Health check/ }).click();
+  await page.getByTestId("health-ask").click();
+  await phone.getByTestId("add-health").click();
+  await phone.getByRole("dialog").getByText("Measles (MMR) immunity").waitFor();
+  check(await phone.getByText(/Your health record, other vaccinations/).isVisible(), "health: the sheet asks for one fact and lists what is not shared");
+  await page.screenshot({ path: path.join(SHOTS, "07a-health-consent.png") });
+  await audit(page, "health: consent");
+  await phone.getByTestId("share").click();
+  await page.getByTestId("health-status").getByText("Measles (MMR) immunity: confirmed").waitFor({ timeout: 15_000 });
+  const got = await page.getByLabel("What Lakeside received").innerText();
+  check(/"answer": true/.test(got) && !/tbScreen|flu|sports|Alex|19\d\d-/.test(got), "health: Lakeside received one verified yes, nothing else from the record");
+  await phone.getByRole("button", { name: "Back to Lakeside College" }).click();
+  await page.getByRole("navigation", { name: "Scenario" }).getByRole("button", { name: /Venue entry/ }).click();
+
   // Sam
   await phone.locator("#pass-person").selectOption("__new");
   await phone.getByRole("button", { name: /Simulated Identity Office/ }).click();

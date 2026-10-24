@@ -141,12 +141,16 @@ export interface ConsentProps {
   onCancel: () => void;
   /** Device unlock: whether this Pass has Face ID / fingerprint on, and whether the business requires it. */
   unlock?: { enabled: boolean; required: boolean; onEnable?: () => void };
+  /** Overrides for non-age questions (e.g. a health fact). */
+  purpose?: string;
+  notShared?: string;
+  footnote?: string;
 }
 
 const NOT_SHARED = "Your name, date of birth, address, ID number, photo and any other details on your ID.";
 
-export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy, error, onShare, onCancel, unlock }: ConsentProps) {
-  const purpose = merchant.kind === "venue" ? `${merchant.name} has to confirm that every guest is 21 or older before entry.` : `${merchant.name} has to confirm that buyers of alcohol are 21 or older.`;
+export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy, error, onShare, onCancel, unlock, ...custom }: ConsentProps) {
+  const purpose = custom.purpose ?? (merchant.kind === "venue" ? `${merchant.name} has to confirm that every guest is 21 or older before entry.` : `${merchant.name} has to confirm that buyers of alcohol are 21 or older.`);
   return (
     <SheetLayer labelledBy="consent-title">
       <div className="max-h-[92%] overflow-y-auto rounded-t-[22px] bg-white px-5 pb-7 pt-2 shadow-sheet animate-sheet-in">
@@ -178,19 +182,19 @@ export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy,
         </div>
 
         <h4 className="mt-5 text-ui text-ink-10">Not shared</h4>
-        <p className="mt-1 text-body text-ink-11">{NOT_SHARED}</p>
+        <p className="mt-1 text-body text-ink-11">{custom.notShared ?? NOT_SHARED}</p>
 
         <p className="mt-4 flex gap-2 text-ui text-ink-10">
           <Info size={15} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
           <span>
-            {merchant.name} keeps the answer and a signed receipt, not your details. Your ID issuer is not told where you used it.
+            {custom.footnote ?? `${merchant.name} keeps the answer and a signed receipt, not your details. Your ID issuer is not told where you used it.`}
           </span>
         </p>
 
         {(!answer || revoked) && (
           <p className="mt-4 flex gap-2 rounded-[12px] bg-warn-soft px-3.5 py-3 text-ui text-warn" role="status">
             <TriangleAlert size={15} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
-            <span>{revoked ? `This ID has been revoked. ${merchant.name} will be told it is not valid.` : `Your ID says you are not ${item.toLowerCase()}. If you share, ${merchant.name} will be told “No” and nothing else.`}</span>
+            <span>{revoked ? `This ID has been revoked. ${merchant.name} will be told it is not valid.` : custom.purpose ? `Your record says “No”. If you share, ${merchant.name} will be told “No” and nothing else.` : `Your ID says you are not ${item.toLowerCase()}. If you share, ${merchant.name} will be told “No” and nothing else.`}</span>
           </p>
         )}
 

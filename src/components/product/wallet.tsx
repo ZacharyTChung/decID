@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ArrowLeft, ChevronDown, EyeOff, Fingerprint, FlaskConical, Hand, IdCard, Landmark, ShieldAlert, UserPlus, Wallet } from "lucide-react";
 import { DecidMark } from "./brand";
-import { Credential, CredentialSlot } from "./credential";
+import { Credential } from "./credential";
 import { MerchantLogo, brandFor } from "./merchant";
 import { Group, LargeTitle, PhoneButton, Row, SheetLayer, StepProgress } from "./pass";
 
@@ -66,12 +66,17 @@ export function WalletHome({
       <div className="pb-10">
         <LargeTitle title="decID Pass" subtitle="Prove your age without showing your ID." />
         <div className="px-4">
-          <CredentialSlot>
-            <div className="flex flex-col items-center gap-3">
-              <DecidMark size={28} className="text-ink-9" />
-              <span>No ID added yet</span>
+          {/* A preview of the Pass, so the empty state shows what you'll get. */}
+          <div className="relative" aria-label="No ID added yet" role="img">
+            <div className="pointer-events-none select-none opacity-40 blur-[0.5px] saturate-50" aria-hidden>
+              <Credential holder="You" ageOver18 ageOver21 issuer="Your ID issuer" validUntil={new Date(Date.UTC(2027, 9, 1))} documentRef="--------" />
             </div>
-          </CredentialSlot>
+            <div className="absolute inset-0 grid place-items-center">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-ui font-medium text-ink-12 shadow-card backdrop-blur">
+                <DecidMark size={16} /> Your Pass appears here
+              </span>
+            </div>
+          </div>
           <div className="mt-4">
             <PhoneButton onClick={onAdd} testId="add-id">
               Add your ID
