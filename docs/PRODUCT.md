@@ -52,7 +52,10 @@ Businesses don't want this data. They want a defensible "yes, we checked."
 5. **Open standards, no lock-in.**
    - The credential is a W3C Verifiable Credential with SD-JWT selective disclosure (RFC 9901).
    - Independent libraries accept it (tested in `test/unit/interop.test.ts`).
-6. **Nothing to install for the business, nothing crypto for the person.**
+6. **Verified once from the ID already on the phone.**
+   - A Pass can come from the driver's licence in Apple Wallet, Google Wallet or a state app, asking it only "over 18?" and "over 21?" (ISO 18013-7 over the browser's Digital Credentials API).
+   - One licence backs one active Pass, so an adult can't quietly make Passes for others with their licence.
+7. **Nothing to install for the business, nothing crypto for the person.**
    - The Pass creates its own key on the device.
    - The one on-chain registration is gas-sponsored, so nobody needs a wallet extension or tokens.
 
@@ -62,7 +65,8 @@ Businesses don't want this data. They want a defensible "yes, we checked."
 | --- | --- | --- |
 | ID upload + selfie vendors (Yoti, Persona, Veriff, Onfido, Jumio) | Per-check document scan and face match | Each check moves ID images to a vendor, and the honeypot risk shown by the Discord leak. Strong at first-time verification, and could be *issuers* for decID. |
 | Facial age estimation | A model estimates age from a selfie | No document, but probabilistic. Weak near the 21 threshold and needs a camera every time. |
-| Mobile driver's licences in Apple Wallet / Google Wallet | ISO 18013-5/-7 mDL with selective disclosure | The closest alternative, and good for users. Availability is per state and per platform. decID is the issuer-agnostic layer and gives the business receipts and a dashboard. Supporting mDL as an input is on the roadmap. |
+| Mobile driver's licences in Apple Wallet / Google Wallet | ISO 18013-5/-7 mDL with selective disclosure | The closest alternative, and good for users. Availability is per state and per platform, and the business gets an answer but no record it can show a regulator. decID builds on them: a Pass can be created from the licence in the wallet ([GOVERNMENT-ID.md](GOVERNMENT-ID.md)), then adds receipts, a dashboard and one Pass across platforms. |
+| TruAge (NACS / Conexxus) | The cashier scans a licence (or a TruAge-enabled mobile ID); four fields are read (licence number, state, expiry, birth date) and turned into an encrypted single-use token in the store's transaction log | Built for in-store tobacco and alcohol sales at the register. The licence scan still reads the birth date and licence number, and each check goes through TruAge's cloud. decID's business sees only the yes/no, works online, for delivery and at doors, and the receipts are independently verifiable and anchored on-chain. |
 | Bouncer looks at an ID | Visual check | Fake IDs, no record, and staff see the address. |
 
 **Positioning:** decID does not compete with identity-proofing vendors. It reuses their one-time verification so that the *checks* (the frequent, risky part) stop moving personal data.
@@ -88,7 +92,7 @@ Businesses don't want this data. They want a defensible "yes, we checked."
 
 ## Roadmap
 
-1. Accept mDL (ISO 18013-5) and EUDI wallet credentials as inputs.
+1. ~~Accept mDL as an input~~: built with test licences ([GOVERNMENT-ID.md](GOVERNMENT-ID.md)); next, real trust roots and wallet registration, then EUDI wallet credentials.
 2. Unlinkable presentations (BBS+ or SD-JWT batch issuance), so two businesses can't correlate the same Pass.
 3. Native mobile Pass with secure-enclave keys.
 4. A POS / door-scanner integration kit, and a Shopify checkout plugin.

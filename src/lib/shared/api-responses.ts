@@ -31,6 +31,10 @@ export const ConfigResponse = z.strictObject({
   rpcUrl: z.string(),
   origin: z.string(),
   demo: z.boolean(),
+  governmentId: z.strictObject({
+    issuers: z.array(z.strictObject({ name: z.string(), test: z.boolean() })).describe("Issuing authorities whose mobile licences are accepted"),
+    acceptsTestIds: z.boolean(),
+  }),
   issuers: z.array(
     z.strictObject({
       id: z.string(),
@@ -62,6 +66,30 @@ export const HolderRequestsResponse = z.strictObject({
     }),
   ),
 });
+export const MdlRequestResponse = z.strictObject({
+  id: z.string().uuid(),
+  protocol: z.literal("org-iso-mdoc"),
+  data: z.strictObject({ deviceRequest: z.string(), encryptionInfo: z.string() }).describe("Pass unchanged to navigator.credentials.get({ digital: { requests: [{ protocol, data }] } })"),
+  expiresAt: Unix,
+});
+
+export const MdlIssuanceResponse = z.strictObject({
+  requestId: z.string().uuid().describe("Pick the credential up with postBundlePickup"),
+  commitment: Hex32,
+  credentialId: z.string(),
+  superseded: z.strictObject({ revoked: z.array(Hex32), cancelled: z.array(Hex32) }).optional().describe("Earlier Passes backed by the same licence, now shut down"),
+  issuer: z.strictObject({ name: z.string(), test: z.boolean() }).describe("The issuing authority that signed the licence"),
+  ageOver18: z.boolean(),
+  ageOver21: z.boolean(),
+  replacedPass: z.boolean(),
+});
+
+export const TestLicenceResponse = z.strictObject({
+  authority: z.string(),
+  mdoc: z.string().describe("Issuer-signed licence (CBOR, base64url) for the test wallet"),
+  devicePrivateJwk: z.record(z.string(), z.unknown()).describe("The test phone's device key"),
+});
+
 export const BundleResponse = z.strictObject({ bundle: HolderBundleV2.describe("Private holder bundle; returned once, then deleted on the server") });
 
 export const PendingRequestsResponse = z.strictObject({

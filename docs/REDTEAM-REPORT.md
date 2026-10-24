@@ -1,8 +1,8 @@
 # Red-team report
 
-Run: 2026-10-24T02:12:54.984Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
+Run: 2026-10-24T03:22:13.712Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
 
-**56 of 56 defenses held.**
+**62 of 62 defenses held.**
 
 | ID | Category | Attack | Expected defense | Observed | Result |
 | --- | --- | --- | --- | --- | --- |
@@ -62,6 +62,12 @@ Run: 2026-10-24T02:12:54.984Z against a fresh local stack (`npm run redteam`). S
 | F1 | Audit trail & anchoring | Outsider writes a forged checkpoint for the issuer audit log | revert AccessControlUnauthorizedAccount | AccessControlUnauthorizedAccount | held |
 | F2 | Audit trail & anchoring | Stolen anchorer key rolls the audit-log checkpoint back to fewer entries | revert CountNotIncreasing | CountNotIncreasing | held |
 | F3 | Audit trail & anchoring | Operator rewrites the issuer audit log in the database and re-hashes the whole chain | hash chain passes, on-chain anchor mismatch | chain passes; anchor: entry 1 differs from the hash anchored on-chain in block 7 | held |
+| G1 | Government ID | Forged licence: perfect format, signed by the attacker's own "DMV" root | HTTP 422 MDL_UNTRUSTED_ISSUER | HTTP 422 MDL_UNTRUSTED_ISSUER | held |
+| G2 | Government ID | Minor edits age_over_21 from false to true inside the state-signed licence | HTTP 422 MDL_BAD_SIGNATURE | HTTP 422 MDL_BAD_SIGNATURE | held |
+| G3 | Government ID | Copied licence data presented from another phone (without the licence's device key) | HTTP 422 MDL_NOT_DEVICE_SIGNED | HTTP 422 MDL_NOT_DEVICE_SIGNED | held |
+| G4 | Government ID | Phishing relay: an answer the adult's wallet made for evil.example, forwarded to decID | HTTP 400 MDL_BAD_RESPONSE | HTTP 400 MDL_BAD_RESPONSE | held |
+| G5 | Government ID | Replay of a captured, valid wallet answer | HTTP 404 MDL_REQUEST_NOT_FOUND | HTTP 404 MDL_REQUEST_NOT_FOUND | held |
+| G6 | Government ID | Lending a licence: the adult approves a Pass for someone else's phone | allowed once, and the adult's own Pass is shut down (one licence, one Pass) | borrower got a Pass; adult's Pass shut down | held |
 
 Not covered here (needs clock control): expiry, not-yet-valid and registration-deadline boundaries; these are
 covered by the contract tests and the Solidity fuzz/invariant suite (`npm run test:fuzz`).

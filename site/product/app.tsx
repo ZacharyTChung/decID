@@ -32,6 +32,13 @@ const ISSUE_STEPS = [
   { id: "activating", label: "Activate", detail: "A random code goes on the public registry." },
 ];
 
+const ID_STEPS = [
+  { id: "asking-wallet", label: "Ask your wallet", detail: "It shares only “over 18” and “over 21”." },
+  { id: "checking-id", label: "Check the state’s signature", detail: "And that this answer was made on your phone, for this request." },
+  { id: "issuing", label: "Receive your Pass", detail: "Signed by decID’s issuer, kept on this phone." },
+  { id: "activating", label: "Activate", detail: "A random code goes on the public registry." },
+];
+
 function useCloud(cloud: DecidCloud | undefined): number {
   return useSyncExternalStore(
     useCallback((fn: () => void) => cloud?.subscribe(fn) ?? (() => undefined), [cloud]),
@@ -201,19 +208,40 @@ const ISSUER = "Simulated Identity Office";
 function PassApp({ cloud, active, setActive, screen, setScreen, onBackToSite }: { cloud: DecidCloud; active?: Person; setActive: (id: string) => void; screen: PhoneScreen; setScreen: (s: PhoneScreen) => void; onBackToSite: () => void }) {
   const [step, setStep] = useState<string>();
   const [error, setError] = useState<string>();
+  const [flow, setFlow] = useState<"form" | "id">("form");
 
   if (screen.k === "add") {
     return (
       <AddIdFlow
         key={cloud.people.length}
         issuerName={ISSUER}
-        steps={ISSUE_STEPS}
+        steps={flow === "id" ? ID_STEPS : ISSUE_STEPS}
+        governmentId={{
+          browserSupport: false,
+          realIssuers: [],
+          testIds: true,
+          onUseWallet: () => undefined,
+          onUseTestWallet: async (label, birthDate) => {
+            setError(undefined);
+            setFlow("id");
+            try {
+              const { person } = await cloud.getVerifiedWithId(label, birthDate, setStep);
+              setActive(person.id);
+              setScreen(screen.back ?? { k: "home" });
+            } catch (e) {
+              setError(describe(e));
+            } finally {
+              setStep(undefined);
+            }
+          },
+        }}
         step={step}
         error={error}
         canGoBack={cloud.people.length > 0 || !!screen.back}
         onBack={() => setScreen(screen.back ?? { k: "home" })}
         onSubmit={async (label, form) => {
           setError(undefined);
+          setFlow("form");
           try {
             setStep("applying");
             await new Promise((r) => setTimeout(r, 300));
@@ -261,7 +289,7 @@ function PassApp({ cloud, active, setActive, screen, setScreen, onBackToSite }: 
                 holder: active.label,
                 ageOver18: active.claims.ageOver18 === true,
                 ageOver21: active.claims.ageOver21 === true,
-                issuer: ISSUER,
+                issuer: active.issuerName.startsWith("Simulated") ? ISSUER : active.issuerName,
                 validUntil: new Date(b.authorization.expiresAt * 1000),
                 reference: b.commitment.slice(2, 10).toUpperCase(),
                 status: active.status,

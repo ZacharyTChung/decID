@@ -134,7 +134,7 @@ export async function ensureSession(p: PassProfile, config: PublicConfigResponse
   await api("POST", "/api/auth/verify", { message, signature: await w.signMessage(message) });
 }
 
-export type Step = "applying" | "waiting-review" | "issuing" | "activating" | "done";
+export type Step = "applying" | "waiting-review" | "asking-wallet" | "checking-id" | "issuing" | "activating" | "done";
 
 /**
  * Get verified: apply to the (simulated) issuer, wait for approval, pick up the credential and
@@ -164,6 +164,55 @@ export async function getVerified(
   const parsed = HolderBundleV2.parse(bundle);
   const withBundle: PassProfile = { ...p, bundle: parsed, issuerName: config.issuers[0]?.name };
   await saveProfile(withBundle); // keep it even if activation fails; it can be retried
+  onStep("activating");
+  await activate(withBundle, config);
+  onStep("done");
+  return withBundle;
+}
+
+/** The browser can ask a phone wallet for an ID (W3C Digital Credentials API: Safari 26+, Chrome 141+). */
+export function walletIdSupported(): boolean {
+  return typeof window !== "undefined" && "DigitalCredential" in window && typeof navigator.credentials?.get === "function";
+}
+
+export type IdSource = { kind: "wallet" } | { kind: "test"; birthDate: string };
+
+/**
+ * Get verified with the government ID in a phone wallet: decID asks the wallet for "over 18" and
+ * "over 21" only, the person approves in the wallet, the server checks the state's and the phone's
+ * signatures and issues the Pass to this device's key. Then pick up and activate as usual.
+ *
+ * With a test source, the test wallet (synthetic licence from the demo's test DMV) answers instead
+ * of a real wallet, running the same protocol in this page.
+ */
+export async function getVerifiedWithId(p: PassProfile, config: PublicConfigResponse, source: IdSource, onStep: (s: Step) => void): Promise<PassProfile> {
+  await ensureSession(p, config);
+  onStep("asking-wallet");
+  const req = await api<{ id: string; protocol: string; data: { deviceRequest: string; encryptionInfo: string } }>("POST", "/api/holder/mdl/requests", {});
+  let response: string;
+  if (source.kind === "wallet") {
+    const cred = (await navigator.credentials.get({
+      // The DC API member is not in TypeScript's DOM types yet.
+      ...({ digital: { requests: [{ protocol: req.protocol, data: req.data }] } } as object),
+      mediation: "required",
+    } as CredentialRequestOptions)) as (Credential & { data?: unknown }) | null;
+    if (!cred) throw new Error("The wallet didn’t share anything.");
+    const data = typeof cred.data === "string" ? (JSON.parse(cred.data) as { response?: string }) : (cred.data as { response?: string } | undefined);
+    if (!data?.response) throw new Error("The wallet’s answer wasn’t understood.");
+    response = data.response;
+  } else {
+    const licence = await api<{ mdoc: string; devicePrivateJwk: JsonWebKey }>("POST", "/api/demo/test-licence", { birthDate: source.birthDate });
+    const { answerRequest } = await import("@/lib/shared/mdl/test-wallet");
+    const mdoc = Uint8Array.from(atob(licence.mdoc.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    response = await answerRequest({ mdoc, devicePrivateJwk: licence.devicePrivateJwk as never }, req.data, window.location.origin);
+  }
+  onStep("checking-id");
+  const issued = await api<{ requestId: string; issuer: { name: string; test: boolean } }>("POST", `/api/holder/mdl/requests/${req.id}/response`, { response });
+  onStep("issuing");
+  const { bundle } = await api<{ bundle: HolderBundle }>("POST", `/api/holder/requests/${issued.requestId}/bundle`, {});
+  // The card names the authority that signed the licence, e.g. "California DMV".
+  const withBundle: PassProfile = { ...p, bundle: HolderBundleV2.parse(bundle), issuerName: issued.issuer.name };
+  await saveProfile(withBundle);
   onStep("activating");
   await activate(withBundle, config);
   onStep("done");

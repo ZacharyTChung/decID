@@ -111,6 +111,19 @@ export function issuerAutoApprove(): boolean {
   return env("ISSUER_AUTO_APPROVE") === "1";
 }
 
+/**
+ * Government IDs (mobile driving licences). Real issuing-authority roots are PEM files in
+ * MDL_TRUST_DIR (default config/mdl-trust). Test IDs, signed by a generated test root, are accepted
+ * only when MDL_ACCEPT_TEST_IDS=1 or in demo mode (and never when MDL_ACCEPT_TEST_IDS=0).
+ */
+export function mdlTrustDir(): string {
+  return path.resolve(projectRoot(), env("MDL_TRUST_DIR") ?? "config/mdl-trust");
+}
+export function mdlAcceptTestIds(): boolean {
+  const v = env("MDL_ACCEPT_TEST_IDS");
+  return v === "1" || (v !== "0" && demoMode());
+}
+
 export function credentialLifetimeSeconds(): number {
   const days = Number(env("CREDENTIAL_LIFETIME_DAYS") ?? "365");
   if (!Number.isFinite(days) || days <= 0 || days > 3650) throw new Error("invalid CREDENTIAL_LIFETIME_DAYS");

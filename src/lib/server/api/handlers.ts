@@ -8,9 +8,14 @@ import {
   SignInChallengeRequest,
   SignInVerifyRequest,
   HolderRequestBody,
+  MdlResponseBody,
+  TestLicenceBody,
   type PublicConfigResponse,
 } from "../../shared/api";
-import { appConfig, demoMode, issuerAutoApprove } from "../config";
+import { appConfig, demoMode, issuerAutoApprove, mdlAcceptTestIds } from "../config";
+import { completeMdlRequest, startMdlRequest } from "../issuer/mdl";
+import { mdlTrustAnchors, testAuthority } from "../mdl/trust";
+import { provisionTestLicence } from "../../shared/mdl/test-wallet";
 import { loadDeployment } from "../chain";
 import { ApiError, json, readJson, route } from "../http";
 import {
@@ -52,6 +57,10 @@ export const getConfig = route(async () => {
     rpcUrl: appConfig().rpcUrl,
     origin: appConfig().origin,
     demo: demoMode(),
+    governmentId: {
+      issuers: (await mdlTrustAnchors()).map((a) => ({ name: a.name, test: a.test })),
+      acceptsTestIds: mdlAcceptTestIds(),
+    },
     issuers: loadTrustedIssuers().map((i) => ({
       id: i.id,
       name: i.name,
@@ -118,6 +127,42 @@ export async function postBundlePickup(req: Request, id: string | undefined): Pr
     return json({ bundle: issuer.pickupBundle(session, requestIdParam(id)) });
   })(req);
 }
+
+// ---------------------------------------------------------------- government ID (mobile licence)
+
+export const postMdlRequest = route(
+  async (req) => {
+    const session = requireSession(req, "holder");
+    return json(await startMdlRequest(session), { status: 201 });
+  },
+  { rateLimit: { name: "mdl-request", perMinute: 20 } },
+);
+
+export async function postMdlResponse(req: Request, id: string | undefined): Promise<Response> {
+  return route(
+    async (r) => {
+      const session = requireSession(r, "holder");
+      const { response } = await readJson(r, MdlResponseBody);
+      return json(await completeMdlRequest(session, requestIdParam(id), response));
+    },
+    { rateLimit: { name: "mdl-response", perMinute: 20 } },
+  )(req);
+}
+
+/**
+ * A TEST licence for the test wallet (development and demo only): synthetic data signed by the
+ * generated test authority, with a fresh device key, the way a DMV provisions a phone.
+ */
+export const postTestLicence = route(
+  async (req) => {
+    if (!mdlAcceptTestIds()) throw new ApiError(404, "TEST_IDS_DISABLED", "test IDs are off (set MDL_ACCEPT_TEST_IDS=1)");
+    const body = await readJson(req, TestLicenceBody);
+    const authority = await testAuthority();
+    const w = await provisionTestLicence(authority, { birthDate: body.birthDate, jurisdiction: body.jurisdiction });
+    return json({ authority: authority.name, mdoc: Buffer.from(w.mdoc).toString("base64url"), devicePrivateJwk: w.devicePrivateJwk }, { status: 201 });
+  },
+  { rateLimit: { name: "test-licence", perMinute: 20 } },
+);
 
 // ---------------------------------------------------------------- issuer
 

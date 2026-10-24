@@ -165,6 +165,10 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Holder bundle after pickup | Browser tab memory | The holder | Until reload or wallet switch |
 | Encrypted backup file | Wherever the holder saves it | Anyone with the password | Holder-controlled |
 | Device vault (same encrypted envelope) | Browser IndexedDB, keyed by wallet address | Anyone with the passphrase and access to that browser profile | Until the holder removes it or clears site data |
+| Government-ID request: one-time reader private key, encryption info, origin | SQLite `mdl_requests` | Server | Deleted when the wallet's answer arrives, or after 5 min |
+| Government-ID answer (age_over_18 / age_over_21, issuer-signed licence data) | Server process memory | Server | Not persisted; only the derived claims go into the credential |
+| One-licence-one-Pass binding: HMAC of the licence's device-key thumbprint, holder address | SQLite `mdl_bindings` | Server | Until reset |
+| Test DMV (root + document-signer certificate, signer private key) | `<DATA_DIR>/mdl-test-authority.json` (0600) | Server | Test only; accepted only with `MDL_ACCEPT_TEST_IDS=1` or demo mode |
 | Credential token and salt during verification | Verifier process memory | Verifier | Not persisted |
 | Challenge (nonce, action, audience, chain, registry, expiry, outcome code) | SQLite `verifier_challenges` | Verifier | 1 h after expiry |
 | SIWE nonces / sessions (SHA-256 of cookie, address, role) | SQLite `auth_*` | Server | Nonces 5 min, sessions 1 h |

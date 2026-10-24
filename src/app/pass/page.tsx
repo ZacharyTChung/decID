@@ -7,7 +7,7 @@ import { useApp } from "@/components/providers";
 import { AddIdFlow, WalletHome, type IdForm } from "@/components/product/wallet";
 import { PassScreen, PhoneButton } from "@/components/product/pass";
 import { describeError } from "@/lib/client/errors";
-import { activate, activeProfile, claimsOf, createProfile, credentialStatus, getVerified, history, listProfiles, saveProfile, setActive, type HistoryEntry, type PassProfile, type Step } from "@/lib/client/pass";
+import { activate, activeProfile, claimsOf, createProfile, credentialStatus, getVerified, getVerifiedWithId, history, listProfiles, saveProfile, setActive, walletIdSupported, type HistoryEntry, type IdSource, type PassProfile, type Step } from "@/lib/client/pass";
 import { deriveHolderDid } from "@/lib/shared/did-pkh";
 import { friendlyReason } from "@/lib/shared/policies";
 
@@ -23,6 +23,13 @@ const STEPS = [
   { id: "activating", label: "Activate", detail: "A random code goes on the public registry. decID pays the fee." },
 ];
 
+const ID_STEPS = [
+  { id: "asking-wallet", label: "Ask your wallet", detail: "It shares only “over 18” and “over 21”." },
+  { id: "checking-id", label: "Check the state’s signature", detail: "And that this answer was made on your phone, for this request." },
+  { id: "issuing", label: "Receive your Pass", detail: "Signed by decID’s issuer, kept on this phone." },
+  { id: "activating", label: "Activate", detail: "A random code goes on the public registry. decID pays the fee." },
+];
+
 function PassHome() {
   const app = useApp();
   const router = useRouter();
@@ -33,6 +40,7 @@ function PassHome() {
   const [hist, setHist] = useState<HistoryEntry[]>([]);
   const [adding, setAdding] = useState(false);
   const [step, setStep] = useState<Step>();
+  const [flow, setFlow] = useState<"form" | "id">("form");
   const [error, setError] = useState<string>();
 
   const reload = useCallback(async () => {
@@ -52,6 +60,7 @@ function PassHome() {
   const addId = async (label: string, form: IdForm) => {
     if (!app.config) return;
     setError(undefined);
+    setFlow("form");
     try {
       // Reuse a person that was created but never verified; otherwise start a new one.
       let p = profile && !profile.bundle ? profile : await createProfile(label);
@@ -62,6 +71,27 @@ function PassHome() {
       // Only the application fields (the issuer's schema is strict).
       const { fullName, dateOfBirth, country, documentNumber } = form;
       await getVerified(p, app.config, { fullName, dateOfBirth, country, documentNumber }, setStep);
+      setAdding(false);
+      await reload();
+      if (next?.startsWith("/pass/r/")) router.push(next);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setStep(undefined);
+    }
+  };
+
+  const addWithId = async (label: string, source: IdSource) => {
+    if (!app.config) return;
+    setError(undefined);
+    setFlow("id");
+    try {
+      let p = profile && !profile.bundle ? profile : await createProfile(label);
+      if (p.label !== label) {
+        p = { ...p, label };
+        await saveProfile(p);
+      }
+      await getVerifiedWithId(p, app.config, source, setStep);
       setAdding(false);
       await reload();
       if (next?.startsWith("/pass/r/")) router.push(next);
@@ -92,7 +122,24 @@ function PassHome() {
   if (adding || !profile?.bundle) {
     return (
       <PassScreen>
-        <AddIdFlow issuerName="Simulated Identity Office" steps={STEPS} step={step} error={error} canGoBack={verified.length > 0} onBack={() => setAdding(false)} onSubmit={(label, form) => void addId(label, form)} />
+        <AddIdFlow
+          issuerName="Simulated Identity Office"
+          steps={flow === "id" ? ID_STEPS : STEPS}
+          step={step}
+          error={error}
+          canGoBack={verified.length > 0}
+          onBack={() => setAdding(false)}
+          onSubmit={(label, form) => void addId(label, form)}
+          governmentId={
+            app.config?.governmentId && {
+              browserSupport: walletIdSupported(),
+              realIssuers: app.config.governmentId.issuers.filter((i) => !i.test).map((i) => i.name),
+              testIds: app.config.governmentId.acceptsTestIds,
+              onUseWallet: (label) => void addWithId(label, { kind: "wallet" }),
+              onUseTestWallet: (label, birthDate) => void addWithId(label, { kind: "test", birthDate }),
+            }
+          }
+        />
       </PassScreen>
     );
   }
@@ -114,7 +161,7 @@ function PassHome() {
           holder: profile.label,
           ageOver18: claims.ageOver18 === true,
           ageOver21: claims.ageOver21 === true,
-          issuer: "Simulated Identity Office",
+          issuer: profile.issuerName && profile.issuerName !== app.config?.issuers[0]?.name ? profile.issuerName : "Simulated Identity Office",
           validUntil: new Date(b.authorization.expiresAt * 1000),
           reference: b.commitment.slice(2, 10).toUpperCase(),
           status,

@@ -40,7 +40,9 @@ export interface IssueInput {
     attestationSigner: Signer;
   };
   holderAddress: string;
-  application: Pick<SyntheticApplicationT, "dateOfBirth" | "country">;
+  /** Either an application to derive the claims from, or claims already established (e.g. from a government ID). */
+  application?: Pick<SyntheticApplicationT, "dateOfBirth" | "country">;
+  claims?: SdClaims;
   deployment: { chainId: number; registry: string; deploymentId: string };
   issuerEpoch: number;
   now: number;
@@ -61,9 +63,11 @@ export async function issueCredential(i: IssueInput): Promise<Issued> {
   const validFrom = i.now;
   const validUntil = i.now + i.lifetimeSeconds;
 
-  // 1. Minimal VC with selectively disclosable claims derived from the (synthetic) application,
+  // 1. Minimal VC with selectively disclosable claims (from the synthetic application or a verified ID),
   //    signed with the credential key. Only digests go into the signed payload.
-  const { disclosures, sd } = createDisclosures(deriveDisclosableClaims(i.application, i.now));
+  const claims = i.claims ?? (i.application ? deriveDisclosableClaims(i.application, i.now) : undefined);
+  if (!claims) throw new Error("issueCredential needs an application or claims");
+  const { disclosures, sd } = createDisclosures(claims);
   const vc = buildIdentityCredential({
     credentialId: i.credentialId,
     issuerDid: i.keys.did,

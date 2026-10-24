@@ -146,6 +146,27 @@ CREATE TABLE IF NOT EXISTS issuer_tx_lease (
   expires_at_ms  INTEGER NOT NULL
 );
 -- The same for the anchorer's key (src/lib/server/anchor.ts).
+-- A Digital Credentials API request to the ID in a phone's wallet (ISO 18013-7 Annex C). The
+-- one-time reader key is deleted with the row when the answer arrives or the request expires.
+CREATE TABLE IF NOT EXISTS mdl_requests (
+  id                  TEXT PRIMARY KEY,
+  holder_address      TEXT NOT NULL,
+  reader_private_key  TEXT NOT NULL,
+  encryption_info     TEXT NOT NULL,
+  origin              TEXT NOT NULL,
+  created_at          INTEGER NOT NULL,
+  expires_at          INTEGER NOT NULL
+);
+
+-- One government ID backs one active Pass. key_hash is a keyed hash of the licence's device key
+-- (a public key, not personal data); nothing else about the licence is stored.
+CREATE TABLE IF NOT EXISTS mdl_bindings (
+  key_hash        TEXT PRIMARY KEY,
+  holder_address  TEXT NOT NULL,
+  request_id      TEXT NOT NULL,
+  bound_at        INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS anchor_tx_lease (
   id             INTEGER PRIMARY KEY CHECK (id = 1),
   owner          TEXT NOT NULL,
@@ -181,6 +202,10 @@ function migrate(d: Database.Database): void {
   // Set when a recovery replaced this credential (revoked or authorization cancelled).
   addColumn("issuer_credentials", "superseded_at", "INTEGER");
   addColumn("issuer_credentials", "superseded_by", "TEXT");
+  // Requests proven by a government ID carry the established claims instead of an application.
+  addColumn("issuer_requests", "method", "TEXT");
+  addColumn("issuer_requests", "claims_json", "TEXT");
+  addColumn("issuer_requests", "valid_until_cap", "INTEGER");
   ensureAuditTable(d);
 }
 
@@ -203,4 +228,5 @@ export function purgeExpired(now = nowSeconds()): void {
   d.prepare("DELETE FROM verifier_challenges WHERE expires_at <= ?").run(now - 3600);
   d.prepare("DELETE FROM rate_limits WHERE window_start <= ?").run(now - 3600);
   d.prepare("DELETE FROM business_sessions WHERE expires_at <= ?").run(now);
+  d.prepare("DELETE FROM mdl_requests WHERE expires_at <= ?").run(now);
 }

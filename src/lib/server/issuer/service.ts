@@ -4,6 +4,7 @@ import { Contract, Wallet, getAddress } from "ethers";
 import { CREDENTIAL_REGISTRY_ABI } from "../../../generated/contracts";
 import { deriveHolderDid } from "../../shared/did-pkh";
 import { HolderBundleV2, type HolderBundle } from "../../shared/bundle";
+import type { SdClaims } from "../../shared/sd-jwt";
 import type { HolderRequestView, SyntheticApplicationT } from "../../shared/api";
 import { credentialLifetimeSeconds, issuerSecrets } from "../config";
 import { assertLiveDeployment, loadDeployment, onChain, provider, readRecord } from "../chain";
@@ -134,7 +135,7 @@ function liveCredentialsOf(holder: string) {
 
 export function listPendingRequests(_issuer: Session): PendingRequestView[] {
   const rows = db()
-    .prepare("SELECT id, holder_did, created_at, synthetic_json, recovery_of FROM issuer_requests WHERE status = 'pending' ORDER BY created_at")
+    .prepare("SELECT id, holder_did, created_at, synthetic_json, recovery_of FROM issuer_requests WHERE status = 'pending' AND synthetic_json IS NOT NULL ORDER BY created_at")
     .all() as { id: string; holder_did: string; created_at: number; synthetic_json: string; recovery_of: string | null }[];
   return rows.map((r) => ({
     id: r.id,
@@ -223,9 +224,11 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
   const claimed = d
     .prepare(
       `UPDATE issuer_requests SET status = 'approved', reviewed_at = ?, reviewed_by = ?
-       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id, recovery_of, synthetic_json`,
+       WHERE id = ? AND status = 'pending' RETURNING holder_address, chain_id, recovery_of, synthetic_json, claims_json, valid_until_cap, method`,
     )
-    .get(now, issuer.address, requestId) as { holder_address: string; chain_id: number; recovery_of: string | null; synthetic_json: string | null } | undefined;
+    .get(now, issuer.address, requestId) as
+    | { holder_address: string; chain_id: number; recovery_of: string | null; synthetic_json: string | null; claims_json: string | null; valid_until_cap: number | null; method: string | null }
+    | undefined;
   if (!claimed) throw new ApiError(409, "NOT_PENDING", "request is not pending");
 
   try {
@@ -242,17 +245,22 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
     // Recovery: shut down the lost wallet's credentials first; if that fails, nothing new is issued.
     const superseded = claimed.recovery_of ? await supersedeCredentials(issuer.address, claimed.recovery_of, requestId, deployment) : undefined;
 
-    if (!claimed.synthetic_json) throw new ApiError(409, "APPLICATION_ERASED", "the application data is no longer available");
+    // A request carries either a (synthetic) application or claims already proven by a government ID.
+    if (!claimed.synthetic_json && !claimed.claims_json) throw new ApiError(409, "APPLICATION_ERASED", "the application data is no longer available");
     const holderAddress = getAddress(claimed.holder_address);
     const credentialId = `urn:uuid:${randomUUID()}`;
+    // Never outlive the evidence: a credential from an ID ends when that ID's mobile credential does.
+    const lifetimeSeconds = Math.min(credentialLifetimeSeconds(), claimed.valid_until_cap ? claimed.valid_until_cap - now : Infinity);
+    if (lifetimeSeconds <= 0) throw new ApiError(409, "EVIDENCE_EXPIRED", "the ID this request relies on has expired");
     const { bundle, holderDid, validFrom, validUntil } = await issueCredential({
       keys: { did: keys.did, kid: keys.kid, credentialPrivateJwk: keys.secrets.credentialPrivateJwk, attestationSigner: keys.evmWallet },
       holderAddress,
-      application: JSON.parse(claimed.synthetic_json) as SyntheticApplicationT,
+      application: claimed.synthetic_json ? (JSON.parse(claimed.synthetic_json) as SyntheticApplicationT) : undefined,
+      claims: claimed.claims_json ? (JSON.parse(claimed.claims_json) as SdClaims) : undefined,
       deployment,
       issuerEpoch: Number(epoch),
       now,
-      lifetimeSeconds: credentialLifetimeSeconds(),
+      lifetimeSeconds,
       credentialId,
     });
     const { commitment } = bundle;
@@ -264,7 +272,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
         `INSERT INTO issuer_credentials (commitment, request_id, credential_id, holder_address, holder_did, valid_from, expires_at, issued_at, issuer_signer)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(commitment, requestId, credentialId, holderAddress, holderDid, validFrom, validUntil, now, issuerAddress);
-      d.prepare("UPDATE issuer_requests SET synthetic_json = NULL WHERE id = ?").run(requestId);
+      d.prepare("UPDATE issuer_requests SET synthetic_json = NULL, claims_json = NULL WHERE id = ?").run(requestId);
       d.prepare(
         "INSERT INTO issuer_bundle_pickup (request_id, holder_address, bundle_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
       ).run(requestId, holderAddress, JSON.stringify(bundle), now, now + BUNDLE_PICKUP_TTL);
@@ -278,6 +286,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       issuerSigner: issuerAddress,
       validUntil,
       recoveryOf: claimed.recovery_of,
+      evidence: claimed.method ?? "application",
     });
     return { requestId, commitment, credentialId, superseded };
   } catch (err) {

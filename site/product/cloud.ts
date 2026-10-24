@@ -10,6 +10,9 @@ import { checkReceiptChain, GENESIS, matchCode, sha256Hex, signReceipt, verifyRe
 import type { ChallengeResponse, PresentationSubmissionT } from "../../src/lib/shared/api";
 import { failureCode, finalize, verifyPresentationCore } from "../../src/lib/server/verifier/core";
 import { World, type Holder } from "../src/world";
+import { buildRequest, decryptResponse, newReaderKey, sessionTranscript } from "../../src/lib/shared/mdl/annex-c";
+import { verifyMdlResponse } from "../../src/lib/shared/mdl/verify";
+import { answerRequest, createTestAuthority, provisionTestLicence, type TestAuthority, type TestWallet } from "../../src/lib/shared/mdl/test-wallet";
 
 /**
  * decID, hosted in one browser tab. The same flow as the server product (src/lib/server/verify-api)
@@ -20,6 +23,8 @@ import { World, type Holder } from "../src/world";
  *   holder answer     src/lib/shared/presentation.ts + an EIP-712 signature (via World.present)
  *   verification      src/lib/server/verifier/core.ts
  *   receipts, codes   src/lib/shared/receipt-chain.ts
+ *   government ID     src/lib/shared/mdl (ISO 18013-7 Annex C request, licence verification), with
+ *                     a test DMV and a test phone wallet standing in for Apple / Google Wallet
  *
  * What differs from the server: sessions and receipts live in memory instead of SQLite, the
  * Pass's activation is sent by the holder's own key (the in-page chain charges no fees, so no
@@ -181,6 +186,55 @@ export class DecidCloud {
     this.people.push(person);
     this.changed();
     return person;
+  }
+
+  // ---------------------------------------------------------------- government ID (test wallet)
+
+  private dmv?: TestAuthority;
+  /** Licences in the test wallet, by name: provisioned once, like a licence added to a phone. */
+  private licences = new Map<string, TestWallet>();
+  /** One licence backs one active Pass: device-key thumbprint → the person whose Pass it backs. */
+  private idBindings = new Map<string, string>();
+
+  /**
+   * Get verified with the licence in the phone's wallet: decID asks for "over 18" and "over 21"
+   * only; the test wallet answers (signed by the licence's device key, encrypted to decID); decID
+   * checks the test DMV's and the phone's signatures and issues the Pass. If the same licence
+   * already backs another Pass, that one is revoked first.
+   */
+  async getVerifiedWithId(label: string, birthDate: string, onStep?: (s: "asking-wallet" | "checking-id" | "issuing" | "activating") => void): Promise<{ person: Person; replaced: Person | null }> {
+    this.dmv ??= await createTestAuthority();
+    let licence = this.licences.get(label);
+    if (!licence) {
+      licence = await provisionTestLicence(this.dmv, { birthDate, givenName: label });
+      this.licences.set(label, licence);
+    }
+    onStep?.("asking-wallet");
+    const origin = typeof location === "undefined" ? "https://decid.example" : location.origin;
+    const reader = await newReaderKey();
+    const request = await buildRequest(reader.publicKey);
+    const response = await answerRequest(licence, request, origin);
+    onStep?.("checking-id");
+    const t = await sessionTranscript(request.encryptionInfo, origin);
+    const id = await verifyMdlResponse(await decryptResponse(response, reader.privateKey, t.plain), t.tagged, [{ name: this.dmv.name, pem: this.dmv.rootPem, test: true }]);
+    const previousId = this.idBindings.get(id.deviceKeyThumbprint);
+    const replaced = this.people.find((p) => p.id === previousId) ?? null;
+    if (replaced && replaced.status === "Active") await this.revoke(replaced);
+    const holder = this.world.newHolder(label);
+    onStep?.("issuing");
+    const bundle = await this.world.issue(holder, {
+      claims: { ageOver18: id.ageOver18 ?? id.ageOver21 === true, ageOver21: id.ageOver21 ?? false, countryOfResidence: id.issuingCountry ?? "US" },
+      validUntil: Math.floor(id.validUntil.getTime() / 1000),
+    });
+    onStep?.("activating");
+    const tx = await this.world.register(holder);
+    if (!tx.ok) throw new Error(`activation failed: ${tx.revert ?? "reverted"}`);
+    const claims = Object.fromEntries(bundle.disclosures.map((d) => decodeDisclosure(d)).map((d) => [d.name, d.value as boolean | string]));
+    const person: Person = { id: hexlify(randomBytes(8)), label, holder, issuerName: this.dmv.name, claims, status: await this.world.status(bundle.commitment), history: [] };
+    this.people.push(person);
+    this.idBindings.set(id.deviceKeyThumbprint, person.id);
+    this.changed();
+    return { person, replaced };
   }
 
   /** The issuer revokes a credential (for example, the phone was reported lost). */

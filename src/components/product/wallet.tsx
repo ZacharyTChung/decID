@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, ChevronDown, EyeOff, Hand, Landmark, ShieldAlert, UserPlus } from "lucide-react";
+import { ArrowLeft, ChevronDown, EyeOff, FlaskConical, Hand, IdCard, Landmark, ShieldAlert, UserPlus, Wallet } from "lucide-react";
 import { DecidMark } from "./brand";
 import { Credential, CredentialSlot } from "./credential";
 import { MerchantLogo, brandFor } from "./merchant";
-import { Group, LargeTitle, PhoneButton, Row, StepProgress } from "./pass";
+import { Group, LargeTitle, PhoneButton, Row, SheetLayer, StepProgress } from "./pass";
 
 /**
  * decID Pass screens shared by the hosted prototype and the Next app: the wallet home (credential,
@@ -182,7 +182,26 @@ export interface IdForm {
   documentNumber: string;
 }
 
-/** The one-time "Add your ID" flow: choose an issuer, enter (synthetic) details, watch it happen. */
+/** Synthetic licences in the test wallet (the stand-in for Apple Wallet / Google Wallet). */
+export const TEST_LICENCES = {
+  alex: { label: "Alex", birthDate: "1990-04-04", note: "California licence · 36" },
+  jo: { label: "Jo", birthDate: `${new Date().getUTCFullYear() - 19}-02-11`, note: "California licence · 19" },
+} as const;
+export type TestLicenceKey = keyof typeof TEST_LICENCES;
+
+/** Getting a Pass from the government ID already in a phone wallet (see shared/mdl). */
+export interface GovernmentIdOption {
+  /** This browser can ask a phone wallet (W3C Digital Credentials API). */
+  browserSupport: boolean;
+  /** Issuing authorities the deployment trusts (not counting the test one). */
+  realIssuers: string[];
+  /** The deployment accepts test licences (demo, development). */
+  testIds: boolean;
+  onUseWallet: (label: string) => void;
+  onUseTestWallet: (label: string, birthDate: string) => void;
+}
+
+/** The one-time "Add your ID" flow: use the ID in your phone's wallet, or choose an issuer and enter (synthetic) details. */
 export function AddIdFlow({
   issuerName,
   steps,
@@ -191,6 +210,7 @@ export function AddIdFlow({
   canGoBack,
   onBack,
   onSubmit,
+  governmentId,
 }: {
   issuerName: string;
   steps: { id: string; label: string; detail: string }[];
@@ -199,8 +219,11 @@ export function AddIdFlow({
   canGoBack: boolean;
   onBack: () => void;
   onSubmit: (label: string, form: IdForm) => void;
+  governmentId?: GovernmentIdOption;
 }) {
-  const [stage, setStage] = useState<"issuer" | "details">("issuer");
+  const [stage, setStage] = useState<"issuer" | "details" | "test-wallet">("issuer");
+  const [licence, setLicence] = useState<TestLicenceKey>("alex");
+  const [walletSheet, setWalletSheet] = useState(false);
   const [who, setWho] = useState<SampleKey | "custom">("alex");
   const [form, setForm] = useState<IdForm>({ ...SAMPLE_PEOPLE.alex });
   const pick = (k: SampleKey | "custom") => {
@@ -211,7 +234,7 @@ export function AddIdFlow({
   if (step) {
     return (
       <div className="pb-10">
-        <LargeTitle title="Verifying" subtitle={issuerName} />
+        <LargeTitle title="Verifying" subtitle={steps.some((s) => s.id === "asking-wallet") ? "Your government ID" : issuerName} />
         <div className="px-5 pt-2">
           <StepProgress steps={steps} current={step} />
         </div>
@@ -220,18 +243,115 @@ export function AddIdFlow({
   }
 
   const back = (
-    <button type="button" onClick={stage === "details" ? () => setStage("issuer") : onBack} className="press inline-flex h-9 items-center gap-1 rounded-sm px-2 text-[15px] text-accent hover:text-accent-hover">
+    <button type="button" onClick={stage !== "issuer" ? () => setStage("issuer") : onBack} className="press inline-flex h-9 items-center gap-1 rounded-sm px-2 text-[15px] text-accent hover:text-accent-hover">
       <ArrowLeft size={17} strokeWidth={2} aria-hidden /> Back
     </button>
   );
 
+  const gov = governmentId;
+  const realWallet = gov && gov.browserSupport && gov.realIssuers.length > 0;
   if (stage === "issuer") {
     return (
       <div className="pb-10">
-        <LargeTitle title="Add your ID" subtitle="Choose who verifies you. You only do this once." leading={canGoBack ? back : undefined} />
-        <Group title="ID issuers" footer="In a real deployment: your DMV, bank or mobile carrier, which already checked your ID.">
+        <LargeTitle title="Add your ID" subtitle="Choose how to prove who you are. You only do this once." leading={canGoBack ? back : undefined} />
+        {gov && (realWallet || gov.testIds) && (
+          <Group
+            title="ID on this phone"
+            className="mb-6"
+            footer={
+              realWallet
+                ? `Your wallet shares only whether you’re over 18 and over 21, signed by ${gov.realIssuers.join(", ")}. Not your name, birth date, photo or address.`
+                : "Shares only whether you’re over 18 and over 21, signed by the state. Not your name, birth date, photo or address."
+            }
+          >
+            {realWallet && (
+              <Row icon={<Wallet size={18} strokeWidth={1.75} />} label="Driver’s licence in your wallet" detail="Apple Wallet, Google Wallet or your state’s app" chevron onClick={() => gov.onUseWallet("Me")} />
+            )}
+            {gov.testIds && <Row icon={<FlaskConical size={18} strokeWidth={1.75} />} label="Test wallet" detail="A synthetic licence, signed by a test DMV" chevron onClick={() => setStage("test-wallet")} />}
+          </Group>
+        )}
+        <Group title={gov && (realWallet || gov.testIds) ? "Or verify with an issuer" : "ID issuers"} footer="In a real deployment: your DMV, bank or mobile carrier, which already checked your ID.">
           <Row icon={<Landmark size={18} strokeWidth={1.75} />} label={issuerName} detail="Demo issuer for this prototype" chevron onClick={() => setStage("details")} />
         </Group>
+        {error && (
+          <p className="mt-4 px-6 text-center text-ui text-bad" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (stage === "test-wallet" && gov) {
+    const l = TEST_LICENCES[licence];
+    return (
+      <div className="pb-10">
+        <LargeTitle title="Test wallet" subtitle="Stands in for the ID in Apple Wallet or Google Wallet." leading={back} />
+        <Group title="Licence in this wallet" footer="Synthetic licences signed by a test DMV. A real deployment accepts only real issuing authorities.">
+          {(Object.keys(TEST_LICENCES) as TestLicenceKey[]).map((k) => (
+            <Row
+              key={k}
+              icon={<IdCard size={18} strokeWidth={1.75} />}
+              label={`${TEST_LICENCES[k].label} Sample`}
+              detail={TEST_LICENCES[k].note}
+              onClick={() => setLicence(k)}
+              value={licence === k ? <span className="text-accent">✓</span> : <span />}
+            />
+          ))}
+        </Group>
+        <div className="px-4 pt-6">
+          <PhoneButton onClick={() => setWalletSheet(true)} testId="use-test-licence">
+            Continue
+          </PhoneButton>
+          {error && (
+            <p className="mt-2 text-center text-ui text-bad" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+        {walletSheet && (
+          <SheetLayer labelledBy="wallet-sheet-title">
+            <div className="rounded-t-[22px] bg-ink-2 px-4 pb-6 pt-3 animate-sheet-in">
+              <div className="mx-auto mb-3 h-[5px] w-9 rounded-full bg-ink-6" aria-hidden />
+              <div className="flex items-center gap-3 px-2">
+                <span className="grid h-11 w-11 place-items-center rounded-[10px] bg-ink-12 text-white">
+                  <DecidMark size={22} />
+                </span>
+                <div>
+                  <h3 id="wallet-sheet-title" className="text-[17px] font-semibold text-ink-12">
+                    decID wants to verify your age
+                  </h3>
+                  <p className="text-ui text-ink-10">Using {l.label} Sample’s licence · test wallet</p>
+                </div>
+              </div>
+              <div className="mt-4 divide-y divide-ink-4 overflow-hidden rounded-[12px] bg-white">
+                <div className="flex items-center justify-between px-4 py-3 text-[17px]">
+                  <span>Over 18</span>
+                  <span className="text-ink-10">Shared</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-[17px]">
+                  <span>Over 21</span>
+                  <span className="text-ink-10">Shared</span>
+                </div>
+              </div>
+              <p className="mt-2 px-2 text-meta text-ink-10">Not shared: name, birth date, photo, address, licence number. decID won’t keep this information.</p>
+              <div className="mt-4 space-y-2">
+                <PhoneButton
+                  testId="wallet-share"
+                  onClick={() => {
+                    setWalletSheet(false);
+                    gov.onUseTestWallet(l.label, l.birthDate);
+                  }}
+                >
+                  Share
+                </PhoneButton>
+                <PhoneButton variant="plain" onClick={() => setWalletSheet(false)}>
+                  Cancel
+                </PhoneButton>
+              </div>
+            </div>
+          </SheetLayer>
+        )}
       </div>
     );
   }

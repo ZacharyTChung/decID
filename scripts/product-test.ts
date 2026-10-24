@@ -154,6 +154,38 @@ try {
   await door.screenshot({ path: path.join(SHOTS, "10-door-refused.png") });
   await audit(door, "Neon Hall: refused");
 
+  // ---------------------------------------------------------------- Jo (19) uses the ID in a phone wallet
+  // The Digital Credentials API flow, answered by the test wallet: a synthetic licence signed by
+  // the demo's test DMV. The server checks the state's and the phone's signatures.
+  await phone.goto(`${base}/pass`);
+  await phone.locator("#pass-person").selectOption("__new");
+  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Jo Sample/ }).click();
+  await phone.screenshot({ path: path.join(SHOTS, "10a-pass-test-wallet.png") });
+  await audit(phone, "Pass: test wallet");
+  await phone.getByTestId("use-test-licence").click();
+  await phone.getByRole("dialog").getByText("decID wants to verify your age").waitFor();
+  check(await phone.getByText(/Not shared: name, birth date, photo, address, licence number/).isVisible(), "the wallet sheet asks only for “Over 18” and “Over 21”");
+  await phone.waitForTimeout(400);
+  await phone.screenshot({ path: path.join(SHOTS, "10b-pass-wallet-sheet.png") });
+  await audit(phone, "Pass: wallet sheet");
+  const mdlCalls: string[] = [];
+  phone.on("request", (r) => {
+    if (r.url().includes("/api/holder/mdl/")) mdlCalls.push(r.postData() ?? "");
+  });
+  await phone.getByTestId("wallet-share").click();
+  await phone
+    .getByRole("group", { name: "decID Pass for Jo: 18+" })
+    .waitFor({ timeout: 60_000 })
+    .catch(async (e) => {
+      await phone.screenshot({ path: path.join(SHOTS, "10x-pass-id-failed.png") });
+      throw new Error(`no Pass from the test wallet; the phone shows: ${(await phone.getByRole("alert").allInnerTexts()).join(" | ") || "(no error)"}`, { cause: e });
+    });
+  await phone.getByTestId("pass-status").getByText(/^Active/).waitFor({ timeout: 30_000 });
+  check(true, "Jo got a Pass from a (test) government ID: 18+, not 21+, and it is Active");
+  check(mdlCalls.length >= 1 && mdlCalls.every((b) => !/birth|\d{4}-\d{2}-\d{2}|Sample/.test(b)), "what the phone sent decID is the wallet's encrypted answer: no readable name or birth date");
+  await phone.screenshot({ path: path.join(SHOTS, "10c-pass-from-id.png") });
+
   // ---------------------------------------------------------------- business dashboard
   const biz = await laptopCtx.newPage();
   watch(biz, "business");

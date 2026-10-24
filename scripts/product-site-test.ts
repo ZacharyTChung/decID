@@ -127,6 +127,30 @@ try {
   await page.screenshot({ path: path.join(SHOTS, "08-door-refused.png") });
   await audit(page, "door: refused");
 
+  // Jo (19) uses the licence in the phone's wallet (test wallet, test DMV)
+  await phone.getByRole("button", { name: "Back to Neon Hall" }).click();
+  await phone.locator("#pass-person").selectOption("__new");
+  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Jo Sample/ }).click();
+  await phone.getByTestId("use-test-licence").click();
+  check(await phone.getByText(/Not shared: name, birth date, photo, address, licence number/).isVisible(), "the wallet sheet asks only for “Over 18” and “Over 21”");
+  await page.screenshot({ path: path.join(SHOTS, "08a-wallet-sheet.png") });
+  await audit(page, "Pass: wallet sheet");
+  await phone.getByTestId("wallet-share").click();
+  await phone.getByRole("group", { name: "decID Pass for Jo: 18+" }).waitFor({ timeout: 30_000 });
+  check(await phone.getByTestId("pass-status").getByText(/^Active/).isVisible(), "Jo's Pass comes from the (test) licence: 18+, not 21+, active");
+  // The same licence used again for another Pass: the first one is revoked (one licence, one Pass).
+  await phone.locator("#pass-person").selectOption("__new");
+  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Jo Sample/ }).click();
+  await phone.getByTestId("use-test-licence").click();
+  await phone.getByTestId("wallet-share").click();
+  await phone.getByRole("group", { name: "decID Pass for Jo: 18+" }).waitFor({ timeout: 30_000 });
+  await phone.locator("#pass-person").selectOption({ index: 2 });
+  await phone.getByTestId("pass-status").getByText(/^Revoked/).waitFor({ timeout: 10_000 });
+  check(true, "one licence backs one Pass: making a second Pass with Jo's licence revoked the first");
+  await phone.locator("#pass-person").selectOption({ index: 3 });
+
   // Dashboard
   await page.getByRole("button", { name: "Business dashboard" }).click();
   check((await page.locator("[data-tour][data-done]").count()) === 5, "the walkthrough shows all five steps done");

@@ -6,6 +6,7 @@ import { ACTION_POLICIES, CREDENTIAL_TYPE, SCHEMA_ID, type VerifierAction } from
 import { presentationStatement, PRESENTATION_TYPES, presentationDomain } from "../../src/lib/shared/eip712";
 import { preparePresentation } from "../../src/lib/shared/presentation";
 import type { HolderBundle } from "../../src/lib/shared/bundle";
+import type { SdClaims } from "../../src/lib/shared/sd-jwt";
 import type { VerificationResult } from "../../src/lib/shared/verification";
 import type { ChallengeResponse, PresentationSubmissionT } from "../../src/lib/shared/api";
 import { deriveDidKeyFromJwk } from "../../src/lib/server/did/did-key";
@@ -115,16 +116,19 @@ export class World {
   }
 
   /** Issuer approves a synthetic application: the exact function the server's approveRequest calls. */
-  async issue(holder: Holder, application: { dateOfBirth: string; country: string }): Promise<HolderBundle> {
+  async issue(holder: Holder, application: { dateOfBirth: string; country: string } | { claims: SdClaims; validUntil: number }): Promise<HolderBundle> {
     const [, epoch] = (await this.registry.getFunction("issuerState")(this.issuer.attestation.address)) as [boolean, bigint];
+    const now = this.now();
+    const fromId = "claims" in application;
     const { bundle } = await issueCredential({
       keys: { did: this.issuer.did, kid: this.issuer.kid, credentialPrivateJwk: this.issuer.privateJwk, attestationSigner: this.issuer.attestation },
       holderAddress: holder.wallet.address,
-      application,
+      // Either a synthetic application, or claims proven by a government ID (as the server's approveRequest).
+      ...(fromId ? { claims: application.claims } : { application }),
       deployment: this.deployment,
       issuerEpoch: Number(epoch),
-      now: this.now(), // the issuer's clock, as on the server (not the chain's block time)
-      lifetimeSeconds: 365 * 24 * 60 * 60,
+      now, // the issuer's clock, as on the server (not the chain's block time)
+      lifetimeSeconds: fromId ? Math.min(365 * 24 * 60 * 60, application.validUntil - now) : 365 * 24 * 60 * 60,
       credentialId: `urn:uuid:${crypto.randomUUID()}`,
     });
     holder.bundle = bundle;

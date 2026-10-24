@@ -31,6 +31,7 @@ import { DEV_ROLES, devWallet } from "./lib/dev-accounts";
 import { HttpActor } from "./lib/http-actor";
 import { startLocalStack, type LocalStack } from "./lib/local-stack";
 import { parseEnvFile } from "./lib/setup-keys";
+import { answerRequest, createTestAuthority, provisionTestLicence, type TestWallet } from "../src/lib/shared/mdl/test-wallet";
 
 const ROOT = process.cwd();
 const DIR = path.join(ROOT, ".redteam");
@@ -171,7 +172,7 @@ async function main() {
     appPort: 3300,
     mode: "dev",
     distDir: ".next-redteam",
-    appEnv: { TRUST_PROXY: "1" },
+    appEnv: { TRUST_PROXY: "1", MDL_ACCEPT_TEST_IDS: "1" },
     log: (m) => console.log(`  setup: ${m}`),
   });
   const trust = JSON.parse(readFileSync(path.join(DIR, "trusted-issuers.json"), "utf8"));
@@ -211,6 +212,22 @@ async function main() {
     sd: createDisclosures({ ageOver18: true, ageOver21: true, countryOfResidence: "ZZ" }).sd,
   });
   const forgedSalt = hexlify(randomBytes(32));
+  // Government ID: an adult with a (test) licence on their phone, and someone who wants their own.
+  const adult = actor("licence-holder", 9, "10.0.0.9");
+  const borrower = actor("borrower", 10, "10.0.0.10");
+  for (const a of [adult, borrower]) if ((await a.signIn("holder")).status !== 200) throw new Error("holder sign-in failed");
+  const testLicence = async (who: HttpActor, birthDate = "1990-01-01"): Promise<TestWallet> => {
+    const r = await who.call("POST", "/api/demo/test-licence", { birthDate });
+    if (r.status !== 201) throw new Error(`test licence failed: ${r.status}`);
+    return { mdoc: new Uint8Array(Buffer.from(r.body.mdoc, "base64url")), devicePrivateJwk: r.body.devicePrivateJwk };
+  };
+  const idAttempt = async (who: HttpActor, w: TestWallet, opts: { origin?: string; tamper?: (b: Uint8Array) => Uint8Array } = {}) => {
+    const req = (await who.call("POST", "/api/holder/mdl/requests", {})).body;
+    const response = await answerRequest(w, req.data, opts.origin ?? stack.origin, { tamper: opts.tamper });
+    const res = await who.call("POST", `/api/holder/mdl/requests/${req.id}/response`, { response });
+    return { res, response, id: req.id as string };
+  };
+  const adultLicence = await testLicence(adult);
   console.log("  setup: legitimate credentials issued (A registered, B unregistered, C awaiting pickup, M registered and under 18)\n");
 
   const scenarios: Scenario[] = [
@@ -641,6 +658,67 @@ async function main() {
         }
         const v = (await issuer.call("GET", "/api/issuer/audit")).body.verification;
         return { ok: v.ok === true && v.anchor?.ok === false, observed: `chain ${v.ok ? "passes" : "fails"}; anchor: ${v.anchor?.problem ?? JSON.stringify(v.anchor)}` };
+      },
+    },
+
+    // -------------------------------------------------------------- G: government ID (mobile licence)
+    {
+      id: "G1", category: "Government ID", attack: "Forged licence: perfect format, signed by the attacker's own \"DMV\" root", expected: "HTTP 422 MDL_UNTRUSTED_ISSUER",
+      run: async () => {
+        const fake = await provisionTestLicence(await createTestAuthority({ name: "Totally Real DMV" }), { birthDate: "1980-01-01" });
+        await attacker.signIn("holder");
+        const { res } = await idAttempt(attacker, fake);
+        return { ok: res.status === 422 && res.body.error?.code === "MDL_UNTRUSTED_ISSUER", observed: `HTTP ${res.status} ${res.body.error?.code ?? ""}` };
+      },
+    },
+    {
+      id: "G2", category: "Government ID", attack: "Minor edits age_over_21 from false to true inside the state-signed licence", expected: "HTTP 422 MDL_BAD_SIGNATURE",
+      run: async () => {
+        const young = await testLicence(borrower, `${new Date().getUTCFullYear() - 19}-06-01`);
+        const { res } = await idAttempt(borrower, young, {
+          tamper: (b) => {
+            const s = Buffer.from(b);
+            const at = s.indexOf(Buffer.from("age_over_21"));
+            s[s.indexOf(0xf4, at)] = 0xf5; // false → true
+            return new Uint8Array(s);
+          },
+        });
+        return { ok: res.status === 422 && res.body.error?.code === "MDL_BAD_SIGNATURE", observed: `HTTP ${res.status} ${res.body.error?.code ?? ""}` };
+      },
+    },
+    {
+      id: "G3", category: "Government ID", attack: "Copied licence data presented from another phone (without the licence's device key)", expected: "HTTP 422 MDL_NOT_DEVICE_SIGNED",
+      run: async () => {
+        const other = await testLicence(borrower);
+        const { res } = await idAttempt(borrower, { mdoc: adultLicence.mdoc, devicePrivateJwk: other.devicePrivateJwk });
+        return { ok: res.status === 422 && res.body.error?.code === "MDL_NOT_DEVICE_SIGNED", observed: `HTTP ${res.status} ${res.body.error?.code ?? ""}` };
+      },
+    },
+    {
+      id: "G4", category: "Government ID", attack: "Phishing relay: an answer the adult's wallet made for evil.example, forwarded to decID", expected: "HTTP 400 MDL_BAD_RESPONSE",
+      run: async () => {
+        const { res } = await idAttempt(borrower, adultLicence, { origin: "https://evil.example" });
+        return { ok: res.status === 400 && res.body.error?.code === "MDL_BAD_RESPONSE", observed: `HTTP ${res.status} ${res.body.error?.code ?? ""}` };
+      },
+    },
+    {
+      id: "G5", category: "Government ID", attack: "Replay of a captured, valid wallet answer", expected: "HTTP 404 MDL_REQUEST_NOT_FOUND",
+      run: async () => {
+        const first = await idAttempt(adult, adultLicence);
+        if (first.res.status !== 200) return { ok: false, observed: `legit answer refused: ${first.res.status} ${JSON.stringify(first.res.body)}` };
+        const again = await adult.call("POST", `/api/holder/mdl/requests/${first.id}/response`, { response: first.response });
+        return { ok: again.status === 404 && again.body.error?.code === "MDL_REQUEST_NOT_FOUND", observed: `HTTP ${again.status} ${again.body.error?.code ?? ""}` };
+      },
+    },
+    {
+      id: "G6", category: "Government ID", attack: "Lending a licence: the adult approves a Pass for someone else's phone", expected: "allowed once, and the adult's own Pass is shut down (one licence, one Pass)",
+      run: async () => {
+        const mine = await idAttempt(adult, adultLicence);
+        const pickup = await adult.call("POST", `/api/holder/requests/${mine.res.body.requestId}/bundle`, {});
+        const myCommitment = pickup.body.bundle.commitment as string;
+        const lent = await idAttempt(borrower, adultLicence);
+        const gone = [...(lent.res.body.superseded?.revoked ?? []), ...(lent.res.body.superseded?.cancelled ?? [])];
+        return { ok: lent.res.status === 200 && lent.res.body.replacedPass === true && gone.includes(myCommitment), observed: `borrower got a Pass; adult's ${gone.includes(myCommitment) ? "Pass shut down" : "Pass still live (!)"}` };
       },
     },
   ];

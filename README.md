@@ -23,13 +23,16 @@ npm run product            # one command: chain, keys, contracts, demo businesse
 | `/business` | decID Verify business dashboard (receipt chain, stored fields) |
 | `/lab` | Protocol lab: the underlying holder / issuer / verifier roles |
 
+**Government ID:** a Pass can be created from the driver's licence in a phone wallet. decID asks it only for "over 18" and "over 21", over the browser's Digital Credentials API (ISO 18013-7 Annex C), checks the state's and the phone's signatures, and keeps one active Pass per licence. It is tested with synthetic licences from a test DMV. Real licences need trust roots and wallet registration: see [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md).
+
 More docs:
-- [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors, business model (labelled assumptions), risks and roadmap.
+- [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors (including TruAge and wallet IDs), business model (labelled assumptions), risks and roadmap.
+- [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md): getting a Pass from a mobile driver's licence, and what going live needs.
 - [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md): how to present it live.
 - [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md) and `docs/openapi.json`: integrating a business.
 
 `npm run test:product` drives the whole product in Chromium:
-- Pass onboarding with sponsored gas;
+- Pass onboarding with sponsored gas, and from a (test) government ID in a phone wallet;
 - a checkout that receives only `{ ageOver21: true }` plus a verified receipt;
 - door and phone showing the same match code;
 - an under-21 refusal;
@@ -120,7 +123,7 @@ Without an injected wallet, the UI says so and does not pretend to sign. Use `np
 npm run redteam      # ~2 min: 53 attacks against a fresh live stack; exits 1 if any defense fails
 ```
 
-Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).
+Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), government-ID attacks (forged or edited licences, copied licences, phishing relay, replay, lending), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).
 
 ## Standalone verification (relying parties)
 

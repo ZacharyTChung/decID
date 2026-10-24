@@ -8,6 +8,7 @@ import { CREDENTIAL_REGISTRY_ABI } from "@/generated/contracts";
 import { ErrorBody } from "@/lib/shared/api-responses";
 import type { HolderBundle } from "@/lib/shared/bundle";
 import type { ChallengeResponse } from "@/lib/shared/api";
+import { answerRequest } from "@/lib/shared/mdl/test-wallet";
 import { buildOpenApi, OPERATIONS, type Operation } from "../../scripts/lib/openapi-spec";
 import { Actor, signIn, signPresentation, submission } from "./helpers/actors";
 import { db } from "@/lib/server/db";
@@ -145,6 +146,11 @@ describe("real responses conform to the description", () => {
     expect((await present()).status).toBe(422);
     await call(holder, "getVerifierHistory");
     await call(issuer, "getIssuerAudit");
+    // A Pass from a (test) government ID: the test wallet answers the Digital Credentials request.
+    const licence = (await call(holder, "postTestLicence", { birthDate: "1990-01-01" })).body;
+    const mdlReq = (await call(holder, "postMdlRequest", {})).body;
+    const walletAnswer = await answerRequest({ mdoc: new Uint8Array(Buffer.from(licence.mdoc, "base64url")), devicePrivateJwk: licence.devicePrivateJwk }, mdlReq.data, process.env.APP_ORIGIN!);
+    await call(holder, "postMdlResponse", { response: walletAnswer }, mdlReq.id);
 
     // decID Verify through a demo business (SDK over in-process "HTTP"), then directly with its key.
     const key = { authorization: `Bearer ${process.env.DEMO_HOPLINE_API_KEY}` };

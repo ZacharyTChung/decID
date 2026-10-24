@@ -55,6 +55,15 @@ export const ReviewDecisionRequest = z.discriminatedUnion("decision", [
 
 export const RevokeRequest = z.strictObject({ commitment: Hex32 });
 
+/** The wallet's answer to a Digital Credentials API request: `data.response` (base64url, HPKE-encrypted DeviceResponse). */
+export const MdlResponseBody = z.strictObject({ response: z.string().regex(/^[A-Za-z0-9_-]+$/).max(200_000) });
+
+/** Demo/development only: a synthetic licence for the test wallet. */
+export const TestLicenceBody = z.strictObject({
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  jurisdiction: z.string().regex(/^US-[A-Z]{2}$/).optional(),
+});
+
 export const ChallengeRequest = z.strictObject({ action: z.enum(VERIFIER_ACTIONS) });
 
 export const PresentationSubmission = z.strictObject({
@@ -96,6 +105,8 @@ export interface PublicConfigResponse {
   origin: string;
   /** Demo conveniences are on (DEMO_MODE=1): demo businesses, one-click dashboard sign-in. */
   demo: boolean;
+  /** Government IDs (mobile driving licences) this deployment accepts for getting a Pass. */
+  governmentId: { issuers: { name: string; test: boolean }[]; acceptsTestIds: boolean };
   issuers: {
     id: string;
     name: string;
