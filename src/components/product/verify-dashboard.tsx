@@ -71,6 +71,8 @@ export interface VerifyDashboardProps {
   receiptKeyId?: string;
   accountMenu?: ReactNode;
   className?: string;
+  /** Download link for the auditor export (verifiable with `npm run verify-receipts`). */
+  exportHref?: string;
 }
 
 type Page = "overview" | "checks" | "receipts" | "data";
@@ -258,6 +260,17 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
                 </div>
                 {p.chain?.anchor !== undefined && <AnchorRow anchor={p.chain.anchor} />}
               </div>
+              {p.exportHref && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white px-5 py-4 shadow-card">
+                  <div>
+                    <p className="text-body font-medium">Give your auditor the whole record</p>
+                    <p className="text-ui text-ink-10">They can verify it with decID’s public keys and the blockchain alone: <code className="font-mono text-meta">npm run verify-receipts -- file.json</code></p>
+                  </div>
+                  <a href={p.exportHref} download className="press inline-flex h-8 items-center rounded-full bg-accent px-4 text-ui font-medium text-white hover:bg-accent-hover" data-testid="export-receipts">
+                    Export for auditor
+                  </a>
+                </div>
+              )}
               {p.integrity && (
                 <Panel title="Integrity test" description="Try to falsify the record. Each attack is caught by a different layer: decID’s signature, or the checkpoints on the public chain that nobody, not even decID, can rewrite.">
                   {p.integrity.tampered ? (

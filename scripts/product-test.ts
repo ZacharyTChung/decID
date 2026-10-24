@@ -12,7 +12,8 @@
  * Also runs an axe accessibility audit (WCAG 2.1 A/AA) of each screen and fails on console
  * errors. Screenshots go to .product-test/ (useful for slides).
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
@@ -168,6 +169,19 @@ try {
   check(true, "dashboard: an intact chain of 2 signed receipts");
   await biz.getByTestId("anchor-status").getByText("Anchored on-chain · 2 receipts").waitFor({ timeout: 20_000 });
   check(true, "dashboard: both receipts anchored on-chain by the ReceiptAnchor contract");
+  check(await biz.getByTestId("export-receipts").isVisible(), "dashboard offers an auditor export");
+  // An auditor's independent check: the export, decID's published keys and the chain. No database.
+  const exportRes = await biz.request.get(`${base}/api/business/receipts/export`);
+  const exportFile = path.join(SHOTS, "auditor-export.json");
+  writeFileSync(exportFile, await exportRes.text());
+  const auditorCheck = (f: string) => spawnSync(process.execPath, ["node_modules/tsx/dist/cli.mjs", "scripts/verify-receipts.ts", f, "--rpc", stack!.rpc, "--jwks-url", `${base}/api/v1/receipt-keys`], { encoding: "utf8" });
+  const good = auditorCheck(exportFile);
+  check(good.status === 0 && /RECEIPTS VERIFIED/.test(good.stdout), `auditor: npm run verify-receipts verifies the export (${good.stdout.match(/on-chain anchor\s+(.*)/)?.[1] ?? good.stderr.trim()})`);
+  const doctored = JSON.parse(readFileSync(exportFile, "utf8")) as { receipts: unknown[] };
+  doctored.receipts = doctored.receipts.slice(0, -1); // drop the refusal before handing it over
+  writeFileSync(exportFile + ".doctored.json", JSON.stringify(doctored));
+  const bad = auditorCheck(exportFile + ".doctored.json");
+  check(bad.status === 2 && /MISMATCH/.test(bad.stdout), "auditor: an export with a receipt removed fails against the on-chain checkpoints");
   await biz.getByRole("button", { name: "Data & privacy" }).click();
   const fields = await biz.locator("tbody code").allInnerTexts();
   check(fields.length > 5 && !fields.some((f) => /holder|wallet|did|name$|birth|address|credential|salt|disclosure|photo/i.test(f) && f !== "issuer_name"), `dashboard: none of the ${fields.length} stored fields can hold personal data`);

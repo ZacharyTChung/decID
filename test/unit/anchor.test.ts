@@ -12,6 +12,8 @@ import { appendAuditAnchored, verifyAuditChainAnchored } from "@/lib/server/issu
 import { verifyReceiptKey } from "@/lib/server/config";
 import { GENESIS, sha256Hex, signReceipt, type Receipt } from "@/lib/shared/receipt-chain";
 import { checkAgainstAnchors, receiptStream, streamId } from "@/lib/shared/anchor-check";
+import { exportReceipts } from "@/lib/server/verify-api/receipts";
+import { verifyExport } from "@/lib/shared/receipt-export";
 import { calculateJwkThumbprint, importJWK } from "jose";
 
 /**
@@ -110,6 +112,26 @@ describe("anchoring logs on-chain", () => {
     const after = await verifyAuditChainAnchored();
     expect(after.ok).toBe(true);
     expect(after.anchor).toMatchObject({ ok: false });
+  });
+
+  it("an auditor verifies an export with only the public keys and the chain", async () => {
+    createMerchant({ id: "anchor-audit", name: "Anchor Audit", kind: "online" });
+    for (let i = 0; i < 3; i++) await appendReceipt("anchor-audit", body(`a${i}`, "anchor-audit", i === 1 ? "not_satisfied" : "satisfied"));
+    await flushAnchors();
+    const exp = await exportReceipts({ id: "anchor-audit", name: "Anchor Audit" });
+    // No holder identifiers: the only addresses are the public anchor contract and registry.
+    const addresses = new Set(JSON.stringify(exp).match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g) ?? []);
+    for (const a of addresses) expect([exp.anchor!.contract.toLowerCase(), "0x0000000000000000000000000000000000000001"]).toContain(a.toLowerCase());
+    expect(JSON.stringify(exp)).not.toMatch(/did:pkh|dateOfBirth|fullName|holder/);
+    const cps = await readCheckpoints(exp.anchor!.stream);
+    const ok = await verifyExport(exp, await receiptJwks(), cps);
+    expect(ok).toMatchObject({ ok: true, receipts: 3, outcomes: { satisfied: 2, notSatisfied: 1 } });
+    // The business drops a refusal from the file before handing it over.
+    const trimmed = { ...exp, receipts: exp.receipts.filter((r) => r.seq !== 3) };
+    expect((await verifyExport(trimmed, await receiptJwks(), cps)).ok).toBe(false);
+    // Or edits a receipt in the file.
+    const edited = { ...exp, receipts: exp.receipts.map((r) => (r.seq === 2 ? { ...r, jws: r.jws.replace(/\.[^.]+\./, `.${Buffer.from(JSON.stringify({ outcome: "satisfied" })).toString("base64url")}.`) } : r)) };
+    expect((await verifyExport(edited, await receiptJwks(), cps)).chain.ok).toBe(false);
   });
 
   it("the pure comparison handles gaps between checkpoints and pending entries", () => {

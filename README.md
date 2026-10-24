@@ -179,6 +179,9 @@ Every issuer action (issue, reject, revoke, recovery supersede) is appended to a
 ```bash
 npm run audit-log -- verify     # recompute the chain: exit 0 intact, 2 tampered (names the first broken entry)
 npm run audit-log -- head       # entry count + head hash (also checkpointed on-chain by ReceiptAnchor)
+npm run verify-receipts -- export.json --jwks-url <decID>/api/v1/receipt-keys --rpc <chain>
+                                # an auditor's check of a business's receipt export (dashboard → Receipts →
+                                # Export for auditor): signatures, links and on-chain checkpoints, no database
 npm run audit-log -- list 20    # newest entries
 ```
 

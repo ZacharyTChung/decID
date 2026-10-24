@@ -259,6 +259,17 @@ export const PassRegistrationResult = z.strictObject({
 export const PassCredentialStatus = z.strictObject({ status: z.union([RegistryStatus, z.literal("NotRegistered")]) });
 
 export const BusinessSessionResponse = z.strictObject({ merchant: z.strictObject({ id: z.string(), name: z.string() }) });
+export const ReceiptExportResponse = z
+  .strictObject({
+    format: z.literal("decid-receipts/v1"),
+    exportedAt: z.string(),
+    merchant: z.strictObject({ id: z.string(), name: z.string() }),
+    receiptKeys: z.strictObject({ keys: z.array(z.strictObject({ kty: z.string(), crv: z.string(), x: z.string(), kid: z.string(), alg: z.string(), use: z.string() })) }),
+    anchor: z.strictObject({ chainId: z.number().int(), contract: z.string(), stream: z.string(), streamId: z.string() }).nullable(),
+    receipts: z.array(z.strictObject({ seq: z.number().int().positive(), jws: z.string() })),
+  })
+  .describe("Every compliance receipt of the business, for its auditor. Verify with `npm run verify-receipts`: decID's public keys and the chain are all it needs. No personal data.");
+
 export const BusinessOverviewResponse = z.strictObject({
   merchant: z.strictObject({ id: z.string(), name: z.string(), kind: z.enum(["online", "venue"]), keyPrefix: z.string() }),
   stats: z.strictObject({

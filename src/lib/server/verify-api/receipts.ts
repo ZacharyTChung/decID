@@ -5,7 +5,9 @@ import { verifyReceiptKey } from "../config";
 import { db, nowSeconds } from "../db";
 import { checkLogAnchors, requestAnchor } from "../anchor";
 import { anchorNamespace } from "../config";
-import { receiptStream, type AnchorCheck } from "../../shared/anchor-check";
+import { receiptStream, streamId, type AnchorCheck } from "../../shared/anchor-check";
+import { EXPORT_FORMAT, type ReceiptExport } from "../../shared/receipt-export";
+import { loadDeployment } from "../chain";
 
 /**
  * Compliance receipts. For every completed verification, decID Verify signs a receipt for the
@@ -70,6 +72,20 @@ export async function verifyReceiptChainAnchored(merchantId: string): Promise<Ch
   } catch {
     return { ...chain, anchor: { unavailable: true } };
   }
+}
+
+/** Every receipt of a business, packaged for an auditor (see shared/receipt-export.ts). */
+export async function exportReceipts(merchant: { id: string; name: string }): Promise<ReceiptExport> {
+  const receipts = db().prepare("SELECT seq, jws FROM verify_receipts WHERE merchant_id = ? ORDER BY seq").all(merchant.id) as { seq: number; jws: string }[];
+  let anchor: ReceiptExport["anchor"] = null;
+  try {
+    const d = loadDeployment();
+    const stream = receiptStream(merchant.id, anchorNamespace());
+    if (d.anchor) anchor = { chainId: d.chainId, contract: d.anchor, stream, streamId: streamId(stream) };
+  } catch {
+    // no deployment: export without anchor coordinates
+  }
+  return { format: EXPORT_FORMAT, exportedAt: new Date().toISOString(), merchant: { id: merchant.id, name: merchant.name }, receiptKeys: await receiptJwks(), anchor, receipts };
 }
 
 /** Re-verifies every signature and link in a merchant's receipt chain. */

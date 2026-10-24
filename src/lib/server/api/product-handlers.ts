@@ -22,7 +22,7 @@ import {
   requireBusiness,
   requireMerchant,
 } from "../verify-api/merchants";
-import { receiptJwks, verifyReceiptChainAnchored } from "../verify-api/receipts";
+import { exportReceipts, receiptJwks, verifyReceiptChainAnchored } from "../verify-api/receipts";
 import { createSession, getSessionForMerchant, listSessions, merchantStats, storedFields, submitPresentation, walletRequest } from "../verify-api/sessions";
 import { DecidVerify } from "../../../sdk/decid-verify";
 import { friendlyReason } from "../../shared/policies";
@@ -114,6 +114,13 @@ export const getBusinessOverview = route(async (req) => {
     storedFields: storedFields(),
     recent: listSessions(merchant, 25).map(({ receipt: _r, walletUrl: _w, ...v }) => v),
   });
+});
+
+/** The business's receipts for its auditor: verifiable with `npm run verify-receipts` and nothing else. */
+export const getBusinessReceiptExport = route(async (req) => {
+  const merchant = requireBusiness(req);
+  const body = await exportReceipts(merchant);
+  return json(body, { headers: { "content-disposition": `attachment; filename="decid-receipts-${merchant.id}-${body.exportedAt.slice(0, 10)}.json"` } });
 });
 
 // ---------------------------------------------------------------- demo businesses (built on the SDK)

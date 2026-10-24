@@ -92,6 +92,7 @@ Nothing is mocked. The only stand-ins are the simulated issuer and synthetic peo
    - Charts of checks by outcome and of verification time per check.
    - A recent-checks table and the signed receipt chain.
    - **Receipts** compares the stored chain with its checkpoints on the blockchain (the `ReceiptAnchor` contract). Three live attacks show which layer catches what: an insider edit (decID's signature), the operator re-signing history (only the on-chain checkpoints), and deleting the newest receipt (only the anchored count).
+   - In the local app, **Export for auditor** downloads the whole signed record; `npm run verify-receipts` checks it with decID's public keys and the blockchain alone, so a regulator never needs access to decID's or the business's systems.
    - **Receipts → Edit a receipt as an insider** flips a stored receipt's outcome and recomputes its hash. The chain check still catches it, because only decID can sign.
 4. **Fraud handling at scale.**
    - **Simulate a busy night** sends 12 synthetic guests through the door with the full real flow (issuance, activation, signed answer, verification, receipt).

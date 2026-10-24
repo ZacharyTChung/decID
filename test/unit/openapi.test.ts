@@ -186,6 +186,7 @@ describe("real responses conform to the description", () => {
     const biz = new Actor(18);
     await call(biz, "postBusinessSession", { apiKey: process.env.DEMO_HOPLINE_API_KEY });
     await call(biz, "getBusinessOverview");
+    await call(biz, "getBusinessReceiptExport");
     await call(biz, "postBusinessLogout", {});
     await call(biz, "postDemoBusinessSession", { merchant: "neonhall" });
     await call(holder, "postLogout", {});

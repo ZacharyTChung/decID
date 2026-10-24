@@ -4162,6 +4162,185 @@
         }
       }
     },
+    "/api/business/receipts/export": {
+      "get": {
+        "operationId": "getBusinessReceiptExport",
+        "summary": "Export every signed receipt for an auditor (verifiable without decID's database)",
+        "tags": [
+          "business"
+        ],
+        "security": [
+          {
+            "business": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipt export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "const": "decid-receipts/v1"
+                    },
+                    "exportedAt": {
+                      "type": "string"
+                    },
+                    "merchant": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "receiptKeys": {
+                      "type": "object",
+                      "properties": {
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kty": {
+                                "type": "string"
+                              },
+                              "crv": {
+                                "type": "string"
+                              },
+                              "x": {
+                                "type": "string"
+                              },
+                              "kid": {
+                                "type": "string"
+                              },
+                              "alg": {
+                                "type": "string"
+                              },
+                              "use": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kty",
+                              "crv",
+                              "x",
+                              "kid",
+                              "alg",
+                              "use"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "chainId": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "contract": {
+                              "type": "string"
+                            },
+                            "stream": {
+                              "type": "string"
+                            },
+                            "streamId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "chainId",
+                            "contract",
+                            "stream",
+                            "streamId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "receipts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "seq": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "jws": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "seq",
+                          "jws"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "exportedAt",
+                    "merchant",
+                    "receiptKeys",
+                    "anchor",
+                    "receipts"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Every compliance receipt of the business, for its auditor. Verify with `npm run verify-receipts`: decID's public keys and the chain are all it needs. No personal data."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in to the business dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error (no stack traces)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/business/overview": {
       "get": {
         "operationId": "getBusinessOverview",

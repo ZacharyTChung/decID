@@ -117,6 +117,7 @@ export default function Business() {
         checks={rows}
         chain={o.receipts}
         storedFields={o.storedFields}
+        exportHref="/api/business/receipts/export"
         now={Math.floor(Date.now() / 1000)}
         loadCheck={async (id) => {
           const r = o.recent.find((x) => x.id === id)!;
