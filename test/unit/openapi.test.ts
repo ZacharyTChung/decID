@@ -9,6 +9,7 @@ import { ErrorBody } from "@/lib/shared/api-responses";
 import type { HolderBundle } from "@/lib/shared/bundle";
 import type { ChallengeResponse } from "@/lib/shared/api";
 import { answerRequest } from "@/lib/shared/mdl/test-wallet";
+import { SoftAuthenticator } from "./helpers/soft-authenticator";
 import { buildOpenApi, OPERATIONS, type Operation } from "../../scripts/lib/openapi-spec";
 import { Actor, signIn, signPresentation, submission } from "./helpers/actors";
 import { db } from "@/lib/server/db";
@@ -151,6 +152,10 @@ describe("real responses conform to the description", () => {
     const mdlReq = (await call(holder, "postMdlRequest", {})).body;
     const walletAnswer = await answerRequest({ mdoc: new Uint8Array(Buffer.from(licence.mdoc, "base64url")), devicePrivateJwk: licence.devicePrivateJwk }, mdlReq.data, process.env.APP_ORIGIN!);
     await call(holder, "postMdlResponse", { response: walletAnswer }, mdlReq.id);
+    // Device unlock: a platform passkey (software authenticator standing in for Face ID).
+    const phone = new SoftAuthenticator(process.env.APP_ORIGIN!);
+    const pkOpts = (await call(holder, "postPasskeyOptions", {})).body;
+    await call(holder, "postPasskey", { response: phone.register(pkOpts.challenge) });
 
     // decID Verify through a demo business (SDK over in-process "HTTP"), then directly with its key.
     const key = { authorization: `Bearer ${process.env.DEMO_HOPLINE_API_KEY}` };
@@ -193,6 +198,8 @@ describe("real responses conform to the description", () => {
     await call(biz, "postBusinessSession", { apiKey: process.env.DEMO_HOPLINE_API_KEY });
     await call(biz, "getBusinessOverview");
     await call(biz, "getBusinessReceiptExport");
+    await call(biz, "getBusinessRisk");
+    await call(biz, "postBusinessAssistant", { question: "Write this week’s compliance report" });
     await call(biz, "postBusinessLogout", {});
     await call(biz, "postDemoBusinessSession", { merchant: "neonhall" });
     await call(holder, "postLogout", {});

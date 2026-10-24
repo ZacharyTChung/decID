@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, ChevronDown, EyeOff, FlaskConical, Hand, IdCard, Landmark, ShieldAlert, UserPlus, Wallet } from "lucide-react";
+import { ArrowLeft, ChevronDown, EyeOff, Fingerprint, FlaskConical, Hand, IdCard, Landmark, ShieldAlert, UserPlus, Wallet } from "lucide-react";
 import { DecidMark } from "./brand";
 import { Credential, CredentialSlot } from "./credential";
 import { MerchantLogo, brandFor } from "./merchant";
@@ -41,6 +41,7 @@ export function WalletHome({
   tech,
   onRevoke,
   notice,
+  unlock,
 }: {
   people: { id: string; label: string }[];
   activeId?: string;
@@ -51,10 +52,14 @@ export function WalletHome({
   tech?: { deviceKey: string; registryEntry: string; hiddenClaims: number };
   onRevoke?: () => Promise<void>;
   notice?: ReactNode;
+  /** Device unlock: confirm every share with Face ID, a fingerprint or the phone's PIN. */
+  unlock?: { enabled: boolean; available: boolean; onEnable: () => Promise<void>; simulated?: boolean };
 }) {
   const [confirmLost, setConfirmLost] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showTech, setShowTech] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+  const [unlockError, setUnlockError] = useState<string>();
 
   if (!card) {
     return (
@@ -119,6 +124,43 @@ export function WalletHome({
           activity.map((h, i) => <Row key={i} icon={<MerchantLogo merchant={brandFor(h.merchantId, h.merchantName, "online")} size={28} />} label={h.merchantName} detail={h.detail} value={h.matchCode ? <span className="font-mono text-ui">{h.matchCode}</span> : undefined} />)
         )}
       </Group>
+
+      {unlock && (
+        <Group
+          title="Security"
+          className="mt-6"
+          footer={
+            unlockError ??
+            (unlock.enabled
+              ? "Every share needs your face, fingerprint or PIN. It stays on this phone; businesses only learn that you unlocked."
+              : unlock.available
+                ? "Stops anyone else who picks up your phone from using your Pass."
+                : "Needs a secure connection (HTTPS or localhost) and a phone with Face ID, a fingerprint sensor or a PIN.") +
+              (unlock.simulated ? " Simulated in this prototype; on a phone it’s a real passkey." : "")
+          }
+        >
+          <Row
+            icon={<Fingerprint size={18} strokeWidth={1.75} />}
+            label="Face ID / fingerprint"
+            value={<span data-testid="unlock-status">{unlock.enabled ? "On" : enabling ? "…" : "Off"}</span>}
+            onClick={
+              !unlock.enabled && unlock.available && !enabling
+                ? async () => {
+                    setEnabling(true);
+                    setUnlockError(undefined);
+                    try {
+                      await unlock.onEnable();
+                    } catch (e) {
+                      setUnlockError((e as Error).message);
+                    } finally {
+                      setEnabling(false);
+                    }
+                  }
+                : undefined
+            }
+          />
+        </Group>
+      )}
 
       <Group title="Credential" className="mt-6">
         <Row label="Issued by" value={<span className="text-ui">{card.issuer}</span>} />

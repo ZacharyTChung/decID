@@ -133,14 +133,34 @@ export const CreateVerificationRequest = z.strictObject({
   policy: z.enum(POLICY_IDS),
   /** The business's own reference (an order number, a door name). Must not contain personal data. */
   reference: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional(),
+  /** Refuse unless the holder unlocks their phone (Face ID, fingerprint or device PIN) to answer. */
+  requireUserVerification: z.boolean().optional(),
 });
 
 /** A wallet's answer to a verification session (the session id is the challenge id). */
-export const WalletPresentation = PresentationSubmission.omit({ challengeId: true });
+export const WalletPresentation = PresentationSubmission.omit({ challengeId: true }).extend({
+  /** Optional WebAuthn assertion (device unlock) over the session's unlock challenge. */
+  unlock: z
+    .looseObject({
+      id: z.string().max(1024),
+      rawId: z.string().max(1024),
+      type: z.literal("public-key"),
+      response: z.looseObject({ clientDataJSON: z.string().max(8192), authenticatorData: z.string().max(8192), signature: z.string().max(1024) }),
+    })
+    .optional(),
+});
+
+/** A question for the compliance assistant. */
+export const AssistantRequest = z.strictObject({ question: z.string().trim().min(1).max(500) });
 
 export const BusinessLoginRequest = z.strictObject({ apiKey: z.string().min(1).max(200) });
 export const DemoBusinessLoginRequest = z.strictObject({ merchant: z.enum(["hopline", "neonhall"]) });
-export const DemoSessionRequest = z.strictObject({ reference: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional() });
+export const DemoSessionRequest = z.strictObject({ reference: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional(), requireUserVerification: z.boolean().optional() });
 
 /** decID Pass: a registration transaction signed by the holder's device wallet, relayed and gas-sponsored. */
+/** decID Pass device unlock: the WebAuthn registration response from the platform authenticator. */
+export const PasskeyRegistrationRequest = z.strictObject({
+  response: z.looseObject({ id: z.string().max(1024), rawId: z.string().max(1024), type: z.literal("public-key"), response: z.looseObject({ clientDataJSON: z.string().max(8192), attestationObject: z.string().max(32768) }) }),
+});
+
 export const PassRegistrationRequest = z.strictObject({ rawTx: z.string().regex(/^0x[0-9a-fA-F]{2,8192}$/) });

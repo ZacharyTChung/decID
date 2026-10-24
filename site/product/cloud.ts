@@ -10,6 +10,8 @@ import { checkReceiptChain, GENESIS, matchCode, sha256Hex, signReceipt, verifyRe
 import type { ChallengeResponse, PresentationSubmissionT } from "../../src/lib/shared/api";
 import { failureCode, finalize, verifyPresentationCore } from "../../src/lib/server/verifier/core";
 import { World, type Holder } from "../src/world";
+import { detectRisk, riskForCheck, type CheckRecord, type RiskAlert } from "../../src/lib/shared/risk";
+import { answerQuestion, type AssistantAnswer } from "../../src/lib/shared/assistant";
 import { buildRequest, decryptResponse, newReaderKey, sessionTranscript } from "../../src/lib/shared/mdl/annex-c";
 import { verifyMdlResponse } from "../../src/lib/shared/mdl/verify";
 import { answerRequest, createTestAuthority, provisionTestLicence, type TestAuthority, type TestWallet } from "../../src/lib/shared/mdl/test-wallet";
@@ -51,6 +53,8 @@ export interface Person {
   issuerName: string;
   claims: Record<string, boolean | string>;
   status: string;
+  /** Face ID / fingerprint turned on for this Pass (simulated in the hosted prototype). */
+  unlock?: boolean;
   history: { at: number; merchant: string; shared: string; outcome: "verified" | "rejected"; failureCode: string | null; matchCode: string | null }[];
 }
 
@@ -72,6 +76,9 @@ interface Session {
   issuerName: string | null;
   receiptSeq: number | null;
   verifyMs: number | null;
+  requireUnlock: boolean;
+  userVerified: boolean | null;
+  passTag: string | null;
 }
 
 /** What the business's backend gets back: the same shape as GET /api/v1/verifications/:id. */
@@ -88,10 +95,13 @@ export interface MerchantView {
   issuer: { name: string } | null;
   receipt: { jws: string; payload: Receipt; valid: boolean } | null;
   verifyMs: number | null;
+  userVerified: boolean | null;
+  risk: RiskAlert[];
 }
 
 export interface WalletRequest {
   id: string;
+  requireUnlock: boolean;
   merchant: Merchant;
   policy: { id: PolicyId; question: string; short: string };
   status: MerchantView["status"];
@@ -125,6 +135,8 @@ export class DecidCloud {
   private receipts: Record<MerchantId, (ReceiptRow & { sessionId: string })[]> = { hopline: [], neonhall: [] };
   /** The receipts as they were before a simulated attack, so the demo can restore them. */
   private tampered: { merchantId: MerchantId; kind: TamperKind; seq: number; backup: (ReceiptRow & { sessionId: string })[] } | null = null;
+  /** Keys the per-business, per-day Pass pseudonym used by the fraud signals. */
+  private readonly tagSecret = hexlify(randomBytes(32));
   /** Bumped on every change, so the UI knows when to re-read. */
   version = 0;
   private listeners = new Set<() => void>();
@@ -252,6 +264,7 @@ export class DecidCloud {
     const action = ACTION_POLICIES[p.action];
     return {
       id: s.id,
+      requireUnlock: s.requireUnlock,
       merchant: MERCHANTS[s.merchantId],
       policy: { id: p.id, question: p.question, short: p.short },
       status: this.effectiveStatus(s),
@@ -273,8 +286,10 @@ export class DecidCloud {
   /** The holder answers: only the requested claim is disclosed, and the Pass signs. */
   async share(person: Person, requestId: string): Promise<Outcome> {
     const req = this.walletRequest(requestId);
+    if (req.requireUnlock && !person.unlock) throw new Error(`${req.merchant.name} asks you to confirm with Face ID or your fingerprint. Turn it on for this Pass first.`);
     const sub = await this.world.present(person.holder, req.challenge);
-    const out = await this.submit(requestId, sub);
+    // In the hosted prototype the phone's Face ID is simulated; on the server it is a verified passkey assertion.
+    const out = await this.submit(requestId, sub, { userVerified: !!person.unlock });
     person.history.unshift({ at: Date.now(), merchant: req.merchant.name, shared: req.policy.short, outcome: out.status, failureCode: out.failureCode, matchCode: out.matchCode });
     this.changed();
     return out;
@@ -282,7 +297,13 @@ export class DecidCloud {
 
   // ---------------------------------------------------------------- decID Verify (business side)
 
-  createSession(merchantId: MerchantId, policy: PolicyId, reference?: string): MerchantView {
+  /** Turns on (simulated) Face ID / fingerprint for a Pass. */
+  enableUnlock(person: Person): void {
+    person.unlock = true;
+    this.changed();
+  }
+
+  createSession(merchantId: MerchantId, policy: PolicyId, reference?: string, opts: { requireUnlock?: boolean } = {}): MerchantView {
     const d = this.world.deployment;
     const now = this.now();
     const s: Session = {
@@ -303,6 +324,9 @@ export class DecidCloud {
       issuerName: null,
       receiptSeq: null,
       verifyMs: null,
+      requireUnlock: !!opts.requireUnlock,
+      userVerified: null,
+      passTag: null,
     };
     this.sessions.set(s.id, s);
     this.changed();
@@ -317,7 +341,7 @@ export class DecidCloud {
   }
 
   /** The verifier side of an answer: single use, production verifier core, signed receipt. */
-  async submit(id: string, sub: Omit<PresentationSubmissionT, "challengeId">): Promise<Outcome> {
+  async submit(id: string, sub: Omit<PresentationSubmissionT, "challengeId">, opts: { userVerified?: boolean } = {}): Promise<Outcome> {
     const s = this.sessions.get(id);
     if (!s) throw new SessionError("UNKNOWN_SESSION", "this request does not exist");
     if (this.effectiveStatus(s) === "expired") throw new SessionError("SESSION_EXPIRED", "this request expired; ask for a new one");
@@ -340,9 +364,12 @@ export class DecidCloud {
     }
     const verifyMs = performance.now() - started;
     const result = finalize([{ id: "challenge", status: "pass" }, ...core.checks], { registryStatus: core.registryStatus, disclosed: core.disclosed });
-    const verified = result.verified;
-    const code = verified ? null : (failureCode(core.checks) ?? "FAILED");
+    const userVerified = result.verified && !!opts.userVerified;
+    const verified = result.verified && (!s.requireUnlock || userVerified);
+    const code = verified ? null : result.verified ? "USER_NOT_VERIFIED" : (failureCode(core.checks) ?? "FAILED");
     const match = verified ? matchCode(id, sub.proof.signature) : null;
+    s.userVerified = userVerified;
+    s.passTag = /^0x[0-9a-fA-F]{64}$/.test(sub.proof.commitment) ? sha256Hex(`${this.tagSecret}|${s.merchantId}|${sub.proof.commitment.toLowerCase()}|${new Date(now * 1000).toISOString().slice(0, 10)}`).slice(0, 16) : null;
     const seq = await this.appendReceipt(s.merchantId, {
       sid: id,
       merchant: s.merchantId,
@@ -354,6 +381,7 @@ export class DecidCloud {
       registry: { chainId: s.chainId, address: s.registry, status: core.registryStatus ?? null },
       evidence: sha256Hex(`${compactPresentation(sub.credentialJwt, sub.disclosures)}|${sub.proof.signature}`),
       checkedAt: new Date(now * 1000).toISOString(),
+      userVerified,
     });
     Object.assign(s, {
       status: verified ? "verified" : "rejected",
@@ -394,7 +422,7 @@ export class DecidCloud {
 
   /** The complete list of fields stored per check, to make "no personal data" checkable. */
   storedFields(): string[] {
-    return ["id", "merchant_id", "policy", "reference", "nonce", "audience", "chain_id", "registry", "created_at", "expires_at", "status", "failure_code", "completed_at", "match_code", "issuer_name", "receipt_seq"];
+    return ["id", "merchant_id", "policy", "reference", "nonce", "audience", "chain_id", "registry", "created_at", "expires_at", "status", "failure_code", "completed_at", "match_code", "issuer_name", "receipt_seq", "require_uv", "user_verified", "pass_tag"];
   }
 
   /** The chain check (signatures and links) plus the comparison with the on-chain checkpoints. */
@@ -484,11 +512,12 @@ export class DecidCloud {
   /**
    * Runs a queue of synthetic guests through the Neon Hall door with the real flow: each guest
    * is verified once (real issuance and on-chain activation), the door creates a session and the
-   * guest's Pass answers it. Two guests try something: one shows a friend's credential from their
-   * own phone, and one shows a Pass the issuer has revoked.
+   * guest's Pass answers it. Then trouble: a guest's Pass is handed back through the queue, someone
+   * tries three edited Passes, a guest shows a friend's credential from their own phone, and one
+   * shows a Pass the issuer has revoked. The fraud signals (Risk page) pick these up.
    */
   async simulateNight(guests: number, onProgress?: (done: number, total: number, line: string) => void): Promise<void> {
-    const total = guests + 2;
+    const total = guests + 6;
     let done = 0;
     const step = (line: string) => onProgress?.(++done, total, line);
     const bornYearsAgo = (age: number) => {
@@ -507,6 +536,22 @@ export class DecidCloud {
       const out = await this.submit(s.id, await this.world.present(holder, this.walletRequest(s.id).challenge));
       queue.push(holder);
       step(`Guest ${i + 1} (${age}): ${out.status === "verified" ? `admitted · ${out.matchCode}` : "refused · not old enough"}`);
+    }
+    // Pass-back: the first admitted guest's phone comes back through the queue.
+    const first = queue[0]!;
+    const sBack = this.createSession("neonhall", "age_over_21", "night-again");
+    const oBack = await this.submit(sBack.id, await this.world.present(first, this.walletRequest(sBack.id).challenge));
+    step(`Same Pass again: ${oBack.status === "verified" ? "admitted · flagged as pass-back" : "refused"}`);
+    // Someone tries Passes with an edited credential (the issuer's signature no longer matches).
+    for (let i = 1; i <= 3; i++) {
+      const sf = this.createSession("neonhall", "age_over_21", `night-fake-${i}`);
+      // The forger edits the credential and signs the presentation over the edited copy with their own key.
+      const [h, p, sig] = first.bundle!.credentialJwt.split(".");
+      const forger = this.world.newHolder(`Forger ${i}`);
+      const edited = { ...first.bundle!, credentialJwt: `${h}.${p}.${sig!.slice(0, -4)}${sig!.slice(-4) === "AAAA" ? "BBBB" : "AAAA"}` };
+      forger.bundle = edited;
+      const of = await this.submit(sf.id, await this.world.present(forger, this.walletRequest(sf.id).challenge));
+      step(`Fake Pass ${i}: ${of.status === "verified" ? "admitted" : `refused · ${friendlyReason(of.failureCode).toLowerCase()}`}`);
     }
     // A guest shows a friend's credential: the friend's Pass, signed by the guest's own key.
     const friend = queue.find((h) => h.bundle) ?? queue[0]!;
@@ -547,7 +592,37 @@ export class DecidCloud {
       issuer: s.issuerName ? { name: s.issuerName } : null,
       receipt: null,
       verifyMs: s.verifyMs,
+      userVerified: s.userVerified,
+      risk: status === "verified" || status === "rejected" ? riskForCheck(this.records(s.merchantId), s.id, MERCHANTS[s.merchantId].kind) : [],
     };
+  }
+
+  // ---------------------------------------------------------------- fraud signals and the assistant
+
+  /** The business's checks in the shape the fraud engine and the assistant read (as on the server). */
+  records(merchantId: MerchantId): CheckRecord[] {
+    return [...this.sessions.values()]
+      .filter((s) => s.merchantId === merchantId)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((s) => ({ id: s.id, createdAt: s.createdAt, completedAt: s.completedAt, status: this.effectiveStatus(s), policy: s.policy, reference: s.reference, failureCode: s.failureCode, receiptSeq: s.receiptSeq, passTag: s.passTag, userVerified: s.userVerified }));
+  }
+
+  risk(merchantId: MerchantId): { alerts: RiskAlert[]; checksAnalysed: number } {
+    const records = this.records(merchantId);
+    return { alerts: detectRisk(records, MERCHANTS[merchantId].kind, this.now()), checksAnalysed: records.length };
+  }
+
+  /** The compliance assistant (src/lib/shared/assistant.ts), over this business's in-page records. */
+  async ask(merchantId: MerchantId, question: string): Promise<AssistantAnswer> {
+    const records = this.records(merchantId);
+    return answerQuestion(question, {
+      merchant: MERCHANTS[merchantId],
+      records,
+      chain: await this.receiptChain(merchantId),
+      alerts: detectRisk(records, MERCHANTS[merchantId].kind, this.now()),
+      storedFields: this.storedFields(),
+      now: this.now(),
+    });
   }
 
   private async viewWithReceipt(s: Session): Promise<MerchantView> {

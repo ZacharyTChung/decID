@@ -146,6 +146,23 @@ CREATE TABLE IF NOT EXISTS issuer_tx_lease (
   expires_at_ms  INTEGER NOT NULL
 );
 -- The same for the anchorer's key (src/lib/server/anchor.ts).
+-- decID Pass device unlock: a platform passkey (Face ID, fingerprint or device PIN) registered by
+-- the holder's Pass. Only the public key is stored. The challenge row lives for one enrolment.
+CREATE TABLE IF NOT EXISTS pass_passkeys (
+  credential_id   TEXT PRIMARY KEY,
+  holder_address  TEXT NOT NULL,
+  public_key      TEXT NOT NULL,
+  counter         INTEGER NOT NULL,
+  transports      TEXT,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pass_passkeys_holder ON pass_passkeys (holder_address);
+CREATE TABLE IF NOT EXISTS pass_passkey_challenges (
+  holder_address  TEXT PRIMARY KEY,
+  challenge       TEXT NOT NULL,
+  expires_at      INTEGER NOT NULL
+);
+
 -- A Digital Credentials API request to the ID in a phone's wallet (ISO 18013-7 Annex C). The
 -- one-time reader key is deleted with the row when the answer arrives or the request expires.
 CREATE TABLE IF NOT EXISTS mdl_requests (
@@ -206,6 +223,11 @@ function migrate(d: Database.Database): void {
   addColumn("issuer_requests", "method", "TEXT");
   addColumn("issuer_requests", "claims_json", "TEXT");
   addColumn("issuer_requests", "valid_until_cap", "INTEGER");
+  // decID Verify: device-unlock requirement and result, and the per-business, per-day Pass
+  // pseudonym used for fraud signals (cleared after 48 h).
+  addColumn("verify_sessions", "require_uv", "INTEGER NOT NULL DEFAULT 0");
+  addColumn("verify_sessions", "user_verified", "INTEGER");
+  addColumn("verify_sessions", "pass_tag", "TEXT");
   ensureAuditTable(d);
 }
 
@@ -229,4 +251,7 @@ export function purgeExpired(now = nowSeconds()): void {
   d.prepare("DELETE FROM rate_limits WHERE window_start <= ?").run(now - 3600);
   d.prepare("DELETE FROM business_sessions WHERE expires_at <= ?").run(now);
   d.prepare("DELETE FROM mdl_requests WHERE expires_at <= ?").run(now);
+  d.prepare("DELETE FROM pass_passkey_challenges WHERE expires_at <= ?").run(now);
+  // Fraud signals only look back hours; the pseudonym is not kept longer than that.
+  d.prepare("UPDATE verify_sessions SET pass_tag = NULL WHERE pass_tag IS NOT NULL AND created_at <= ?").run(now - 48 * 3600);
 }

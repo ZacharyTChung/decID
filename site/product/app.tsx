@@ -304,6 +304,7 @@ function PassApp({ cloud, active, setActive, screen, setScreen, onBackToSite }: 
         }))}
         tech={active && b ? { deviceKey: active.holder.wallet.address, registryEntry: b.commitment, hiddenClaims: b.disclosures.length } : undefined}
         onRevoke={active ? () => cloud.revoke(active) : undefined}
+        unlock={active ? { enabled: !!active.unlock, available: true, simulated: true, onEnable: async () => cloud.enableUnlock(active) } : undefined}
       />
       {screen.k === "request" && (
         <Request cloud={cloud} id={screen.id} person={active} onAdd={() => setScreen({ k: "add", back: screen })} onClose={() => setScreen({ k: "home" })} onAnswered={(o) => setScreen({ k: "result", id: screen.id, outcome: o })} />
@@ -338,6 +339,7 @@ function Request({ cloud, id, person, onAdd, onClose, onAnswered }: { cloud: Dec
       answer={person.claims.ageOver21 === true}
       revoked={person.status !== "Active"}
       expiresIn={Math.max(0, req.expiresAt - cloud.now())}
+      unlock={{ enabled: !!person.unlock, required: req.requireUnlock, onEnable: () => cloud.enableUnlock(person) }}
       busy={busy}
       error={error}
       onCancel={onClose}
@@ -363,6 +365,7 @@ function useAgeCheck(cloud: DecidCloud, merchant: MerchantId, openOnPhone: (id: 
   const [id, setId] = useState<string>();
   const [view, setView] = useState<MerchantView>();
   const [qrSvg, setQr] = useState<string>();
+  const [requireUnlock, setRequireUnlock] = useState(false);
   const version = useCloud(cloud);
   const tick = useTick();
   useEffect(() => {
@@ -377,7 +380,7 @@ function useAgeCheck(cloud: DecidCloud, merchant: MerchantId, openOnPhone: (id: 
     if (!id || !withQr) return setQr(undefined);
     void QRCode.toString(`decid://request/${id}`, { type: "svg", margin: 0, errorCorrectionLevel: "M", color: { dark: "#0E0B12", light: "#FFFFFF" } }).then(setQr);
   }, [id, withQr]);
-  const start = useCallback((reference: string) => setId(cloud.createSession(merchant, "age_over_21", reference).id), [cloud, merchant]);
+  const start = useCallback((reference: string) => setId(cloud.createSession(merchant, "age_over_21", reference, { requireUnlock }).id), [cloud, merchant, requireUnlock]);
   const reset = useCallback(() => setId(undefined), []);
   const v = view?.id === id ? view : undefined;
   const done = v && (v.status === "verified" || v.status === "rejected");
@@ -387,7 +390,10 @@ function useAgeCheck(cloud: DecidCloud, merchant: MerchantId, openOnPhone: (id: 
     failureCode: v?.failureCode,
     matchCode: v?.matchCode,
     issuerName: v?.issuer?.name,
-    received: done ? { result: v.result, issuer: v.issuer, receipt: v.receipt ? { valid: v.receipt.valid, policy: v.receipt.payload.policy, outcome: v.receipt.payload.outcome, seq: v.receipt.payload.seq } : null } : undefined,
+    userVerified: v?.userVerified,
+    risk: v?.risk,
+    ...(withQr ? { requireUnlock, setRequireUnlock } : {}),
+    received: done ? { result: v.result, issuer: v.issuer, userVerified: v.userVerified, risk: v.risk.map((r) => r.title), receipt: v.receipt ? { valid: v.receipt.valid, policy: v.receipt.payload.policy, outcome: v.receipt.payload.outcome, seq: v.receipt.payload.seq } : null } : undefined,
     qrSvg,
     start,
     reset,
@@ -438,15 +444,17 @@ function Dashboard({ cloud }: { cloud: DecidCloud }) {
         return { ...toRow(v), answer: v.result ? Object.values(v.result)[0]! : null, verifyMs: v.verifyMs, receipt: v.receipt ? { valid: v.receipt.valid, payload: v.receipt.payload as unknown as Record<string, unknown> } : null };
       }}
       receipts={cloud.receiptRows(merchant).map((r) => ({ seq: r.seq, hash: r.hash, prev: r.prev, outcome: r.body ? (r.body.outcome === "satisfied" ? "21 or older" : friendlyReason(r.body.failureCode)) : "Unreadable", signedAt: r.body?.iat ?? null }))}
+      risk={cloud.risk(merchant)}
+      assistant={{ ask: (q) => cloud.ask(merchant, q) }}
       integrity={{ tampered: tampered && tampered.merchantId === merchant ? { kind: tampered.kind, seq: tampered.seq } : null, tamper: (kind) => void cloud.tamper(merchant, kind), undo: () => cloud.undoTamper() }}
       simulate={
         merchant === "neonhall"
           ? {
               label: "Simulate a busy night",
-              description: `${NIGHT_GUESTS} synthetic guests through the real flow, plus a borrowed credential and a Pass reported lost.`,
+              description: `${NIGHT_GUESTS} synthetic guests through the real flow, then trouble: a Pass handed back, three fake Passes, a borrowed credential and a Pass reported lost.`,
               progress: night,
               run: () => {
-                setNight({ done: 0, total: NIGHT_GUESTS + 2, lines: [] });
+                setNight({ done: 0, total: NIGHT_GUESTS + 6, lines: [] });
                 void cloud.simulateNight(NIGHT_GUESTS, (done, total, line) => setNight((n) => ({ done, total, lines: [...(n?.lines ?? []), line] })));
               },
             }

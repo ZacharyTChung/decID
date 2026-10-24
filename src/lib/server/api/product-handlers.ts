@@ -6,8 +6,13 @@ import {
   DemoBusinessLoginRequest,
   DemoSessionRequest,
   PassRegistrationRequest,
+  PasskeyRegistrationRequest,
+  AssistantRequest,
   WalletPresentation,
 } from "../../shared/api";
+import { passkeyRegistrationOptions, registerPasskey } from "../pass/passkey";
+import { detectRisk, riskSummary } from "../../shared/risk";
+import { answerQuestion } from "../../shared/assistant";
 import { appConfig, demoMode } from "../config";
 import { readRecord } from "../chain";
 import { ApiError } from "../errors";
@@ -23,7 +28,7 @@ import {
   requireMerchant,
 } from "../verify-api/merchants";
 import { exportReceipts, receiptJwks, verifyReceiptChainAnchored } from "../verify-api/receipts";
-import { createSession, getSessionForMerchant, listSessions, merchantStats, storedFields, submitPresentation, walletRequest } from "../verify-api/sessions";
+import { checkRecords, createSession, getSessionForMerchant, listSessions, merchantStats, storedFields, submitPresentation, walletRequest } from "../verify-api/sessions";
 import { DecidVerify } from "../../../sdk/decid-verify";
 import { friendlyReason } from "../../shared/policies";
 
@@ -43,7 +48,7 @@ export const postVerification = route(
   async (req) => {
     const merchant = requireMerchant(req);
     const body = await readJson(req, CreateVerificationRequest);
-    return json(createSession(merchant, body.policy, body.reference), { status: 201 });
+    return json(createSession(merchant, body.policy, body.reference, { requireUserVerification: body.requireUserVerification }), { status: 201 });
   },
   { csrf: false, rateLimit: { name: "v1-create", perMinute: 600 } },
 );
@@ -112,9 +117,52 @@ export const getBusinessOverview = route(async (req) => {
     stats: merchantStats(merchant),
     receipts: await verifyReceiptChainAnchored(merchant.id),
     storedFields: storedFields(),
-    recent: listSessions(merchant, 25).map(({ receipt: _r, walletUrl: _w, ...v }) => v),
+    recent: listSessions(merchant, 100).map(({ receipt: _r, walletUrl: _w, ...v }) => v),
   });
 });
+
+/** Fraud signals across the business's recent checks (shared/risk.ts). */
+export const getBusinessRisk = route(async (req) => {
+  const merchant = requireBusiness(req);
+  const records = checkRecords(merchant.id);
+  const alerts = detectRisk(records, merchant.kind, Math.floor(Date.now() / 1000));
+  return json({ alerts, summary: riskSummary(alerts), checksAnalysed: records.length, passTagRetentionHours: 48 });
+});
+
+// ---------------------------------------------------------------- decID Pass: device unlock (passkey)
+
+export const postPasskeyOptions = route(async (req) => json(await passkeyRegistrationOptions(requireSession(req, "holder"))), { rateLimit: { name: "passkey", perMinute: 20 } });
+
+export const postPasskey = route(
+  async (req) => {
+    const session = requireSession(req, "holder");
+    const { response } = await readJson(req, PasskeyRegistrationRequest);
+    return json(await registerPasskey(session, response as never), { status: 201 });
+  },
+  { rateLimit: { name: "passkey", perMinute: 20 } },
+);
+
+/** The compliance assistant: answers from this business's own checks, receipts and anchor (shared/assistant.ts). */
+export const postBusinessAssistant = route(
+  async (req) => {
+    const merchant = requireBusiness(req);
+    const { question } = await readJson(req, AssistantRequest);
+    const records = checkRecords(merchant.id, 30 * 86400);
+    const now = Math.floor(Date.now() / 1000);
+    return json(
+      answerQuestion(question, {
+        merchant: { id: merchant.id, name: merchant.name, kind: merchant.kind },
+        records,
+        chain: await verifyReceiptChainAnchored(merchant.id),
+        alerts: detectRisk(records, merchant.kind, now),
+        storedFields: storedFields(),
+        now,
+        exportHref: "/api/business/receipts/export",
+      }),
+    );
+  },
+  { rateLimit: { name: "assistant", perMinute: 60 } },
+);
 
 /** The business's receipts for its auditor: verifiable with `npm run verify-receipts` and nothing else. */
 export const getBusinessReceiptExport = route(async (req) => {
@@ -148,7 +196,7 @@ export async function postDemoSession(req: Request, merchant: string | undefined
     async (r) => {
       const { client, demo } = demoClient(merchant);
       const body = await readJson(r, DemoSessionRequest);
-      const v = await client.createVerification({ policy: demo.policy, reference: body.reference });
+      const v = await client.createVerification({ policy: demo.policy, reference: body.reference, requireUserVerification: body.requireUserVerification });
       const qrSvg = await QRCode.toString(v.walletUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
       return json({ id: v.id, walletUrl: v.walletUrl, qrSvg, expiresAt: v.expiresAt }, { status: 201 });
     },
@@ -169,7 +217,7 @@ export async function getDemoSession(req: Request, merchant: string | undefined,
           receipt = { valid: false };
         }
       }
-      return json({ status: v.status, result: v.result, failureCode: v.failureCode, reason: friendlyReason(v.failureCode), matchCode: v.matchCode, issuer: v.issuer, receipt, reference: v.reference });
+      return json({ status: v.status, result: v.result, failureCode: v.failureCode, reason: friendlyReason(v.failureCode), matchCode: v.matchCode, issuer: v.issuer, receipt, reference: v.reference, userVerified: v.userVerified, risk: v.risk });
     },
     { rateLimit: { name: "demo-status", perMinute: 3000 } },
   )(req);

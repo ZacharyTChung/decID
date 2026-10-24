@@ -6,7 +6,8 @@ import { ConsentSheet, PassScreen, PhoneButton, ShareResult, SheetNotice } from 
 import { brandByName } from "@/components/product/merchant";
 import { WalletHome } from "@/components/product/wallet";
 import { describeError } from "@/lib/client/errors";
-import { activeProfile, addHistory, claimsOf, credentialStatus, listProfiles, loadRequest, setActive, share, type Outcome, type PassProfile, type WalletRequest } from "@/lib/client/pass";
+import { activeProfile, addHistory, claimsOf, credentialStatus, enableUnlock, listProfiles, loadRequest, setActive, share, unlockAvailable, type Outcome, type PassProfile, type WalletRequest } from "@/lib/client/pass";
+import { useApp } from "@/components/providers";
 import { friendlyReason } from "@/lib/shared/policies";
 
 /** A business's request, answered from decID Pass: the wallet with the consent sheet over it. */
@@ -26,6 +27,7 @@ function useCountdown(until?: number) {
 export default function ApproveRequest() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const app = useApp();
   const [profiles, setProfiles] = useState<PassProfile[]>();
   const [profile, setProfile] = useState<PassProfile>();
   const [req, setReq] = useState<WalletRequest>();
@@ -112,6 +114,21 @@ export default function ApproveRequest() {
           answer={claim ? claims?.[claim] === true : true}
           revoked={passStatus !== undefined && passStatus !== "Active"}
           expiresIn={left}
+          unlock={{
+            enabled: !!profile?.passkeyId,
+            required: req.unlock.required,
+            onEnable: unlockAvailable()
+              ? async () => {
+                  if (!app.config || !profile) return;
+                  setError(undefined);
+                  try {
+                    setProfile(await enableUnlock(profile, app.config));
+                  } catch (e) {
+                    setError(describeError(e));
+                  }
+                }
+              : undefined,
+          }}
           busy={busy}
           error={error}
           onCancel={async () => {

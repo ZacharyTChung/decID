@@ -25,6 +25,13 @@ npm run product            # one command: chain, keys, contracts, demo businesse
 
 **Government ID:** a Pass can be created from the driver's licence in a phone wallet. decID asks it only for "over 18" and "over 21", over the browser's Digital Credentials API (ISO 18013-7 Annex C), checks the state's and the phone's signatures, and keeps one active Pass per licence. It is tested with synthetic licences from a test DMV. Real licences need trust roots and wallet registration: see [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md).
 
+**Fraud signals, device unlock and a compliance assistant:**
+- The door warns when the same Pass comes back through the queue, and the dashboard's Risk page flags forged, borrowed and revoked Passes and unusual rates.
+- A business can require the guest to unlock their phone with Face ID, a fingerprint or a PIN (a passkey) for each answer.
+- The Assistant answers compliance questions, such as "Was order HL-4821 age-checked?", from the signed receipts, citing them.
+
+See [docs/TRUST-FEATURES.md](docs/TRUST-FEATURES.md).
+
 More docs:
 - [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors (including TruAge and wallet IDs), business model (labelled assumptions), risks and roadmap.
 - [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md): getting a Pass from a mobile driver's licence, and what going live needs.
@@ -123,7 +130,7 @@ Without an injected wallet, the UI says so and does not pretend to sign. Use `np
 npm run redteam      # ~2 min: 53 attacks against a fresh live stack; exits 1 if any defense fails
 ```
 
-Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), government-ID attacks (forged or edited licences, copied licences, phishing relay, replay, lending), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).
+Credential forgery (tampering, self-issued, `alg:none`, HS256 key confusion, embedded keys, kid spoofing), impersonation and replay (stolen bundles, forged proofs, audience relay, races), commitment and on-chain attacks (front-running, re-registration, rogue registries), government-ID attacks (forged or edited licences, copied licences, phishing relay, replay, lending), device-unlock and fraud-signal attacks (someone else's passkey, replayed unlocks, pass-back, cross-tenant assistant reads), API abuse (CSRF, privilege escalation, mass assignment, floods, recovery hijack) and privacy probes. Results and findings: [docs/REDTEAM-REPORT.md](docs/REDTEAM-REPORT.md).
 
 ## Standalone verification (relying parties)
 

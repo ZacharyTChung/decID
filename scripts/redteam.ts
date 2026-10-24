@@ -32,6 +32,8 @@ import { HttpActor } from "./lib/http-actor";
 import { startLocalStack, type LocalStack } from "./lib/local-stack";
 import { parseEnvFile } from "./lib/setup-keys";
 import { answerRequest, createTestAuthority, provisionTestLicence, type TestWallet } from "../src/lib/shared/mdl/test-wallet";
+import { preparePresentation } from "../src/lib/shared/presentation";
+import { SoftAuthenticator } from "../test/unit/helpers/soft-authenticator";
 
 const ROOT = process.cwd();
 const DIR = path.join(ROOT, ".redteam");
@@ -172,7 +174,15 @@ async function main() {
     appPort: 3300,
     mode: "dev",
     distDir: ".next-redteam",
-    appEnv: { TRUST_PROXY: "1", MDL_ACCEPT_TEST_IDS: "1" },
+    appEnv: {
+      TRUST_PROXY: "1",
+      MDL_ACCEPT_TEST_IDS: "1",
+      // Demo businesses (Neon Hall, Hopline) for the decID Verify, device-unlock and assistant scenarios.
+      DEMO_MODE: "1",
+      DEMO_HOPLINE_API_KEY: "dk_test_" + "r".repeat(43),
+      DEMO_NEONHALL_API_KEY: "dk_test_" + "t".repeat(43),
+      DECID_API_BASE: "http://127.0.0.1:3300",
+    },
     log: (m) => console.log(`  setup: ${m}`),
   });
   const trust = JSON.parse(readFileSync(path.join(DIR, "trusted-issuers.json"), "utf8"));
@@ -228,6 +238,31 @@ async function main() {
     return { res, response, id: req.id as string };
   };
   const adultLicence = await testLicence(adult);
+  // Device unlock: the holder's phone (Face ID) and the thief's own phone, both with registered passkeys.
+  const holderPhone = new SoftAuthenticator(stack.origin);
+  const thiefPhone = new SoftAuthenticator(stack.origin);
+  for (const [a, phone] of [[holder, holderPhone], [thief, thiefPhone]] as const) {
+    if ((await a.signIn("holder")).status !== 200) throw new Error("holder sign-in failed");
+    const opts = await a.call("POST", "/api/pass/passkey/options", {});
+    const reg = await a.call("POST", "/api/pass/passkey", { response: phone.register(opts.body.challenge) });
+    if (reg.status !== 201) throw new Error(`passkey registration failed: ${JSON.stringify(reg.body)}`);
+  }
+  /** Neon Hall asks (optionally requiring device unlock); `who` answers with `bundle` and an optional unlock. */
+  const doorCheck = async (who: HttpActor, bundle: HolderBundle, unlock?: (challenge: string) => unknown, requireUserVerification = true) => {
+    const s = await who.call("POST", "/api/demo/neonhall/sessions", { requireUserVerification, reference: "door-7" });
+    if (s.status !== 201) throw new Error(`door session failed: ${s.status} ${JSON.stringify(s.body)}`);
+    const req = (await who.call("GET", `/api/v1/verifications/${s.body.id}/request`)).body;
+    const { disclosures, message } = preparePresentation(bundle, req.challenge, who.address);
+    const signature = await who.wallet.signTypedData(presentationDomain(req.challenge.chainId, req.challenge.registry), PRESENTATION_TYPES, message);
+    const out = await who.call("POST", `/api/v1/verifications/${s.body.id}/presentation`, {
+      credentialJwt: bundle.credentialJwt,
+      disclosures,
+      salt: bundle.salt,
+      proof: { holder: who.address, commitment: bundle.commitment, expiresAt: req.challenge.expiresAt, signature },
+      ...(unlock ? { unlock: unlock(req.unlock.challenge) } : {}),
+    });
+    return { id: s.body.id as string, out, challenge: req.unlock.challenge as string };
+  };
   console.log("  setup: legitimate credentials issued (A registered, B unregistered, C awaiting pickup, M registered and under 18)\n");
 
   const scenarios: Scenario[] = [
@@ -658,6 +693,59 @@ async function main() {
         }
         const v = (await issuer.call("GET", "/api/issuer/audit")).body.verification;
         return { ok: v.ok === true && v.anchor?.ok === false, observed: `chain ${v.ok ? "passes" : "fails"}; anchor: ${v.anchor?.problem ?? JSON.stringify(v.anchor)}` };
+      },
+    },
+
+    // -------------------------------------------------------------- H: device unlock, fraud signals, assistant
+    {
+      id: "H1", category: "Device unlock & fraud signals", attack: "Someone else's face: the holder's Pass unlocked with a passkey registered to another wallet", expected: "USER_NOT_VERIFIED",
+      run: async () => {
+        const { out } = await doorCheck(holder, A, (c) => thiefPhone.assert(c));
+        return { ok: out.body.failureCode === "USER_NOT_VERIFIED", observed: `${out.body.status} ${out.body.failureCode ?? ""}` };
+      },
+    },
+    {
+      id: "H2", category: "Device unlock & fraud signals", attack: "Replay of a captured Face ID assertion into a new check", expected: "USER_NOT_VERIFIED",
+      run: async () => {
+        const first = await doorCheck(holder, A, (c) => holderPhone.assert(c));
+        if (first.out.body.status !== "verified") return { ok: false, observed: `legit unlock refused: ${JSON.stringify(first.out.body)}` };
+        const captured = holderPhone.assert(first.challenge);
+        const { out } = await doorCheck(holder, A, () => captured);
+        return { ok: out.body.failureCode === "USER_NOT_VERIFIED", observed: `${out.body.status} ${out.body.failureCode ?? ""}` };
+      },
+    },
+    {
+      id: "H3", category: "Device unlock & fraud signals", attack: "Phone tapped without Face ID / PIN (user presence only, no user verification)", expected: "USER_NOT_VERIFIED",
+      run: async () => {
+        const { out } = await doorCheck(holder, A, (c) => holderPhone.assert(c, { uv: false }));
+        return { ok: out.body.failureCode === "USER_NOT_VERIFIED", observed: `${out.body.status} ${out.body.failureCode ?? ""}` };
+      },
+    },
+    {
+      id: "H4", category: "Device unlock & fraud signals", attack: "Pass-back: the same Pass admitted twice in a row at the door", expected: "second answer carries a pass_reuse signal",
+      run: async () => {
+        await doorCheck(holder, A, undefined, false);
+        const { id } = await doorCheck(holder, A, undefined, false);
+        const status = (await holder.call("GET", `/api/demo/neonhall/sessions/${id}`)).body;
+        return { ok: status.status === "verified" && status.risk?.some((r: { kind: string }) => r.kind === "pass_reuse"), observed: `${status.status}; signals: ${(status.risk ?? []).map((r: { kind: string }) => r.kind).join(", ") || "none"}` };
+      },
+    },
+    {
+      id: "H5", category: "Device unlock & fraud signals", attack: "Read another business's fraud signals or ask its assistant without signing in", expected: "HTTP 401 / 401",
+      run: async () => {
+        const stranger = actor("stranger", 11, "10.0.0.11");
+        const r = await stranger.call("GET", "/api/business/risk");
+        const a = await stranger.call("POST", "/api/business/assistant", { question: "Anything suspicious?" });
+        return { ok: r.status === 401 && a.status === 401, observed: `HTTP ${r.status} / ${a.status}` };
+      },
+    },
+    {
+      id: "H6", category: "Device unlock & fraud signals", attack: "Hopline asks its assistant about one of Neon Hall's checks (cross-tenant read)", expected: "not found",
+      run: async () => {
+        const biz = actor("hopline-officer", 12, "10.0.0.12");
+        await biz.call("POST", "/api/demo/business-session", { merchant: "hopline" });
+        const a = await biz.call("POST", "/api/business/assistant", { question: "Was order door-7 age-checked?" });
+        return { ok: a.status === 200 && /no age check with the reference/.test(a.body.text?.[0] ?? ""), observed: `HTTP ${a.status}: ${(a.body.text?.[0] ?? "").slice(0, 60)}` };
       },
     },
 

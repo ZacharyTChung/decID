@@ -18,6 +18,8 @@ export interface CheckStatus {
   issuer: { name: string } | null;
   receipt: { valid: boolean; payload?: Record<string, unknown> } | null;
   reference: string | null;
+  userVerified: boolean | null;
+  risk: { kind: string; severity: "high" | "medium" | "low"; title: string; detail: string; action: string }[];
 }
 
 export interface Check {
@@ -42,6 +44,9 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
   const [status, setStatus] = useState<CheckStatus>();
   const [error, setError] = useState<string>();
   const timer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const [requireUnlock, setRequireUnlock] = useState(false);
+  const requireRef = useRef(false);
+  requireRef.current = requireUnlock;
 
   const stop = () => {
     if (timer.current) clearInterval(timer.current);
@@ -61,7 +66,7 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
       // scanned it in the gap would be told "already answered".
       setCheck(undefined);
       try {
-        const c = await api<Check>("POST", `/api/demo/${merchant}/sessions`, reference ? { reference } : {});
+        const c = await api<Check>("POST", `/api/demo/${merchant}/sessions`, { ...(reference ? { reference } : {}), ...(requireRef.current ? { requireUserVerification: true } : {}) });
         setCheck(c);
         timer.current = setInterval(async () => {
           try {
@@ -90,16 +95,19 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
     setCheck(undefined);
     setStatus(undefined);
   };
-  return { check, status, error, start, reset };
+  return { check, status, error, start, reset, requireUnlock, setRequireUnlock };
 }
 
 /** The shared checkout and door UI (src/components/product) read an AgeCheck; this adapts the HTTP flow. */
 export function useHttpAgeCheck(merchant: "hopline" | "neonhall"): AgeCheck {
-  const { check, status, error, start, reset } = useAgeCheck(merchant);
+  const { check, status, error, start, reset, requireUnlock, setRequireUnlock } = useAgeCheck(merchant);
   const begin = useCallback((reference: string) => void start(reference), [start]);
   const done = status && (status.status === "verified" || status.status === "rejected");
   const p = status?.receipt?.payload as { policy?: string; outcome?: string; seq?: number } | undefined;
-  const received = useMemo(() => (done ? { result: status.result, issuer: status.issuer, receipt: status.receipt ? { valid: status.receipt.valid, policy: p?.policy, outcome: p?.outcome, seq: p?.seq } : null } : undefined), [done, status, p]);
+  const received = useMemo(
+    () => (done ? { result: status.result, issuer: status.issuer, userVerified: status.userVerified, risk: status.risk.map((r) => r.title), receipt: status.receipt ? { valid: status.receipt.valid, policy: p?.policy, outcome: p?.outcome, seq: p?.seq } : null } : undefined),
+    [done, status, p],
+  );
   return {
     id: check?.id,
     status: check ? (status?.status ?? "pending") : undefined,
@@ -110,6 +118,10 @@ export function useHttpAgeCheck(merchant: "hopline" | "neonhall"): AgeCheck {
     qrSvg: check?.qrSvg,
     walletUrl: check?.walletUrl,
     error,
+    userVerified: status?.userVerified,
+    risk: status?.risk,
+    requireUnlock,
+    setRequireUnlock,
     start: begin,
     reset,
     open: () => check && openWallet(check.walletUrl),

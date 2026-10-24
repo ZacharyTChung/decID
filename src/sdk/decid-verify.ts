@@ -31,6 +31,24 @@ export interface Verification {
   matchCode: string | null;
   issuer: { name: string } | null;
   receipt: string | null;
+  /** The business asked for the holder to unlock their phone (Face ID, fingerprint or PIN). */
+  requireUserVerification: boolean;
+  /** The holder unlocked their phone to answer (null while pending). */
+  userVerified: boolean | null;
+  /** Fraud signals for this check (pass-back, forged or borrowed Passes, unusual rates). */
+  risk: RiskAlert[];
+}
+
+export interface RiskAlert {
+  id: string;
+  kind: "pass_reuse" | "repeat_orders" | "forgery_probing" | "borrowed_pass" | "revoked_pass" | "underage_spike" | "volume_spike";
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  action: string;
+  at: number;
+  sessions: string[];
+  receipts: number[];
 }
 
 export interface Receipt {
@@ -44,6 +62,7 @@ export interface Receipt {
   registry: { chainId: number; address: string; status: string | null };
   evidence: string;
   checkedAt: string;
+  userVerified?: boolean;
   seq: number;
   prev: string;
   iat: number;
@@ -79,7 +98,7 @@ export class DecidVerify {
     return data as T;
   }
 
-  createVerification(input: { policy: Policy; reference?: string }): Promise<Verification> {
+  createVerification(input: { policy: Policy; reference?: string; requireUserVerification?: boolean }): Promise<Verification> {
     return this.call("POST", "/api/v1/verifications", input);
   }
 

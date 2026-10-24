@@ -7,6 +7,8 @@ import { DecidWordmark } from "@/components/product/brand";
 import { HOPLINE, NEON_HALL, brandFor } from "@/components/product/merchant";
 import { VerifyDashboard, type AnchorView, type CheckRow } from "@/components/product/verify-dashboard";
 import type { CheckStatus } from "@/components/product/dashboard";
+import type { RiskAlert } from "@/lib/shared/risk";
+import type { AssistantAnswer } from "@/lib/shared/assistant";
 
 /**
  * decID Verify business dashboard: what a business sees about its age checks. Signed in with
@@ -26,10 +28,12 @@ export default function Business() {
   const [o, setO] = useState<Overview | null>();
   const [key, setKey] = useState("");
   const [error, setError] = useState<string>();
+  const [risk, setRisk] = useState<{ alerts: RiskAlert[]; checksAnalysed: number }>();
 
   const load = useCallback(async () => {
     try {
       setO(await api<Overview>("GET", "/api/business/overview"));
+      setRisk(await api<{ alerts: RiskAlert[]; checksAnalysed: number }>("GET", "/api/business/risk"));
     } catch (e) {
       if (e instanceof ClientApiError && e.status === 401) setO(null);
       else setError((e as Error).message);
@@ -118,10 +122,14 @@ export default function Business() {
         chain={o.receipts}
         storedFields={o.storedFields}
         exportHref="/api/business/receipts/export"
+        risk={risk}
+        assistant={{ ask: (question) => api<AssistantAnswer>("POST", "/api/business/assistant", { question }) }}
         now={Math.floor(Date.now() / 1000)}
         loadCheck={async (id) => {
-          const r = o.recent.find((x) => x.id === id)!;
-          return { ...rows.find((x) => x.id === id)!, answer: r.result ? Object.values(r.result)[0]! : null, receipt: null };
+          const r = o.recent.find((x) => x.id === id);
+          const row = rows.find((x) => x.id === id);
+          if (!r || !row) return { id, reference: null, status: "verified" as CheckStatus, failureCode: null, matchCode: null, issuerName: null, createdAt: 0, completedAt: null, answer: null, receipt: null };
+          return { ...row, answer: r.result ? Object.values(r.result)[0]! : null, receipt: null };
         }}
         accountMenu={
           <button

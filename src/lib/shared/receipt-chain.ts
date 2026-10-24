@@ -25,6 +25,8 @@ export interface ReceiptBody {
   registry: { chainId: number; address: string; status: string | null };
   evidence: string; // SHA-256 of the presentation the holder signed; the holder keeps it
   checkedAt: string;
+  /** The holder unlocked their phone (Face ID, fingerprint or device PIN) for this answer. Absent in older receipts. */
+  userVerified?: boolean;
 }
 export interface Receipt extends ReceiptBody {
   seq: number;

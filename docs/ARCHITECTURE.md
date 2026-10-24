@@ -169,6 +169,8 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Government-ID answer (age_over_18 / age_over_21, issuer-signed licence data) | Server process memory | Server | Not persisted; only the derived claims go into the credential |
 | One-licence-one-Pass binding: HMAC of the licence's device-key thumbprint, holder address | SQLite `mdl_bindings` | Server | Until reset |
 | Test DMV (root + document-signer certificate, signer private key) | `<DATA_DIR>/mdl-test-authority.json` (0600) | Server | Test only; accepted only with `MDL_ACCEPT_TEST_IDS=1` or demo mode |
+| Device-unlock passkeys: credential id, public key, signature counter, holder address | SQLite `pass_passkeys` | Server | Until reset (the biometric never leaves the phone) |
+| Per-check unlock result and requirement, and the Pass pseudonym `pass_tag` (HMAC of business, commitment and UTC day) | SQLite `verify_sessions` | Server; the business sees its own | `pass_tag` cleared after 48 h |
 | Credential token and salt during verification | Verifier process memory | Verifier | Not persisted |
 | Challenge (nonce, action, audience, chain, registry, expiry, outcome code) | SQLite `verifier_challenges` | Verifier | 1 h after expiry |
 | SIWE nonces / sessions (SHA-256 of cookie, address, role) | SQLite `auth_*` | Server | Nonces 5 min, sessions 1 h |

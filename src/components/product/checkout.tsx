@@ -26,6 +26,13 @@ export interface AgeCheck {
   /** Link that opens this request in decID Pass (on another device, via the QR code). */
   walletUrl?: string;
   error?: string;
+  /** The guest unlocked their phone (Face ID, fingerprint or PIN) to answer. */
+  userVerified?: boolean | null;
+  /** Fraud signals decID attached to this answer. */
+  risk?: { kind: string; severity: "high" | "medium" | "low"; title: string; detail: string; action: string }[];
+  /** Whether new requests ask the guest to unlock their phone; and a switch for it. */
+  requireUnlock?: boolean;
+  setRequireUnlock?: (v: boolean) => void;
   start: (reference: string) => void;
   reset: () => void;
   /** Open the request in decID Pass (the demo phone). */

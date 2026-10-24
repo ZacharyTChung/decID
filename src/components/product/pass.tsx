@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BadgeCheck, BatteryFull, ChevronRight, Info, Signal, TriangleAlert, Wifi, X } from "lucide-react";
+import { BadgeCheck, BatteryFull, ChevronRight, Fingerprint, Info, Signal, TriangleAlert, Wifi, X } from "lucide-react";
 import { MerchantLogo, type MerchantBrand } from "./merchant";
 
 /**
@@ -139,11 +139,13 @@ export interface ConsentProps {
   error?: string;
   onShare: () => void;
   onCancel: () => void;
+  /** Device unlock: whether this Pass has Face ID / fingerprint on, and whether the business requires it. */
+  unlock?: { enabled: boolean; required: boolean; onEnable?: () => void };
 }
 
 const NOT_SHARED = "Your name, date of birth, address, ID number, photo and any other details on your ID.";
 
-export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy, error, onShare, onCancel }: ConsentProps) {
+export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy, error, onShare, onCancel, unlock }: ConsentProps) {
   const purpose = merchant.kind === "venue" ? `${merchant.name} has to confirm that every guest is 21 or older before entry.` : `${merchant.name} has to confirm that buyers of alcohol are 21 or older.`;
   return (
     <SheetLayer labelledBy="consent-title">
@@ -192,8 +194,23 @@ export function ConsentSheet({ merchant, item, answer, expiresIn, revoked, busy,
           </p>
         )}
 
+        {unlock?.required && !unlock.enabled && (
+          <div className="mt-4 rounded-[12px] bg-warn-soft px-3.5 py-3 text-ui text-warn" role="status" data-testid="unlock-required">
+            <p className="flex gap-2">
+              <Fingerprint size={15} strokeWidth={1.75} className="mt-px shrink-0" aria-hidden />
+              <span>{merchant.name} asks you to confirm with Face ID or your fingerprint. Turn it on for this Pass first.</span>
+            </p>
+            {unlock.onEnable && (
+              <button type="button" onClick={unlock.onEnable} className="press mt-2 font-semibold text-accent" data-testid="enable-unlock-inline">
+                Turn on Face ID / fingerprint
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="mt-5 grid gap-2">
-          <PhoneButton onClick={onShare} busy={busy} testId="share">
+          <PhoneButton onClick={onShare} busy={busy} testId="share" disabled={unlock?.required && !unlock.enabled}>
+            {unlock?.enabled && <Fingerprint size={18} strokeWidth={2} aria-hidden />}
             Share with {merchant.name}
           </PhoneButton>
           <PhoneButton variant="plain" onClick={onCancel}>

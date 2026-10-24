@@ -150,6 +150,9 @@ try {
   await phone.getByTestId("pass-status").getByText(/^Revoked/).waitFor({ timeout: 10_000 });
   check(true, "one licence backs one Pass: making a second Pass with Jo's licence revoked the first");
   await phone.locator("#pass-person").selectOption({ index: 3 });
+  await phone.getByRole("button", { name: /Face ID \/ fingerprint/ }).click();
+  await phone.getByTestId("unlock-status").getByText("On").waitFor();
+  check(true, "Face ID / fingerprint can be turned on for a Pass (simulated in the hosted prototype)");
 
   // Dashboard
   await page.getByRole("button", { name: "Business dashboard" }).click();
@@ -201,9 +204,27 @@ try {
   check(/Borrowed credential: refused · credential belongs to someone else/.test(log), "busy night: the borrowed credential is refused");
   check(/Revoked Pass: refused · credential revoked/.test(log), "busy night: the revoked Pass is refused");
   check((log.match(/admitted ·/g) ?? []).length >= 8 && (log.match(/not old enough/g) ?? []).length >= 2, "busy night: adults admitted, under-21 guests refused");
-  await page.getByTestId("chain-status").getByText("Chain intact · 16 signed receipts").waitFor();
-  await page.getByTestId("anchor-status").getByText("Anchored on-chain · 16 receipts").waitFor();
-  check(true, "16 receipts, chain intact and all anchored on-chain");
+  check(/Same Pass again: admitted · flagged as pass-back/.test(log) && (log.match(/Fake Pass \d: refused/g) ?? []).length === 3, "busy night: a Pass handed back and three fake Passes");
+  await page.getByTestId("chain-status").getByText("Chain intact · 20 signed receipts").waitFor();
+  await page.getByTestId("anchor-status").getByText("Anchored on-chain · 20 receipts").waitFor();
+  check(true, "20 receipts, chain intact and all anchored on-chain");
+  // Fraud signals
+  await page.getByRole("button", { name: "Risk" }).click();
+  const kinds = await page.getByTestId("risk-alert").evaluateAll((els) => els.map((e) => e.getAttribute("data-kind")));
+  check(["pass_reuse", "forgery_probing", "borrowed_pass", "revoked_pass"].every((k) => kinds.includes(k)), `Risk page: pass-back, forgery probing, borrowed and revoked Passes flagged (${kinds.join(", ")})`);
+  await page.screenshot({ path: path.join(SHOTS, "12a-risk.png"), fullPage: true });
+  await audit(page, "dashboard: risk");
+  // Compliance assistant
+  await page.getByRole("button", { name: "Assistant" }).click();
+  await page.getByTestId("assistant-input").fill("Anything suspicious?");
+  await page.getByTestId("assistant-send").click();
+  const answer = await page.getByTestId("assistant-answer").first().innerText();
+  check(/Forged credentials being tried/.test(answer) && /receipt #\d+/.test(answer), "assistant: names the forgery probing and cites receipts");
+  await page.getByTestId("assistant-suggestion").filter({ hasText: "Write this week’s compliance report" }).click();
+  await page.getByTestId("assistant-answer").nth(1).waitFor();
+  check(/5\. Personal data held: none/.test(await page.getByTestId("assistant-answer").nth(1).innerText()), "assistant: writes a compliance report from the records");
+  await page.screenshot({ path: path.join(SHOTS, "12b-assistant.png"), fullPage: true });
+  await audit(page, "dashboard: assistant");
   await page.getByRole("button", { name: "Overview" }).click();
   await page.screenshot({ path: path.join(SHOTS, "12-dashboard-night.png"), fullPage: true });
   await page.getByRole("button", { name: "Data & privacy" }).click();

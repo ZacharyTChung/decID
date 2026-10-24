@@ -7,7 +7,7 @@ import { useApp } from "@/components/providers";
 import { AddIdFlow, WalletHome, type IdForm } from "@/components/product/wallet";
 import { PassScreen, PhoneButton } from "@/components/product/pass";
 import { describeError } from "@/lib/client/errors";
-import { activate, activeProfile, claimsOf, createProfile, credentialStatus, getVerified, getVerifiedWithId, history, listProfiles, saveProfile, setActive, walletIdSupported, type HistoryEntry, type IdSource, type PassProfile, type Step } from "@/lib/client/pass";
+import { activate, activeProfile, claimsOf, createProfile, credentialStatus, getVerified, getVerifiedWithId, history, listProfiles, saveProfile, setActive, walletIdSupported, enableUnlock, unlockAvailable, type HistoryEntry, type IdSource, type PassProfile, type Step } from "@/lib/client/pass";
 import { deriveHolderDid } from "@/lib/shared/did-pkh";
 import { friendlyReason } from "@/lib/shared/policies";
 
@@ -172,6 +172,15 @@ function PassHome() {
           detail: `${h.outcome === "verified" ? `Shared “${h.shared === "21+" ? "21 or older" : h.shared}”` : h.outcome === "declined" ? "Declined" : friendlyReason(h.failureCode)} · ${new Date(h.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`,
           matchCode: h.matchCode,
         }))}
+        unlock={{
+          enabled: !!profile.passkeyId,
+          available: unlockAvailable(),
+          onEnable: async () => {
+            if (!app.config) return;
+            await enableUnlock(profile, app.config);
+            await reload();
+          },
+        }}
         tech={{ deviceKey: app.config ? deriveHolderDid(app.config.chainId, profile.address) : profile.address, registryEntry: b.commitment, hiddenClaims: b.disclosures.length }}
         notice={
           <div className="mt-4 space-y-3 px-4">

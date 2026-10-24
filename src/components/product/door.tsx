@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Smartphone } from "lucide-react";
+import { Fingerprint, Smartphone, TriangleAlert } from "lucide-react";
 import { friendlyReason } from "../../lib/shared/policies";
 import type { AgeCheck } from "./checkout";
 
@@ -74,6 +74,22 @@ export function NeonHallDoor({ check, className }: { check: AgeCheck; className?
               <Smartphone size={15} strokeWidth={1.75} aria-hidden /> Scan with the demo phone
             </button>
             {check.error && <p className="mt-3 font-sans text-[13px] text-[#ff8ccb]">{check.error}</p>}
+            {check.setRequireUnlock && (
+              <label className="mt-5 inline-flex cursor-pointer items-center gap-2 font-sans text-[13px] text-white/90">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#ff3ea5]"
+                  checked={!!check.requireUnlock}
+                  data-testid="door-require-unlock"
+                  onChange={(e) => {
+                    check.setRequireUnlock!(e.target.checked);
+                    // The code on screen was made with the old setting: replace it.
+                    setTimeout(() => start("door-1"), 0);
+                  }}
+                />
+                Guests must unlock with Face ID / fingerprint
+              </label>
+            )}
           </>
         ) : ok ? (
           <>
@@ -97,6 +113,10 @@ export function NeonHallDoor({ check, className }: { check: AgeCheck; className?
               </button>
             </div>
             <p className="mt-6 font-sans text-[13px] text-white">21 or older, vouched for by {check.issuerName}. Receipt signed.</p>
+            <p className="mt-2 inline-flex items-center gap-1.5 font-sans text-[13px] text-white" data-testid="door-unlock">
+              <Fingerprint size={15} strokeWidth={1.75} aria-hidden />
+              {check.userVerified ? "The guest unlocked their phone with Face ID, fingerprint or PIN." : "No device unlock on this answer."}
+            </p>
           </>
         ) : (
           <>
@@ -111,6 +131,21 @@ export function NeonHallDoor({ check, className }: { check: AgeCheck; className?
           </>
         )}
       </div>
+
+      {answered && check.risk && check.risk.length > 0 && (
+        <div className="mx-6 mb-4 rounded-md bg-[#fff4d6] px-5 py-4 font-sans text-[#5c3d00]" role="alert" data-testid="door-risk">
+          {check.risk.map((r) => (
+            <div key={r.title} className="flex gap-3">
+              <TriangleAlert size={20} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden />
+              <div>
+                <p className="text-[16px] font-semibold">{r.title}</p>
+                <p className="text-[13px] leading-5">{r.detail}</p>
+                <p className="mt-1 text-[13px] font-medium leading-5">{r.action}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/20 px-8 py-4 font-sans text-[12px] text-white">
         <span className="num">

@@ -90,6 +90,8 @@ export const TestLicenceResponse = z.strictObject({
   devicePrivateJwk: z.record(z.string(), z.unknown()).describe("The test phone's device key"),
 });
 
+export const PasskeyOptionsResponse = z.looseObject({ challenge: z.string(), rp: z.looseObject({ id: z.string().optional(), name: z.string() }) }).describe("WebAuthn PublicKeyCredentialCreationOptionsJSON");
+export const PasskeyRegisteredResponse = z.strictObject({ credentialId: z.string() });
 export const BundleResponse = z.strictObject({ bundle: HolderBundleV2.describe("Private holder bundle; returned once, then deleted on the server") });
 
 export const PendingRequestsResponse = z.strictObject({
@@ -232,6 +234,18 @@ const Answer = z
   .describe("The one answer the business receives: true when satisfied, false only when the holder genuinely does not meet the policy");
 const MatchCode = z.string().regex(/^[A-Z0-9]{4}$/).nullable().describe("Shown on the holder's phone and to the business; compare them at a door");
 
+export const RiskAlertSchema = z.strictObject({
+  id: z.string(),
+  kind: z.enum(["pass_reuse", "repeat_orders", "forgery_probing", "borrowed_pass", "revoked_pass", "underage_spike", "volume_spike"]),
+  severity: z.enum(["high", "medium", "low"]),
+  title: z.string(),
+  detail: z.string(),
+  action: z.string(),
+  at: Unix,
+  sessions: z.array(z.string()),
+  receipts: z.array(z.number().int()),
+});
+
 const VerificationCore = {
   id: z.uuid(),
   policy: PolicyId,
@@ -244,6 +258,9 @@ const VerificationCore = {
   failureCode: z.string().nullable(),
   matchCode: MatchCode,
   issuer: z.strictObject({ name: z.string() }).nullable(),
+  requireUserVerification: z.boolean(),
+  userVerified: z.boolean().nullable().describe("The holder unlocked their phone (Face ID, fingerprint or device PIN) to answer"),
+  risk: z.array(RiskAlertSchema).describe("Fraud signals for this check, from this business's own recent checks"),
 };
 export const VerificationResponseV1 = z
   .strictObject({ ...VerificationCore, walletUrl: z.string().url(), receipt: z.string().nullable().describe("Signed compliance receipt (compact JWS, typ decid-receipt+jwt)") })
@@ -256,12 +273,14 @@ export const WalletRequestResponse = z.strictObject({
   status: SessionStatus,
   expiresAt: Unix,
   challenge: ChallengeResponseSchema,
+  unlock: z.strictObject({ challenge: z.string(), required: z.boolean() }).describe("WebAuthn challenge for device unlock, bound to this request"),
 });
 
 export const PresentationOutcome = z.strictObject({
   status: z.enum(["verified", "rejected"]),
   failureCode: z.string().nullable(),
   matchCode: MatchCode,
+  userVerified: z.boolean(),
   merchant: z.strictObject({ name: z.string() }),
   policy: z.strictObject({ id: PolicyId, short: z.string() }),
 });
@@ -324,4 +343,23 @@ export const DemoSessionStatus = z.strictObject({
   issuer: z.strictObject({ name: z.string() }).nullable(),
   receipt: z.strictObject({ valid: z.boolean(), payload: z.unknown().optional() }).nullable(),
   reference: z.string().nullable(),
+  userVerified: z.boolean().nullable(),
+  risk: z.array(RiskAlertSchema),
+});
+
+export const RiskResponse = z.strictObject({
+  alerts: z.array(RiskAlertSchema),
+  summary: z.strictObject({ high: z.number().int(), medium: z.number().int(), low: z.number().int() }),
+  checksAnalysed: z.number().int(),
+  passTagRetentionHours: z.number().int(),
+});
+
+export const AssistantAnswerResponse = z.strictObject({
+  intent: z.enum(["prove_order", "integrity", "risk", "refusals", "summary", "biometrics", "data", "export", "report", "help"]),
+  text: z.array(z.string()),
+  facts: z.array(z.strictObject({ label: z.string(), value: z.string() })),
+  citations: z.strictObject({ receipts: z.array(z.number().int()), sessions: z.array(z.string()) }).describe("The signed receipts and checks the answer is based on"),
+  actions: z.array(z.strictObject({ label: z.string(), href: z.string() })),
+  suggestions: z.array(z.string()),
+  basis: z.string(),
 });

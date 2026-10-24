@@ -31,6 +31,8 @@ export interface PassProfile {
   createdAt: number;
   bundle?: HolderBundle;
   issuerName?: string;
+  /** The platform passkey (Face ID / fingerprint / PIN) this Pass confirms shares with. */
+  passkeyId?: string;
 }
 
 export interface HistoryEntry {
@@ -251,6 +253,7 @@ export interface WalletRequest {
   status: string;
   expiresAt: number;
   challenge: { challengeId: string; nonce: string; action: string; audience: string; chainId: number; registry: string; expiresAt: number; requestedClaims: string[]; statement: string };
+  unlock: { challenge: string; required: boolean };
 }
 
 export async function loadRequest(id: string): Promise<WalletRequest> {
@@ -261,14 +264,44 @@ export interface Outcome {
   status: "verified" | "rejected";
   failureCode: string | null;
   matchCode: string | null;
+  userVerified: boolean;
   merchant: { name: string };
   policy: { id: string; short: string };
+}
+
+// ---------------------------------------------------------------- device unlock (passkey)
+
+/** Platform passkeys need a secure context (HTTPS or localhost) and WebAuthn. */
+export function unlockAvailable(): boolean {
+  return typeof window !== "undefined" && window.isSecureContext && typeof window.PublicKeyCredential === "function";
+}
+
+/** Turns on Face ID / fingerprint for this Pass: registers a platform passkey with decID. */
+export async function enableUnlock(p: PassProfile, config: PublicConfigResponse): Promise<PassProfile> {
+  await ensureSession(p, config);
+  const { startRegistration } = await import("@simplewebauthn/browser");
+  const optionsJSON = await api<Parameters<typeof startRegistration>[0]["optionsJSON"]>("POST", "/api/pass/passkey/options", {});
+  const response = await startRegistration({ optionsJSON });
+  const { credentialId } = await api<{ credentialId: string }>("POST", "/api/pass/passkey", { response });
+  const next = { ...p, passkeyId: credentialId };
+  await saveProfile(next);
+  return next;
 }
 
 /** Answers a business's request: only the requested claim is disclosed, and the wallet signs. */
 export async function share(p: PassProfile, req: WalletRequest): Promise<Outcome> {
   const b = p.bundle!;
   const w = walletOf(p);
+  // Device unlock first: if the person can't unlock the phone, nothing is signed or sent.
+  let unlock: unknown;
+  if (p.passkeyId && unlockAvailable()) {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+    unlock = await startAuthentication({
+      optionsJSON: { challenge: req.unlock.challenge, rpId: window.location.hostname, allowCredentials: [{ id: p.passkeyId, type: "public-key" }], userVerification: "required", timeout: 60_000 },
+    });
+  } else if (req.unlock.required) {
+    throw new Error(`${req.merchant.name} asks you to confirm with Face ID or your fingerprint. Turn it on for this Pass first.`);
+  }
   const { disclosures, message } = preparePresentation(b, req.challenge, w.address);
   const signature = await w.signTypedData(presentationDomain(req.challenge.chainId, req.challenge.registry), PRESENTATION_TYPES, message);
   const out = await api<Outcome>("POST", `/api/v1/verifications/${req.id}/presentation`, {
@@ -276,6 +309,7 @@ export async function share(p: PassProfile, req: WalletRequest): Promise<Outcome
     disclosures,
     salt: b.salt,
     proof: { holder: w.address, commitment: b.commitment, expiresAt: req.challenge.expiresAt, signature },
+    ...(unlock ? { unlock } : {}),
   });
   await addHistory({ profileId: p.id, at: Date.now(), merchant: req.merchant.name, question: req.policy.question, shared: req.policy.short, outcome: out.status, failureCode: out.failureCode, matchCode: out.matchCode });
   return out;

@@ -62,6 +62,12 @@ try {
   const laptopCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   const phone = await phoneCtx.newPage();
   watch(phone, "phone");
+  // The phone's Face ID: Chromium's virtual platform authenticator, with user verification.
+  const cdp = await phoneCtx.newCDPSession(phone);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
 
   // ---------------------------------------------------------------- landing
   const home = await laptopCtx.newPage();
@@ -86,6 +92,9 @@ try {
   check(true, "Alex verified once and the Pass is Active (gas sponsored; no wallet extension, no crypto)");
   await phone.screenshot({ path: path.join(SHOTS, "02-pass-card.png") });
   await audit(phone, "Pass: wallet");
+  await phone.getByRole("button", { name: /Face ID \/ fingerprint/ }).click();
+  await phone.getByTestId("unlock-status").getByText("On").waitFor({ timeout: 15_000 });
+  check(true, "Alex turns on Face ID / fingerprint: a platform passkey, only its public key goes to decID");
 
   // ---------------------------------------------------------------- Hopline checkout
   const shop = await laptopCtx.newPage();
@@ -121,6 +130,10 @@ try {
   const door = await laptopCtx.newPage();
   watch(door, "door");
   await door.goto(`${base}/demo/door`);
+  const firstDoorUrl = await door.locator("[data-wallet-url]").getAttribute("data-wallet-url");
+  // Tonight the door requires device unlock: the code is replaced with one that asks for it.
+  await door.getByTestId("door-require-unlock").check();
+  await door.waitForFunction((old) => document.querySelector("[data-wallet-url]")?.getAttribute("data-wallet-url") !== old, firstDoorUrl);
   const doorUrl = await door.locator("[data-wallet-url]").getAttribute("data-wallet-url");
   await door.screenshot({ path: path.join(SHOTS, "07-door-scan.png") });
   await audit(door, "Neon Hall: scan");
@@ -130,6 +143,7 @@ try {
   await door.getByText("OK to enter").waitFor({ timeout: 15_000 });
   const doorCode = (await door.getByTestId("door-match-code").innerText()).trim();
   check(phoneCode.length === 4 && phoneCode === doorCode, `door and phone show the same match code (${doorCode})`);
+  check(/unlocked their phone/.test(await door.getByTestId("door-unlock").innerText()), "the door required Face ID / fingerprint, and shows the guest unlocked their phone to answer");
   await door.screenshot({ path: path.join(SHOTS, "08-door-admitted.png") });
   await phone.screenshot({ path: path.join(SHOTS, "09-pass-door-code.png") });
   await audit(door, "Neon Hall: admitted");
@@ -147,6 +161,10 @@ try {
   await phone.goto(doorUrl2!);
   await phone.getByText(/Your ID says you are not 21 or older/).waitFor();
   check(true, "the Pass warns Sam before sharing that the answer will be “No”");
+  // The door requires device unlock and Sam hasn't turned it on: Share waits until Sam does.
+  check(await phone.getByTestId("share").isDisabled(), "a door that requires Face ID: Share is disabled until the Pass has it on");
+  await phone.getByTestId("enable-unlock-inline").click();
+  await phone.getByTestId("unlock-required").waitFor({ state: "detached", timeout: 15_000 });
   await phone.getByTestId("share").click();
   await door.getByText("Do not admit").waitFor({ timeout: 15_000 });
   check(/not old enough/i.test(await door.getByTestId("door-reason").innerText()), "Sam is refused at the door: “Not old enough”");
@@ -217,6 +235,46 @@ try {
   await biz.getByRole("button", { name: "Data & privacy" }).click();
   const fields = await biz.locator("tbody code").allInnerTexts();
   check(fields.length > 5 && !fields.some((f) => /holder|wallet|did|name$|birth|address|credential|salt|disclosure|photo/i.test(f) && f !== "issuer_name"), `dashboard: none of the ${fields.length} stored fields can hold personal data`);
+
+  // ---------------------------------------------------------------- fraud: Alex's Pass comes back through the queue
+  await phone.goto(`${base}/pass`);
+  await phone.locator("#pass-person").selectOption({ label: "Alex" });
+  await phone.getByRole("group", { name: "decID Pass for Alex: 21+" }).waitFor();
+  await door.waitForSelector("[data-wallet-url]", { timeout: 20_000 });
+  const doorUrl3 = await door.locator("[data-wallet-url]").getAttribute("data-wallet-url");
+  await phone.goto(doorUrl3!);
+  await phone.getByTestId("share").click();
+  await door.getByTestId("door-risk").getByText("Same Pass admitted again").waitFor({ timeout: 15_000 });
+  check(true, "fraud: the door warns that the same Pass was already admitted (pass-back)");
+  await door.screenshot({ path: path.join(SHOTS, "13-door-pass-back.png") });
+  await audit(door, "Neon Hall: pass-back warning");
+  await biz.getByRole("button", { name: "Risk" }).click();
+  await biz.locator('[data-testid="risk-alert"][data-kind="pass_reuse"]').first().waitFor({ timeout: 15_000 });
+  check(true, "fraud: the dashboard's Risk page lists the pass-back with its receipts as evidence");
+  await biz.screenshot({ path: path.join(SHOTS, "14-business-risk.png"), fullPage: true });
+  await audit(biz, "business: risk");
+
+  // ---------------------------------------------------------------- compliance assistant
+  await biz.getByRole("button", { name: "Assistant" }).click();
+  const ask = async (q: string) => {
+    const n = await biz.getByTestId("assistant-answer").count();
+    await biz.getByTestId("assistant-input").fill(q);
+    await biz.getByTestId("assistant-send").click();
+    await biz.getByTestId("assistant-answer").nth(n).waitFor({ timeout: 15_000 });
+    return biz.getByTestId("assistant-answer").nth(n).innerText();
+  };
+  const suspicious = await ask("Anything suspicious?");
+  check(/Same Pass admitted again/.test(suspicious) && /receipt #\d+/.test(suspicious), "assistant: “Anything suspicious?” names the pass-back and cites receipts");
+  const intact = await ask("Is our record intact?");
+  check(/^Yes\. All \d+ receipts verify/.test(intact) && /anchored on-chain/.test(intact), "assistant: “Is our record intact?” checks signatures, links and the on-chain anchor");
+  await biz.screenshot({ path: path.join(SHOTS, "15-business-assistant.png"), fullPage: true });
+  await audit(biz, "business: assistant");
+  // Hopline's compliance officer proves an order was age-checked.
+  await biz.request.post(`${base}/api/demo/business-session`, { data: { merchant: "hopline" }, headers: { origin: base } });
+  await biz.reload();
+  await biz.getByRole("button", { name: "Assistant" }).click();
+  const order = await ask("Was order HL-4821 age-checked?");
+  check(/^Yes\. Order HL-4821 was age-checked/.test(order) && /receipt #1/.test(order), "assistant: proves order HL-4821 was age-checked, from signed receipt #1");
 
   // ---------------------------------------------------------------- demo stage
   const stage = await laptopCtx.newPage();

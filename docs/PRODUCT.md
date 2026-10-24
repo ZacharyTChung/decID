@@ -55,7 +55,11 @@ Businesses don't want this data. They want a defensible "yes, we checked."
 6. **Verified once from the ID already on the phone.**
    - A Pass can come from the driver's licence in Apple Wallet, Google Wallet or a state app, asking it only "over 18?" and "over 21?" (ISO 18013-7 over the browser's Digital Credentials API).
    - One licence backs one active Pass, so an adult can't quietly make Passes for others with their licence.
-7. **Nothing to install for the business, nothing crypto for the person.**
+7. **Fraud signals, device unlock and a compliance assistant, without personal data.**
+   - The door warns when a Pass comes back through the queue; forged, borrowed and revoked Passes and unusual rates are flagged with the receipts as evidence.
+   - A business can require the guest to unlock their phone (Face ID, fingerprint or PIN) to answer; the receipt records it.
+   - The assistant answers "was this order age-checked?" or writes a compliance report from the signed receipts, citing them. It computes rather than generates, so it can't invent a number.
+8. **Nothing to install for the business, nothing crypto for the person.**
    - The Pass creates its own key on the device.
    - The one on-chain registration is gas-sponsored, so nobody needs a wallet extension or tokens.
 

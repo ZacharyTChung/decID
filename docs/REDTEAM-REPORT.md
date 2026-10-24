@@ -1,8 +1,8 @@
 # Red-team report
 
-Run: 2026-10-24T03:22:13.712Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
+Run: 2026-10-24T04:00:30.832Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
 
-**62 of 62 defenses held.**
+**68 of 68 defenses held.**
 
 | ID | Category | Attack | Expected defense | Observed | Result |
 | --- | --- | --- | --- | --- | --- |
@@ -62,6 +62,12 @@ Run: 2026-10-24T03:22:13.712Z against a fresh local stack (`npm run redteam`). S
 | F1 | Audit trail & anchoring | Outsider writes a forged checkpoint for the issuer audit log | revert AccessControlUnauthorizedAccount | AccessControlUnauthorizedAccount | held |
 | F2 | Audit trail & anchoring | Stolen anchorer key rolls the audit-log checkpoint back to fewer entries | revert CountNotIncreasing | CountNotIncreasing | held |
 | F3 | Audit trail & anchoring | Operator rewrites the issuer audit log in the database and re-hashes the whole chain | hash chain passes, on-chain anchor mismatch | chain passes; anchor: entry 1 differs from the hash anchored on-chain in block 7 | held |
+| H1 | Device unlock & fraud signals | Someone else's face: the holder's Pass unlocked with a passkey registered to another wallet | USER_NOT_VERIFIED | rejected USER_NOT_VERIFIED | held |
+| H2 | Device unlock & fraud signals | Replay of a captured Face ID assertion into a new check | USER_NOT_VERIFIED | rejected USER_NOT_VERIFIED | held |
+| H3 | Device unlock & fraud signals | Phone tapped without Face ID / PIN (user presence only, no user verification) | USER_NOT_VERIFIED | rejected USER_NOT_VERIFIED | held |
+| H4 | Device unlock & fraud signals | Pass-back: the same Pass admitted twice in a row at the door | second answer carries a pass_reuse signal | verified; signals: pass_reuse | held |
+| H5 | Device unlock & fraud signals | Read another business's fraud signals or ask its assistant without signing in | HTTP 401 / 401 | HTTP 401 / 401 | held |
+| H6 | Device unlock & fraud signals | Hopline asks its assistant about one of Neon Hall's checks (cross-tenant read) | not found | HTTP 200: I found no age check with the reference “door-7”. Checks are | held |
 | G1 | Government ID | Forged licence: perfect format, signed by the attacker's own "DMV" root | HTTP 422 MDL_UNTRUSTED_ISSUER | HTTP 422 MDL_UNTRUSTED_ISSUER | held |
 | G2 | Government ID | Minor edits age_over_21 from false to true inside the state-signed licence | HTTP 422 MDL_BAD_SIGNATURE | HTTP 422 MDL_BAD_SIGNATURE | held |
 | G3 | Government ID | Copied licence data presented from another phone (without the licence's device key) | HTTP 422 MDL_NOT_DEVICE_SIGNED | HTTP 422 MDL_NOT_DEVICE_SIGNED | held |

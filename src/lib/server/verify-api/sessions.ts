@@ -1,12 +1,15 @@
 import "server-only";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { hexlify } from "ethers";
 import { ACTION_POLICIES } from "../../shared/constants";
 import { presentationStatement } from "../../shared/eip712";
 import { POLICIES, type PolicyId } from "../../shared/policies";
 import { compactPresentation } from "../../shared/sd-jwt";
 import type { ChallengeResponse, PresentationSubmissionT } from "../../shared/api";
-import { appConfig } from "../config";
+import { appConfig, verifyReceiptKey } from "../config";
+import { verifyUnlock } from "../pass/passkey";
+import { unlockChallenge } from "../../shared/unlock";
+import { riskForCheck, type CheckRecord } from "../../shared/risk";
 import { loadDeployment } from "../chain";
 import { db, nowSeconds } from "../db";
 import { ApiError } from "../errors";
@@ -49,6 +52,9 @@ interface Row {
   match_code: string | null;
   issuer_name: string | null;
   receipt_seq: number | null;
+  require_uv: number;
+  user_verified: number | null;
+  pass_tag: string | null;
 }
 
 const audienceFor = (merchantId: string) => `urn:decid:merchant:${merchantId}`;
@@ -62,16 +68,16 @@ function effectiveStatus(r: Row, now = nowSeconds()): "pending" | "processing" |
   return r.status === "pending" && r.expires_at <= now ? "expired" : r.status;
 }
 
-export function createSession(merchant: Merchant, policy: PolicyId, reference?: string) {
+export function createSession(merchant: Merchant, policy: PolicyId, reference?: string, opts: { requireUserVerification?: boolean } = {}) {
   const deployment = loadDeployment();
   const id = randomUUID();
   const now = nowSeconds();
   db()
     .prepare(
-      `INSERT INTO verify_sessions (id, merchant_id, policy, reference, nonce, audience, chain_id, registry, created_at, expires_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      `INSERT INTO verify_sessions (id, merchant_id, policy, reference, nonce, audience, chain_id, registry, created_at, expires_at, status, require_uv)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
     )
-    .run(id, merchant.id, policy, reference ?? null, hexlify(randomBytes(32)), audienceFor(merchant.id), deployment.chainId, deployment.registry, now, now + SESSION_TTL);
+    .run(id, merchant.id, policy, reference ?? null, hexlify(randomBytes(32)), audienceFor(merchant.id), deployment.chainId, deployment.registry, now, now + SESSION_TTL, opts.requireUserVerification ? 1 : 0);
   return merchantView(merchant, load(id)!, null);
 }
 
@@ -100,7 +106,41 @@ export function merchantView(merchant: Merchant, r: Row, receipt: string | null 
     matchCode: r.match_code,
     issuer: r.issuer_name ? { name: r.issuer_name } : null,
     receipt: receipt ?? null,
+    requireUserVerification: r.require_uv === 1,
+    /** The holder unlocked their phone (Face ID, fingerprint or device PIN) to answer. */
+    userVerified: r.user_verified === null ? null : r.user_verified === 1,
+    /** Fraud signals for this check, from this business's own recent checks (shared/risk.ts). */
+    risk: r.status === "verified" || r.status === "rejected" ? riskForCheck(checkRecords(merchant.id), r.id, merchant.kind) : [],
   };
+}
+
+/** A business's recent checks in the shape the fraud engine and the assistant read. No personal data. */
+export function checkRecords(merchantId: string, sinceSeconds = 7 * 86400): CheckRecord[] {
+  const now = nowSeconds();
+  const rows = db().prepare("SELECT * FROM verify_sessions WHERE merchant_id = ? AND created_at > ? ORDER BY created_at").all(merchantId, now - sinceSeconds) as Row[];
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    completedAt: r.completed_at,
+    status: effectiveStatus(r, now),
+    policy: r.policy,
+    reference: r.reference,
+    failureCode: r.failure_code,
+    receiptSeq: r.receipt_seq,
+    passTag: r.pass_tag,
+    userVerified: r.user_verified === null ? null : r.user_verified === 1,
+  }));
+}
+
+/**
+ * The same Pass at the same business on the same UTC day gets the same tag; at another business,
+ * or the next day, a different one. Enough to spot a Pass handed back through a queue, not enough
+ * to follow anyone across businesses or days. Keyed with a decID secret, kept 48 h.
+ */
+function passTag(merchantId: string, commitment: string, now: number): string {
+  const key = createHmac("sha256", "decid/pass-tag/v1").update(verifyReceiptKey().d).digest();
+  const day = new Date(now * 1000).toISOString().slice(0, 10);
+  return createHmac("sha256", key).update(`${merchantId}|${commitment.toLowerCase()}|${day}`).digest("hex").slice(0, 16);
 }
 
 export function getSessionForMerchant(merchant: Merchant, id: string) {
@@ -140,11 +180,13 @@ export function walletRequest(id: string) {
     status: effectiveStatus(r),
     expiresAt: r.expires_at,
     challenge,
+    /** Device unlock (passkey) for this answer: its WebAuthn challenge, and whether the business requires it. */
+    unlock: { challenge: unlockChallenge(r.id, r.nonce), required: r.require_uv === 1 },
   };
 }
 
 /** The holder answers. Single use: the first submission consumes the session. */
-export async function submitPresentation(id: string, sub: Omit<PresentationSubmissionT, "challengeId">) {
+export async function submitPresentation(id: string, sub: Omit<PresentationSubmissionT, "challengeId"> & { unlock?: unknown }) {
   const now = nowSeconds();
   const deployment = loadDeployment();
   const issuers = loadTrustedIssuers();
@@ -173,8 +215,10 @@ export async function submitPresentation(id: string, sub: Omit<PresentationSubmi
     throw e;
   }
   const result = finalize([{ id: "challenge", status: "pass" }, ...core.checks], { registryStatus: core.registryStatus, disclosed: core.disclosed });
-  const verified = result.verified;
-  const code = verified ? null : (failureCode(core.checks) ?? "FAILED");
+  // Device unlock: only meaningful for the holder whose presentation just verified.
+  const userVerified = result.verified ? await verifyUnlock(sub.proof.holder, unlockChallenge(id, claimed.nonce), sub.unlock as Parameters<typeof verifyUnlock>[2]) : false;
+  const verified = result.verified && (claimed.require_uv !== 1 || userVerified);
+  const code = verified ? null : result.verified ? "USER_NOT_VERIFIED" : (failureCode(core.checks) ?? "FAILED");
   const match = verified ? matchCode(id, sub.proof.signature) : null;
 
   const receipt = await appendReceipt(merchant.id, {
@@ -188,12 +232,23 @@ export async function submitPresentation(id: string, sub: Omit<PresentationSubmi
     registry: { chainId: claimed.chain_id, address: claimed.registry, status: core.registryStatus ?? null },
     evidence: sha256Hex(`${compactPresentation(sub.credentialJwt, sub.disclosures)}|${sub.proof.signature}`),
     checkedAt: new Date(now * 1000).toISOString(),
+    userVerified,
   });
   db()
-    .prepare("UPDATE verify_sessions SET status = ?, failure_code = ?, completed_at = ?, match_code = ?, issuer_name = ?, receipt_seq = ? WHERE id = ?")
-    .run(verified ? "verified" : "rejected", code, now, match, verified ? (core.disclosed?.issuerName ?? null) : null, receipt.seq, id);
+    .prepare("UPDATE verify_sessions SET status = ?, failure_code = ?, completed_at = ?, match_code = ?, issuer_name = ?, receipt_seq = ?, user_verified = ?, pass_tag = ? WHERE id = ?")
+    .run(
+      verified ? "verified" : "rejected",
+      code,
+      now,
+      match,
+      verified ? (core.disclosed?.issuerName ?? null) : null,
+      receipt.seq,
+      userVerified ? 1 : 0,
+      /^0x[0-9a-fA-F]{64}$/.test(sub.proof.commitment) ? passTag(merchant.id, sub.proof.commitment, now) : null,
+      id,
+    );
 
-  return { status: verified ? ("verified" as const) : ("rejected" as const), failureCode: code, matchCode: match, merchant: { name: merchant.name }, policy: { id: policy.id, short: policy.short } };
+  return { status: verified ? ("verified" as const) : ("rejected" as const), failureCode: code, matchCode: match, userVerified, merchant: { name: merchant.name }, policy: { id: policy.id, short: policy.short } };
 }
 
 /** Dashboard numbers for one business. Everything here comes from rows that hold no personal data. */

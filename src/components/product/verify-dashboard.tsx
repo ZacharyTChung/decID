@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, FileCheck2, LayoutGrid, Link2, ListChecks, ScrollText, ShieldCheck } from "lucide-react";
+import { ChevronDown, FileCheck2, LayoutGrid, Link2, ListChecks, MessageSquareText, ScrollText, ShieldAlert, ShieldCheck } from "lucide-react";
+import type { AssistantAnswer } from "../../lib/shared/assistant";
+import type { RiskAlert } from "../../lib/shared/risk";
+import { AssistantPage, RiskPage } from "./risk-assistant";
 import { friendlyReason } from "../../lib/shared/policies";
 import { DecidWordmark } from "./brand";
 import { MerchantLogo, type MerchantBrand } from "./merchant";
@@ -73,9 +76,13 @@ export interface VerifyDashboardProps {
   className?: string;
   /** Download link for the auditor export (verifiable with `npm run verify-receipts`). */
   exportHref?: string;
+  /** Fraud signals (shared/risk.ts). */
+  risk?: { alerts: RiskAlert[]; checksAnalysed: number };
+  /** The compliance assistant (shared/assistant.ts). */
+  assistant?: { ask: (question: string) => Promise<AssistantAnswer> };
 }
 
-type Page = "overview" | "checks" | "receipts" | "data";
+type Page = "overview" | "checks" | "risk" | "receipts" | "assistant" | "data";
 
 /** Chart labels: short names for the ways a check is blocked. */
 const SHORT_REASON: Record<string, string> = {
@@ -106,6 +113,9 @@ const FIELD_PURPOSE: Record<string, string> = {
   match_code: "Four-character door code",
   issuer_name: "Who vouched",
   receipt_seq: "Receipt number",
+  require_uv: "Whether you required Face ID / fingerprint",
+  user_verified: "Whether the customer unlocked their phone",
+  pass_tag: "Pass pseudonym for fraud checks: this business, one day, deleted after 48 h",
 };
 
 export function VerifyDashboard(p: VerifyDashboardProps) {
@@ -118,9 +128,12 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
   const nav: [Page, string, typeof LayoutGrid][] = [
     ["overview", "Overview", LayoutGrid],
     ["checks", "Checks", ListChecks],
+    ...(p.risk ? ([["risk", "Risk", ShieldAlert]] as [Page, string, typeof LayoutGrid][]) : []),
     ["receipts", "Receipts", ScrollText],
+    ...(p.assistant ? ([["assistant", "Assistant", MessageSquareText]] as [Page, string, typeof LayoutGrid][]) : []),
     ["data", "Data & privacy", ShieldCheck],
   ];
+  const highRisk = p.risk?.alerts.filter((a) => a.severity === "high") ?? [];
   const openCheck = async (id: string) => setOpen(await p.loadCheck(id));
 
   return (
@@ -201,7 +214,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
             <Panel title="Simulated night" description={p.simulate.description} actions={running ? undefined : <span className="text-meta text-ink-10">Done</span>}>
               <ol tabIndex={0} aria-label="Door log" data-testid="night-log" className="grid max-h-40 gap-x-8 overflow-y-auto font-mono text-meta text-ink-11 sm:grid-cols-2">
                 {night.lines.map((l, i) => (
-                  <li key={i} className={/^(Borrowed|Revoked)/.test(l) ? "text-bad" : ""}>
+                  <li key={i} className={/^(Borrowed|Revoked|Fake|Same Pass)/.test(l) ? "text-bad" : ""}>
                     {l}
                   </li>
                 ))}
@@ -211,6 +224,14 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
 
           {page === "overview" && (
             <>
+              {highRisk.length > 0 && (
+                <button type="button" onClick={() => setPage("risk")} className="flex w-full items-center gap-3 rounded-lg bg-bad-soft px-5 py-3 text-left text-ui text-bad" data-testid="risk-banner">
+                  <ShieldAlert size={18} strokeWidth={1.75} aria-hidden />
+                  <span className="font-medium">{highRisk[0]!.title}</span>
+                  <span className="text-bad/80">{highRisk.length > 1 ? `and ${highRisk.length - 1} more high-risk signal${highRisk.length > 2 ? "s" : ""}` : highRisk[0]!.action}</span>
+                  <span className="ml-auto font-medium">Review</span>
+                </button>
+              )}
               <KpiStrip
                 items={[
                   { label: "Checks", value: p.stats.verified + p.stats.rejected },
@@ -249,6 +270,10 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
           )}
 
           {page === "checks" && <ChecksPage rows={p.checks} now={p.now} onOpen={openCheck} />}
+
+          {page === "risk" && p.risk && <RiskPage alerts={p.risk.alerts} checksAnalysed={p.risk.checksAnalysed} now={p.now} onOpenCheck={(id) => void openCheck(id)} />}
+
+          {page === "assistant" && p.assistant && <AssistantPage ask={p.assistant.ask} onOpenCheck={(id) => void openCheck(id)} />}
 
           {page === "receipts" && (
             <>
