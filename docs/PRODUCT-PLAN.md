@@ -79,7 +79,7 @@ Nothing is mocked. The only stand-ins are the simulated issuer and synthetic peo
    - The Pass creates its own device key.
    - The issuer signs a W3C Verifiable Credential bound to that key, and the Pass activates it on the registry.
    - Every later answer is signed with the device key, which is how decID authenticates the holder without a password or account.
-   - *Try it:* on the phone, choose Alex, then **Verify me**. "Technical details" shows the device key and the registry entry.
+   - *Try it:* on the phone, **Add your ID** → **Simulated Identity Office** → **Verify**. "Technical details" shows the device key and the registry entry.
 2. **Privacy-preserving age check (selective disclosure with consent).**
    - A business asks one question. The Pass reveals only that one hidden claim and signs it for that request and that business.
    - The verifier checks:
@@ -87,11 +87,11 @@ Nothing is mocked. The only stand-ins are the simulated issuer and synthetic peo
      - that the answer came from the credential's owner;
      - that the request is fresh and single use;
      - the live registry status.
-   - *Try it:* **Hopline → Verify age with decID → Continue in decID Pass → Share**. Then try **Neon Hall** and compare the codes.
+   - *Try it:* **Online checkout → Verify age with decID → Open on the demo phone → Share with Hopline**. Then try **Venue entry** and compare the codes.
 3. **Compliance dashboard (data visualization and tamper-evident records).**
    - Charts of checks by outcome and of verification time per check.
    - A recent-checks table and the signed receipt chain.
-   - **Try it: edit a receipt as an insider** flips a stored receipt's outcome and recomputes its hash. The chain check still catches it, because only decID can sign.
+   - **Receipts → Edit a receipt as an insider** flips a stored receipt's outcome and recomputes its hash. The chain check still catches it, because only decID can sign.
 4. **Fraud handling at scale.**
    - **Simulate a busy night** sends 12 synthetic guests through the door with the full real flow (issuance, activation, signed answer, verification, receipt).
    - It adds one guest showing a friend's credential and one Pass reported lost. Both are refused, and the dashboard and charts update live.

@@ -1,0 +1,163 @@
+/*
+ * decID product tokens (see docs/DESIGN.md). Shared by the Next app (src/app/globals.css) and the
+ * hosted prototype (site/product/styles.css). Fonts are loaded by each host; only names live here.
+ */
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-hop: "Archivo Variable", "Archivo", "Arial Narrow", ui-sans-serif, sans-serif;
+  --font-neon: "Big Shoulders Display Variable", "Big Shoulders Display", Impact, "Arial Narrow", sans-serif;
+
+  /* Ink: neutrals tinted toward blue (OKLCH hue 255). */
+  --color-ink-1: #fcfdff;
+  --color-ink-2: #f8f9fb;
+  --color-ink-3: #f1f3f5;
+  --color-ink-4: #e7eaed;
+  --color-ink-5: #dde0e4;
+  --color-ink-6: #d0d3d7;
+  --color-ink-7: #b7bbc0;
+  --color-ink-8: #94999f;
+  --color-ink-9: #6f757c;
+  --color-ink-10: #565b63;
+  --color-ink-11: #3b4047;
+  --color-ink-12: #171b20;
+
+  /* One accent: ultramarine, for links, focus, selection and charts. */
+  --color-accent: #3552bc;
+  --color-accent-hover: #2941a3;
+  --color-accent-soft: #ecf2ff;
+  --color-accent-ring: #5778df;
+
+  /* Verdicts and status. Solid tones are for full-bleed verdict panels only. */
+  --color-ok: #287c42;
+  --color-ok-soft: #e8f9eb;
+  --color-ok-solid: #1e7a3c;
+  --color-bad: #be2f2c;
+  --color-bad-soft: #ffefec;
+  --color-bad-solid: #b42318;
+  --color-warn: #915c08;
+  --color-warn-soft: #fff3df;
+  --color-warn-dot: #e49e22;
+
+  /* Credential print inks. */
+  --color-print-paper: #f5f7fa;
+  --color-print-blue: #3552bc;
+  --color-print-rose: #b8577a;
+
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-ui: 13px;
+  --text-ui--line-height: 18px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-lead: 16px;
+  --text-lead--line-height: 24px;
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+  --text-h3--letter-spacing: -0.01em;
+  --text-h2: 24px;
+  --text-h2--line-height: 32px;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h1: 32px;
+  --text-h1--line-height: 40px;
+  --text-h1--letter-spacing: -0.02em;
+  --text-display: 40px;
+  --text-display--line-height: 48px;
+  --text-display--letter-spacing: -0.02em;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-float: 0 0 0 1px rgb(23 27 32 / 0.06), 0 12px 32px -8px rgb(23 27 32 / 0.22);
+  --shadow-sheet: 0 -1px 0 rgb(23 27 32 / 0.06), 0 -16px 40px -12px rgb(23 27 32 / 0.25);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --animate-sheet-in: sheet-in 240ms var(--ease-out);
+  --animate-fade-in: fade-in 200ms var(--ease-out);
+  --animate-rise-in: rise-in 320ms var(--ease-out);
+  --animate-ring: ring-draw 520ms var(--ease-out) both;
+  --animate-tick: tick-draw 260ms 360ms var(--ease-out) both;
+
+  @keyframes sheet-in {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise-in {
+    from { transform: translateY(8px) scale(0.98); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes ring-draw {
+    from { stroke-dashoffset: 151; }
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes tick-draw {
+    from { stroke-dashoffset: 40; }
+    to { stroke-dashoffset: 0; }
+  }
+}
+
+@layer base {
+  :where(button, [role="button"], a) {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :where(.press) {
+    transition: transform 160ms var(--ease-out), background-color 100ms, color 100ms, border-color 100ms;
+  }
+  :where(.press):active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent-ring);
+    outline-offset: 2px;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+@layer components {
+  /* Optically variable patch on the credential: fine concentric lines over a hue sweep that turns
+     with the pointer (--sheen is set by the component through CSSOM). */
+  .credential {
+    --sheen: 140deg;
+  }
+  .credential-ovd {
+    aspect-ratio: 1;
+    background: conic-gradient(from var(--sheen), #c4d3ff, #f1c4da, #c2eedf, #f8e3ad, #c4d3ff);
+    -webkit-mask: repeating-radial-gradient(circle at center, #000 0 0.8px, transparent 0.8px 2.2px);
+    mask: repeating-radial-gradient(circle at center, #000 0 0.8px, transparent 0.8px 2.2px);
+    mix-blend-mode: multiply;
+  }
+}
+
+@layer components {
+  /* Door kiosk: a scan line that keeps moving (a still screenshot can't pass for the live screen)
+     and the countdown to the next guest. */
+  .door-scan {
+    animation: door-scan 2.2s var(--ease-out) infinite alternate;
+  }
+  .door-countdown {
+    width: 100%;
+    animation: door-countdown 9s linear forwards;
+  }
+}
+@keyframes door-scan {
+  from { transform: translateY(0); }
+  to { transform: translateY(176px); }
+}
+@keyframes door-countdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}

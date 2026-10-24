@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AgeCheck } from "@/components/product/checkout";
 import { api } from "@/lib/client/api";
 
 /**
@@ -47,8 +48,12 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
     timer.current = undefined;
   };
 
+  const inFlight = useRef(false);
   const start = useCallback(
     async (reference?: string) => {
+      // One request at a time: a door asking for "the next guest" twice must not open two checks.
+      if (inFlight.current) return undefined;
+      inFlight.current = true;
       stop();
       setError(undefined);
       setStatus(undefined);
@@ -72,6 +77,8 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
       } catch (e) {
         setError((e as Error).message);
         return undefined;
+      } finally {
+        inFlight.current = false;
       }
     },
     [merchant],
@@ -84,4 +91,27 @@ export function useAgeCheck(merchant: "hopline" | "neonhall") {
     setStatus(undefined);
   };
   return { check, status, error, start, reset };
+}
+
+/** The shared checkout and door UI (src/components/product) read an AgeCheck; this adapts the HTTP flow. */
+export function useHttpAgeCheck(merchant: "hopline" | "neonhall"): AgeCheck {
+  const { check, status, error, start, reset } = useAgeCheck(merchant);
+  const begin = useCallback((reference: string) => void start(reference), [start]);
+  const done = status && (status.status === "verified" || status.status === "rejected");
+  const p = status?.receipt?.payload as { policy?: string; outcome?: string; seq?: number } | undefined;
+  const received = useMemo(() => (done ? { result: status.result, issuer: status.issuer, receipt: status.receipt ? { valid: status.receipt.valid, policy: p?.policy, outcome: p?.outcome, seq: p?.seq } : null } : undefined), [done, status, p]);
+  return {
+    id: check?.id,
+    status: check ? (status?.status ?? "pending") : undefined,
+    failureCode: status?.failureCode,
+    matchCode: status?.matchCode,
+    issuerName: status?.issuer?.name,
+    received,
+    qrSvg: check?.qrSvg,
+    walletUrl: check?.walletUrl,
+    error,
+    start: begin,
+    reset,
+    open: () => check && openWallet(check.walletUrl),
+  };
 }

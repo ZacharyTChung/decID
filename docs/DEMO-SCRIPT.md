@@ -19,18 +19,18 @@ Optional rehearsal check: `npm run test:product` drives the whole script in a he
 
 ## Option A: one screen (recommended)
 
-Open **http://localhost:3000/demo**. On the left is the business, on the right a phone running decID Pass, and the script sits in a sidebar (hide it with *Hide script*).
+Open **http://localhost:3000/demo**. On the left is the business’s website in a browser frame, and on the right a phone running decID Pass. The talk track runs along the top. The hosted prototype (link in the README) has the same screens and needs no setup.
 
 | # | Say | Do |
 | --- | --- | --- |
 | 1 | "Age checks are now law. The usual fix, uploading your ID, is what leaked at Discord and Tea." | (Slide, or the decID home page at `/`) |
-| 2 | "Alex gets verified once, by a trusted issuer such as a DMV or bank." | Phone: tap **Alex**, then **Verify me**. The card shows 18+ ✓ 21+ ✓, *Active*. |
-| 3 | "Alex is buying beer online. Hopline must check 21+." | Left: Hopline tab, then **Verify age with decID**, then **Open decID Pass on this device**. The phone opens the request by itself. |
-| 4 | "The phone shows who is asking and exactly what they learn, and what they won't see." | Point at *They will learn* / *They will not see*. Tap **Share "21+" with Hopline**. |
-| 5 | "Hopline got a yes and a signed receipt. Nothing else." | Left: *Order confirmed ✓*, then the dark panel *What Hopline received*. Optionally click *Compare with a typical ID-upload checkout*. |
-| 6 | "Same Pass, at a door." | **Neon Hall** tab. Click the link under the QR code to open it in the phone frame (or scan with a real phone, Option B). Share. The kiosk turns green, and both screens show the **same 4-letter code**, which staff compare. |
-| 7 | "Sam is 16." | **Phone home**, then the person menu, then **+ Another person (demo)**, **Fill as Sam**, **Verify me**. Go back to Neon Hall (it resets after a few seconds) and share. The phone warns first. The door shows **ENTRY REFUSED · Not old enough**. |
-| 8 | "The business view: volume, outcomes, and a signed receipt chain for regulators. And here is every field it stores, none of them personal." | **Business dashboard** tab, then **Neon Hall (venue)**. Point at *Chain intact* and *Personal data held: none*. |
+| 2 | "Alex gets verified once, by a trusted issuer such as a DMV or bank." | Phone: **Add your ID**, then **Simulated Identity Office**, then **Verify with Simulated Identity Office** (Alex is filled in). The credential card appears: *21+*, *Active*. |
+| 3 | "Alex is buying beer online. Hopline must check 21+." | Left: **Online checkout**, then **Verify age with decID**, then **Open on the demo phone**. The consent sheet slides up on the phone. |
+| 4 | "The phone shows who is asking, why, the one thing they’ll learn, and what they won’t see." | Point at *Requested: 21 or older · Yes* and *Not shared*. Tap **Share with Hopline**. |
+| 5 | "Hopline got a yes and a signed receipt. Nothing else." | Left: *21 or older, confirmed by decID*, then **What Hopline received**. Place the order. Optionally open *How most shops check age today*. |
+| 6 | "Same Pass, at a door." | **Venue entry**, then **Scan with the demo phone** (or scan the QR with a real phone, Option B). Share. The kiosk says **OK TO ENTER**, and both screens show the **same 4-character code**, which staff compare. |
+| 7 | "Sam is 16." | Phone: person menu (top right), **Add another person…**, **Simulated Identity Office**, choose **Sam**, verify. Back at the door (it resets for the next guest), scan and share. The sheet warns first. The door shows **DO NOT ADMIT · Not old enough**. |
+| 8 | "The business view: volume, outcomes, and a signed receipt chain for regulators. And here is every field it stores, none of them personal." | **Business dashboard**, then **Neon Hall**. Show *Receipts* (*Chain intact*) and *Data & privacy*. In the hosted prototype, also try **Simulate a busy night** and **Edit a receipt as an insider**. |
 
 ## Option B: a real phone (more impressive)
 

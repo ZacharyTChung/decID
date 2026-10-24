@@ -37,11 +37,12 @@ async function audit(p: Page, label: string) {
   check(serious.length === 0, `accessibility (axe, serious/critical): ${label}`);
 }
 
-const TYPES: Record<string, string> = { ".html": "text/html", ".js": "text/javascript" };
+const TYPES: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".woff2": "font/woff2" };
 const server = createServer((req, res) => {
-  const name = (req.url ?? "/").split("?")[0] === "/" ? "local.html" : (req.url ?? "").split("?")[0]!.slice(1);
+  const url = (req.url ?? "/").split("?")[0]!;
+  const name = url === "/" ? "local.html" : path.normalize(url).replace(/^([/\\.])+/, "");
   try {
-    const body = readFileSync(path.join(DIST, path.basename(name)));
+    const body = readFileSync(path.join(DIST, name));
     res.writeHead(200, { "content-type": TYPES[path.extname(name)] ?? "application/octet-stream" }).end(body);
   } catch {
     res.writeHead(404).end();
@@ -58,98 +59,144 @@ try {
   const phone = page.getByTestId("phone");
   const started = Date.now();
   await page.goto(base);
-  await page.getByText("Start as a sample person").waitFor({ timeout: 30_000 });
+  await phone.getByTestId("add-id").waitFor({ timeout: 30_000 });
   check(true, `the page boots: in-page chain, contracts deployed, issuer keys created (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+  check(await page.evaluate(() => document.fonts.check("14px 'IBM Plex Sans'")), "IBM Plex Sans is loaded (self-hosted)");
   await page.screenshot({ path: path.join(SHOTS, "01-start.png") });
   await audit(page, "start");
 
-  // Alex gets a Pass
-  await phone.getByRole("button", { name: /^Alex/ }).click();
-  check((await phone.locator("#pass-dob").inputValue()) === "1990-04-04", "Alex pre-fills the synthetic application");
-  await phone.getByRole("button", { name: "Verify me" }).click();
-  await phone.getByLabel("Your decID Pass").waitFor({ timeout: 30_000 });
-  await phone.getByText("Active", { exact: true }).waitFor();
-  check(true, "Alex is verified and the Pass is Active on the registry");
+  // Alex adds an ID
+  await phone.getByTestId("add-id").click();
+  await phone.getByRole("button", { name: /Simulated Identity Office/ }).click();
+  check((await phone.locator("#pass-dob").inputValue()) === "1990-04-04", "Alex is the default demo person");
+  await page.screenshot({ path: path.join(SHOTS, "02-details.png") });
+  await audit(page, "add ID: details");
+  await phone.getByTestId("verify-me").click();
+  await phone.getByRole("group", { name: "decID Pass for Alex: 21+" }).waitFor({ timeout: 30_000 });
+  await phone.getByTestId("pass-status").getByText(/^Active/).waitFor();
+  check(true, "Alex's credential is issued and active on the registry");
+  await page.screenshot({ path: path.join(SHOTS, "03-wallet.png") });
 
   // Hopline
-  await page.getByRole("button", { name: "Verify age with decID" }).click();
-  await page.getByRole("button", { name: "Continue in decID Pass →" }).click();
-  await phone.getByText("Are you 21 or older?").waitFor();
-  await audit(page, "consent screen");
-  await phone.getByRole("button", { name: /Share “21\+” with Hopline/ }).click();
-  await page.getByText("Order confirmed ✓").waitFor({ timeout: 15_000 });
+  await page.getByTestId("verify-age").click();
+  await page.getByRole("button", { name: "Open on the demo phone" }).click();
+  await phone.getByRole("dialog").getByText("Requested").waitFor();
+  await page.waitForTimeout(400); // let the sheet finish sliding in
+  await page.screenshot({ path: path.join(SHOTS, "04-consent.png") });
+  await audit(page, "consent sheet");
+  await phone.getByTestId("share").click();
+  await phone.getByText("Shared with Hopline").waitFor({ timeout: 15_000 });
+  await page.getByTestId("age-verified").waitFor({ timeout: 15_000 });
+  await page.getByRole("button", { name: "What Hopline received" }).click();
   const received = await page.getByLabel("What Hopline received").innerText();
   check(received.includes('"ageOver21": true') && received.includes('"valid": true'), "Hopline received { ageOver21: true } and a receipt whose signature verified");
   check(!/Alex|1990|SYN-|did:pkh|0x[0-9a-fA-F]{40}/.test(received), "…and nothing personal");
-  await page.screenshot({ path: path.join(SHOTS, "02-hopline.png") });
+  await page.screenshot({ path: path.join(SHOTS, "05-hopline-verified.png") });
+  await page.getByTestId("place-order").click();
+  await page.getByText("Order confirmed").waitFor();
+  check(true, "the order can be placed once age is verified");
+  await phone.getByRole("button", { name: "Back to Hopline" }).click();
 
   // Neon Hall
-  await page.getByRole("tab", { name: /Neon Hall/ }).click();
-  await page.getByRole("button", { name: "Scan with the phone →" }).click();
-  await phone.getByRole("button", { name: /Share “21\+” with Neon Hall/ }).click();
-  await page.getByText("21+ VERIFIED").waitFor({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Venue entry" }).click();
+  await page.getByRole("button", { name: "Scan with the demo phone" }).click();
+  await page.screenshot({ path: path.join(SHOTS, "06-door-idle.png") });
+  await phone.getByTestId("share").click();
+  await page.getByText("OK to enter").waitFor({ timeout: 15_000 });
   const phoneCode = (await phone.getByTestId("match-code").innerText()).trim();
   const doorCode = (await page.getByTestId("door-match-code").innerText()).trim();
   check(phoneCode.length === 4 && phoneCode === doorCode, `door and phone show the same match code (${doorCode})`);
-  await page.screenshot({ path: path.join(SHOTS, "03-door.png") });
+  await page.screenshot({ path: path.join(SHOTS, "07-door-ok.png") });
+  await audit(page, "door: admitted");
+  await page.getByRole("button", { name: "Codes match · next guest" }).click();
+  await phone.getByRole("button", { name: "Back to Neon Hall" }).click();
 
   // Sam
   await phone.locator("#pass-person").selectOption("__new");
-  await phone.getByRole("button", { name: /^Sam/ }).click();
-  await phone.getByRole("button", { name: "Verify me" }).click();
-  await phone.getByText("Active", { exact: true }).waitFor({ timeout: 30_000 });
+  await phone.getByRole("button", { name: /Simulated Identity Office/ }).click();
+  await phone.getByRole("radio", { name: "Sam" }).click();
+  await phone.getByTestId("verify-me").click();
+  await phone.getByRole("group", { name: "decID Pass for Sam: Under 18" }).waitFor({ timeout: 30_000 });
   check((await phone.locator("#pass-person").evaluate((s: HTMLSelectElement) => s.selectedOptions[0]?.text)) === "Sam", "the person menu reads “Sam”");
-  await page.getByRole("button", { name: "Scan with the phone →" }).click({ timeout: 20_000 });
-  await phone.getByText(/Your Pass says you are not 21\+/).waitFor();
-  await phone.getByRole("button", { name: /Share “21\+” with Neon Hall/ }).click();
-  await page.getByText("ENTRY REFUSED").waitFor({ timeout: 15_000 });
-  check((await page.getByTestId("door-reason").innerText()).includes("Not old enough"), "Sam is refused: “Not old enough”");
-  await page.screenshot({ path: path.join(SHOTS, "04-refused.png") });
+  await page.getByRole("button", { name: "Scan with the demo phone" }).click({ timeout: 20_000 });
+  await phone.getByText(/Your ID says you are not 21 or older/).waitFor();
+  check(true, "the sheet warns Sam before sharing");
+  await phone.getByTestId("share").click();
+  await page.getByText("Do not admit").waitFor({ timeout: 15_000 });
+  check(/not old enough/i.test(await page.getByTestId("door-reason").innerText()), "Sam is refused: “Not old enough”");
+  await page.screenshot({ path: path.join(SHOTS, "08-door-refused.png") });
+  await audit(page, "door: refused");
 
   // Dashboard
-  await page.getByRole("tab", { name: /business dashboard/ }).click();
-  await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor();
-  check((await page.locator("[data-tour][data-done]").count()) === 5, "the “Try it” tour shows all five steps done");
+  await page.getByRole("button", { name: "Business dashboard" }).click();
+  check((await page.locator("[data-tour][data-done]").count()) === 5, "the walkthrough shows all five steps done");
   check(await page.getByRole("img", { name: /Passed: 1, Not old enough: 1/ }).isVisible(), "outcome chart: 1 passed, 1 not old enough");
   check(await page.getByRole("img", { name: /Median verification time \d+ ms over 2 checks/ }).isVisible(), "timing chart over 2 checks");
-  await page.getByRole("button", { name: "Try it: edit a receipt as an insider" }).click();
+  await page.screenshot({ path: path.join(SHOTS, "09-dashboard.png"), fullPage: true });
+  await audit(page, "dashboard: overview");
+  await page.getByRole("region", { name: "Checks table" }).getByRole("row").nth(1).click();
+  await page.getByRole("dialog").getByText("Signature valid").waitFor();
+  check(true, "a check opens in a drawer with its verified receipt");
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(SHOTS, "10-drawer.png") });
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("button", { name: "Receipts" }).click();
+  await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor();
+  await page.getByRole("button", { name: "Edit a receipt as an insider" }).click();
   await page.getByTestId("chain-status").getByText(/Tampering detected at receipt 1: signature does not verify/).waitFor();
   check(true, "an insider's edit to a receipt is detected (signature does not verify)");
+  await page.screenshot({ path: path.join(SHOTS, "11-tamper.png") });
   await page.getByRole("button", { name: "Restore the original receipt" }).click();
   await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor();
   check(true, "…and the chain is intact again once restored");
-  await page.getByRole("button", { name: "Run the night" }).click();
-  await page.getByRole("button", { name: "Run again" }).waitFor({ timeout: 120_000 });
+
+  await page.getByTestId("run-night").click();
+  await page.getByTestId("run-night").getByText("Simulate a busy night").waitFor({ timeout: 120_000 });
   const log = await page.getByTestId("night-log").innerText();
   check(/Borrowed credential: refused · credential belongs to someone else/.test(log), "busy night: the borrowed credential is refused");
   check(/Revoked Pass: refused · credential revoked/.test(log), "busy night: the revoked Pass is refused");
   check((log.match(/admitted ·/g) ?? []).length >= 8 && (log.match(/not old enough/g) ?? []).length >= 2, "busy night: adults admitted, under-21 guests refused");
   await page.getByTestId("chain-status").getByText("Chain intact · 16 signed receipts").waitFor();
   check(true, "16 receipts, chain intact");
-  await page.screenshot({ path: path.join(SHOTS, "05-dashboard.png"), fullPage: true });
-  await audit(page, "dashboard");
+  await page.getByRole("button", { name: "Overview" }).click();
+  await page.screenshot({ path: path.join(SHOTS, "12-dashboard-night.png"), fullPage: true });
+  await page.getByRole("button", { name: "Data & privacy" }).click();
+  await audit(page, "dashboard: data & privacy");
 
   // Phone width
   const mobile = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
   watch(mobile, "mobile");
   await mobile.goto(base);
-  await mobile.getByRole("button", { name: "Verify age with decID" }).waitFor({ timeout: 30_000 });
+  await mobile.getByTestId("verify-age").waitFor({ timeout: 30_000 });
   const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check(overflow <= 0, `no horizontal scrolling at phone width (overflow ${overflow}px)`);
-  await mobile.getByRole("tab", { name: "Phone (decID Pass)" }).click();
-  await mobile.getByTestId("phone").getByRole("button", { name: /^Alex/ }).click();
-  await mobile.getByTestId("phone").getByRole("button", { name: "Verify me" }).click();
-  await mobile.getByTestId("phone").getByText("Active", { exact: true }).waitFor({ timeout: 30_000 });
-  await mobile.getByRole("tab", { name: "Business" }).click();
-  await mobile.getByRole("button", { name: "Verify age with decID" }).click();
-  await mobile.getByRole("button", { name: "Continue in decID Pass →" }).click();
-  await mobile.getByTestId("phone").getByRole("button", { name: /Share “21\+” with Hopline/ }).click();
-  await mobile.getByTestId("phone").getByRole("button", { name: "Back to Hopline" }).click();
-  await mobile.getByText("Order confirmed ✓").waitFor();
-  check(true, "phone width: the whole checkout works with the Business / Phone switcher");
-  const overflowAfter = await mobile.evaluate(() => Array.from(document.querySelectorAll("button, h2")).filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length);
-  check(overflowAfter === 0, `phone width: nothing pushed off screen after checkout (${overflowAfter} element(s))`);
-  await mobile.screenshot({ path: path.join(SHOTS, "06-mobile.png") });
+  await mobile.getByRole("tab", { name: "Phone" }).click();
+  const mp = mobile.getByTestId("phone");
+  await mp.getByTestId("add-id").click();
+  await mp.getByRole("button", { name: /Simulated Identity Office/ }).click();
+  await mp.getByTestId("verify-me").click();
+  await mp.getByTestId("pass-status").getByText(/^Active/).waitFor({ timeout: 30_000 });
+  await mobile.getByRole("tab", { name: "Website" }).click();
+  await mobile.getByTestId("verify-age").click();
+  await mobile.getByRole("button", { name: "Open on the demo phone" }).click();
+  await mp.getByTestId("share").click();
+  await mp.getByRole("button", { name: "Back to Hopline" }).click();
+  await mobile.getByTestId("age-verified").waitFor();
+  check(true, "phone width: the whole checkout works with the Website / Phone switcher");
+  // Ignore elements inside horizontal scrollers (they are meant to scroll).
+  const offscreen = await mobile.evaluate(() =>
+    Array.from(document.querySelectorAll("button, h1, h2")).filter((e) => {
+      for (let p = e.parentElement; p; p = p.parentElement) if (["auto", "scroll"].includes(getComputedStyle(p).overflowX)) return false;
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.right > window.innerWidth + 1;
+    }).length,
+  );
+  check(offscreen === 0, `phone width: nothing pushed off screen (${offscreen} element(s))`);
+  await mobile.screenshot({ path: path.join(SHOTS, "13-mobile.png") });
+  await mobile.evaluate(() => window.scrollTo(0, 0));
+  await mobile.getByRole("tab", { name: "Phone" }).click();
+  await mobile.screenshot({ path: path.join(SHOTS, "14-mobile-phone.png") });
   await audit(mobile, "phone width");
 } catch (e) {
   failures.push(`crashed: ${(e as Error).message.split("\n")[0]}`);

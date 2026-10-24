@@ -331,6 +331,19 @@ export class DecidCloud {
     return checkReceiptChain(this.receipts[merchantId], this.jwks, merchantId);
   }
 
+  /** The stored chain for the dashboard's Receipts page: each link with its decoded body. */
+  receiptRows(merchantId: MerchantId): { seq: number; hash: string; prev: string; sessionId: string; body: Receipt | null }[] {
+    return this.receipts[merchantId].map((r) => {
+      let body: Receipt | null = null;
+      try {
+        body = JSON.parse(atob(r.jws.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as Receipt;
+      } catch {
+        body = null;
+      }
+      return { seq: r.seq, hash: r.hash, prev: r.prev_hash, sessionId: r.sessionId, body };
+    });
+  }
+
   get tamperedReceipt() {
     return this.tampered;
   }
