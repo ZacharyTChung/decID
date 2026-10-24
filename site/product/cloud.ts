@@ -319,6 +319,11 @@ export class DecidCloud {
     this.changed();
   }
 
+  /** Whether any health question has been answered (for the walkthrough). */
+  healthAnswered(): boolean {
+    return [...this.healthChecks.values()].some((c) => c.result !== null);
+  }
+
   /** A school's health office asks one question. */
   createHealthCheck(fact: HealthFact): string {
     const id = crypto.randomUUID();

@@ -171,7 +171,7 @@ try {
 
   // Dashboard
   await page.getByRole("button", { name: "Business dashboard" }).click();
-  check((await page.locator("[data-tour][data-done]").count()) === 5, "the walkthrough shows all five steps done");
+  check((await page.locator("[data-tour][data-done]").count()) === 6, "the walkthrough shows all six steps done");
   check(await page.getByRole("img", { name: /Passed: 1, Not old enough: 1/ }).isVisible(), "outcome chart: 1 passed, 1 not old enough");
   check(await page.getByRole("img", { name: /Median verification time \d+ ms over 2 checks/ }).isVisible(), "timing chart over 2 checks");
   await page.screenshot({ path: path.join(SHOTS, "09-dashboard.png"), fullPage: true });

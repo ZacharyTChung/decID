@@ -37,7 +37,7 @@ See [docs/TRUST-FEATURES.md](docs/TRUST-FEATURES.md).
 More docs:
 - [docs/PRODUCT.md](docs/PRODUCT.md): positioning, competitors (including TruAge and wallet IDs), business model (labelled assumptions), risks and roadmap.
 - [docs/GOVERNMENT-ID.md](docs/GOVERNMENT-ID.md): getting a Pass from a mobile driver's licence, and what going live needs.
-- [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md): how to present it live.
+- [docs/DEMO-HOSTED.md](docs/DEMO-HOSTED.md): a 6-minute script for the hosted prototype (every feature). [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md): presenting the full app live.
 - [docs/VERIFIER-INTEGRATION.md](docs/VERIFIER-INTEGRATION.md) and `docs/openapi.json`: integrating a business.
 
 `npm run test:product` drives the whole product in Chromium:

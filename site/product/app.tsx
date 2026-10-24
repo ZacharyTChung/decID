@@ -185,6 +185,7 @@ function Walkthrough({ cloud, sawDashboard, onGo }: { cloud: DecidCloud; sawDash
     { id: "shop", label: "Buy beer at Hopline", done: hop.some((s) => s.status === "verified"), go: "shop" },
     { id: "door", label: "Get into Neon Hall", done: door.some((s) => s.status === "verified"), go: "door" },
     { id: "minor", label: "Try Sam, who is 16", done: [...hop, ...door].some((s) => s.failureCode === "POLICY_NOT_SATISFIED"), go: "phone" },
+    { id: "health", label: "Share one health fact", done: cloud.healthAnswered(), go: "health" },
     { id: "biz", label: "See what the business keeps", done: sawDashboard, go: "dashboard" },
   ];
   const next = steps.find((s) => !s.done);
