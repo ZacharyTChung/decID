@@ -1,4 +1,6 @@
-import { hexlify, randomBytes } from "ethers";
+import { Contract, ContractFactory, Wallet, hexlify, randomBytes, type HDNodeWallet, type InterfaceAbi } from "ethers";
+import anchorArtifact from "../../artifacts/contracts/ReceiptAnchor.sol/ReceiptAnchor.json";
+import { checkAgainstAnchors, receiptStream, streamId, type AnchorCheck, type Checkpoint } from "../../src/lib/shared/anchor-check";
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, type CryptoKey } from "jose";
 import { ACTION_POLICIES } from "../../src/lib/shared/constants";
 import { presentationStatement } from "../../src/lib/shared/eip712";
@@ -98,6 +100,11 @@ export interface Outcome {
   matchCode: string | null;
 }
 
+export type TamperKind = "insider" | "operator" | "truncate";
+
+const decodePayload = (jws: string) => JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(jws.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)))) as Receipt;
+const encodePayload = (p: Receipt) => btoa(JSON.stringify(p)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
 export class SessionError extends Error {
   constructor(
     readonly code: "UNKNOWN_SESSION" | "SESSION_EXPIRED" | "SESSION_USED",
@@ -111,7 +118,8 @@ export class DecidCloud {
   readonly people: Person[] = [];
   private sessions = new Map<string, Session>();
   private receipts: Record<MerchantId, (ReceiptRow & { sessionId: string })[]> = { hopline: [], neonhall: [] };
-  private tampered: { merchantId: MerchantId; seq: number; original: ReceiptRow & { sessionId: string } } | null = null;
+  /** The receipts as they were before a simulated attack, so the demo can restore them. */
+  private tampered: { merchantId: MerchantId; kind: TamperKind; seq: number; backup: (ReceiptRow & { sessionId: string })[] } | null = null;
   /** Bumped on every change, so the UI knows when to re-read. */
   version = 0;
   private listeners = new Set<() => void>();
@@ -121,6 +129,9 @@ export class DecidCloud {
     private receiptKey: CryptoKey,
     readonly receiptKid: string,
     readonly jwks: ReceiptJwks,
+    /** ReceiptAnchor (contracts/ReceiptAnchor.sol) on the in-page chain, and the key allowed to anchor. */
+    readonly anchor: Contract,
+    private anchorer: HDNodeWallet,
   ) {}
 
   static async create(): Promise<DecidCloud> {
@@ -130,7 +141,12 @@ export class DecidCloud {
     const pub = await exportJWK(publicKey);
     const jwk = { kty: pub.kty!, crv: pub.crv!, x: pub.x! };
     const kid = await calculateJwkThumbprint(jwk);
-    return new DecidCloud(world, privateKey, kid, { keys: [{ ...jwk, kid }] });
+    // The same ReceiptAnchor contract as `npm run deploy`, with its own anchorer key.
+    const anchorer = Wallet.createRandom(world.provider);
+    const anchor = (await new ContractFactory(anchorArtifact.abi as InterfaceAbi, anchorArtifact.bytecode, world.deployer).deploy(world.deployer.address)) as Contract;
+    await anchor.waitForDeployment();
+    await (await anchor.getFunction("grantRole")(await anchor.getFunction("ANCHORER_ROLE")(), anchorer.address)).wait();
+    return new DecidCloud(world, privateKey, kid, { keys: [{ ...jwk, kid }] }, anchor, anchorer);
   }
 
   subscribe(fn: () => void): () => void {
@@ -327,8 +343,20 @@ export class DecidCloud {
     return ["id", "merchant_id", "policy", "reference", "nonce", "audience", "chain_id", "registry", "created_at", "expires_at", "status", "failure_code", "completed_at", "match_code", "issuer_name", "receipt_seq"];
   }
 
-  async receiptChain(merchantId: MerchantId): Promise<ChainCheck> {
-    return checkReceiptChain(this.receipts[merchantId], this.jwks, merchantId);
+  /** The chain check (signatures and links) plus the comparison with the on-chain checkpoints. */
+  async receiptChain(merchantId: MerchantId): Promise<ChainCheck & { anchor: AnchorCheck }> {
+    const rows = this.receipts[merchantId];
+    const chain = await checkReceiptChain(rows, this.jwks, merchantId);
+    return { ...chain, anchor: checkAgainstAnchors(rows, await this.checkpoints(merchantId)) };
+  }
+
+  /** Every on-chain checkpoint of a business's receipts, read from the contract's events. */
+  async checkpoints(merchantId: MerchantId): Promise<Checkpoint[]> {
+    const logs = await this.anchor.queryFilter(this.anchor.filters.Anchored!(streamId(receiptStream(merchantId))), 0);
+    return logs.map((l) => {
+      const args = (l as unknown as { args: { count: bigint; head: string } }).args;
+      return { count: Number(args.count), head: args.head.slice(2), block: l.blockNumber, tx: l.transactionHash };
+    });
   }
 
   /** The stored chain for the dashboard's Receipts page: each link with its decoded body. */
@@ -349,29 +377,50 @@ export class DecidCloud {
   }
 
   /**
-   * An insider edits a stored receipt (turns a refusal into a pass, or a pass into a refusal)
-   * without decID's signing key. The chain check must notice. undo() puts the original back.
+   * Three attacks on a business's stored receipts, for the integrity demo. undoTamper() restores.
+   *
+   *   insider   edits one receipt without decID's key: the signature no longer verifies.
+   *   operator  holds decID's key: re-signs an edited receipt and re-chains everything after it.
+   *             Every signature and link verifies again; only the on-chain checkpoints disagree.
+   *   truncate  deletes the newest receipt: a shorter chain is still a valid chain; only the
+   *             anchored count gives it away.
    */
-  async tamper(merchantId: MerchantId): Promise<void> {
+  async tamper(merchantId: MerchantId, kind: TamperKind = "insider"): Promise<void> {
     const rows = this.receipts[merchantId];
     if (!rows.length || this.tampered) return;
-    const i = Math.floor((rows.length - 1) / 2);
-    const original = rows[i]!;
-    const [h, p, sig] = original.jws.split(".") as [string, string, string];
-    const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(p.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)))) as Receipt;
-    payload.outcome = payload.outcome === "satisfied" ? "not_satisfied" : "satisfied";
-    const forged = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    // A careful insider also recomputes the stored hash; only decID's signature still gives it away.
-    const jws = `${h}.${forged}.${sig}`;
-    rows[i] = { ...original, jws, hash: sha256Hex(jws) };
-    this.tampered = { merchantId, seq: original.seq, original };
+    const backup = rows.map((r) => ({ ...r }));
+    const i = kind === "truncate" ? rows.length - 1 : Math.floor((rows.length - 1) / 2);
+    const target = rows[i]!;
+    if (kind === "truncate") {
+      rows.pop();
+    } else {
+      const payload = decodePayload(target.jws);
+      payload.outcome = payload.outcome === "satisfied" ? "not_satisfied" : "satisfied";
+      payload.failureCode = payload.outcome === "satisfied" ? null : "POLICY_NOT_SATISFIED";
+      if (kind === "insider") {
+        // A careful insider also recomputes the stored hash; only decID's signature gives it away.
+        const [h, , sig] = target.jws.split(".") as [string, string, string];
+        const jws = `${h}.${encodePayload(payload)}.${sig}`;
+        rows[i] = { ...target, jws, hash: sha256Hex(jws) };
+      } else {
+        // The operator re-signs this receipt and every later one, re-linking the chain.
+        let prev = i === 0 ? GENESIS : rows[i - 1]!.hash;
+        for (let j = i; j < rows.length; j++) {
+          const p = j === i ? payload : decodePayload(rows[j]!.jws);
+          p.prev = prev;
+          const jws = await signReceipt(p, this.receiptKey, this.receiptKid);
+          rows[j] = { ...rows[j]!, jws, hash: sha256Hex(jws), prev_hash: prev };
+          prev = rows[j]!.hash;
+        }
+      }
+    }
+    this.tampered = { merchantId, kind, seq: target.seq, backup };
     this.changed();
   }
 
   undoTamper(): void {
     if (!this.tampered) return;
-    const rows = this.receipts[this.tampered.merchantId];
-    rows[this.tampered.seq - 1] = this.tampered.original;
+    this.receipts[this.tampered.merchantId] = this.tampered.backup;
     this.tampered = null;
     this.changed();
   }
@@ -469,6 +518,9 @@ export class DecidCloud {
     const receipt: Receipt = { ...body, seq: rows.length + 1, prev: last?.hash ?? GENESIS, iat: this.now() };
     const jws = await signReceipt(receipt, this.receiptKey, this.receiptKid);
     rows.push({ seq: receipt.seq, jws, hash: sha256Hex(jws), prev_hash: receipt.prev, sessionId: body.sid });
+    // Checkpoint the new head on-chain (the server does this in the background; here blocks are instant).
+    const a = this.anchor.connect(this.anchorer) as Contract;
+    await (await a.getFunction("anchor")(streamId(receiptStream(merchantId)), receipt.seq, `0x${sha256Hex(jws)}`)).wait();
     return receipt.seq;
   }
 }

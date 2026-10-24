@@ -143,13 +143,33 @@ try {
 
   await page.getByRole("button", { name: "Receipts" }).click();
   await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor();
-  await page.getByRole("button", { name: "Edit a receipt as an insider" }).click();
+  await page.getByTestId("anchor-status").getByText("Anchored on-chain · 2 receipts").waitFor();
+  check(true, "both receipts are anchored on-chain (ReceiptAnchor contract on the in-page chain)");
+
+  // Attack 1: an insider edits a receipt without decID's key → the signature check catches it.
+  await page.getByRole("button", { name: /Edit a receipt as an insider/ }).click();
   await page.getByTestId("chain-status").getByText(/Tampering detected at receipt 1: signature does not verify/).waitFor();
-  check(true, "an insider's edit to a receipt is detected (signature does not verify)");
+  check(true, "an insider's edit is caught by the signature check");
   await page.screenshot({ path: path.join(SHOTS, "11-tamper.png") });
-  await page.getByRole("button", { name: "Restore the original receipt" }).click();
+  await page.getByRole("button", { name: "Restore the receipts" }).click();
   await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor();
-  check(true, "…and the chain is intact again once restored");
+
+  // Attack 2: the operator re-signs and re-chains history → signatures pass, the chain disagrees.
+  await page.getByRole("button", { name: /Rewrite history as the operator/ }).click();
+  await page.getByTestId("anchor-status").getByText(/Doesn’t match the chain: entry \d differs from the hash anchored on-chain/).waitFor();
+  check(await page.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").isVisible(), "an operator rewrite passes every signature and link check…");
+  check(true, "…and is caught only by the on-chain checkpoints");
+  await page.screenshot({ path: path.join(SHOTS, "11b-operator-rewrite.png") });
+  await page.getByRole("button", { name: "Restore the receipts" }).click();
+
+  // Attack 3: the newest receipt is deleted → a shorter chain is valid, the anchored count is not.
+  await page.getByRole("button", { name: /Delete the newest receipt/ }).click();
+  await page.getByTestId("anchor-status").getByText(/entries were removed: 2 were anchored on-chain, 1 remain/).waitFor();
+  check(await page.getByTestId("chain-status").getByText("Chain intact · 1 signed receipt").isVisible(), "a truncated chain still passes the signature check…");
+  check(true, "…and is caught only by the anchored count");
+  await page.getByRole("button", { name: "Restore the receipts" }).click();
+  await page.getByTestId("anchor-status").getByText("Anchored on-chain · 2 receipts").waitFor();
+  check(true, "restoring the receipts makes both checks pass again");
 
   await page.getByTestId("run-night").click();
   await page.getByTestId("run-night").getByText("Simulate a busy night").waitFor({ timeout: 120_000 });
@@ -158,7 +178,8 @@ try {
   check(/Revoked Pass: refused · credential revoked/.test(log), "busy night: the revoked Pass is refused");
   check((log.match(/admitted ·/g) ?? []).length >= 8 && (log.match(/not old enough/g) ?? []).length >= 2, "busy night: adults admitted, under-21 guests refused");
   await page.getByTestId("chain-status").getByText("Chain intact · 16 signed receipts").waitFor();
-  check(true, "16 receipts, chain intact");
+  await page.getByTestId("anchor-status").getByText("Anchored on-chain · 16 receipts").waitFor();
+  check(true, "16 receipts, chain intact and all anchored on-chain");
   await page.getByRole("button", { name: "Overview" }).click();
   await page.screenshot({ path: path.join(SHOTS, "12-dashboard-night.png"), fullPage: true });
   await page.getByRole("button", { name: "Data & privacy" }).click();

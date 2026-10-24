@@ -104,6 +104,23 @@ export const IssuedCredentialsResponse = z.strictObject({
 });
 export const RevokeResponse = z.strictObject({ txHash: TxHash });
 
+/** The log compared with its on-chain checkpoints (contracts/ReceiptAnchor.sol); null when anchoring isn't deployed. */
+export const AnchorStatus = z
+  .union([
+    z.strictObject({
+      ok: z.boolean(),
+      anchoredCount: z.number().int(),
+      checkpoints: z.number().int(),
+      unanchored: z.number().int().describe("Entries newer than the latest checkpoint, waiting to be anchored"),
+      latestBlock: z.number().int().optional(),
+      latestTx: z.string().optional(),
+      brokenAt: z.number().int().optional(),
+      problem: z.string().optional(),
+    }),
+    z.strictObject({ unavailable: z.literal(true) }),
+  ])
+  .nullable();
+
 export const AuditResponse = z.strictObject({
   verification: z.strictObject({
     ok: z.boolean(),
@@ -111,6 +128,7 @@ export const AuditResponse = z.strictObject({
     head: z.string().regex(/^[0-9a-f]{64}$/),
     firstBrokenSeq: z.number().int().optional(),
     problem: z.string().optional(),
+    anchor: AnchorStatus,
   }),
   entries: z.array(
     z.strictObject({
@@ -252,7 +270,7 @@ export const BusinessOverviewResponse = z.strictObject({
     medianSecondsToAnswer: z.number().nullable(),
     failures: z.record(z.string(), z.number().int()),
   }),
-  receipts: z.strictObject({ ok: z.boolean(), count: z.number().int(), head: z.string(), firstBrokenSeq: z.number().int().optional(), problem: z.string().optional() }),
+  receipts: z.strictObject({ ok: z.boolean(), count: z.number().int(), head: z.string(), firstBrokenSeq: z.number().int().optional(), problem: z.string().optional(), anchor: AnchorStatus }),
   storedFields: z.array(z.string()).describe("Every column of a verification record: proof that none can hold personal data"),
   recent: z.array(z.strictObject(VerificationCore)),
 });

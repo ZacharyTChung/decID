@@ -410,7 +410,7 @@ function Dashboard({ cloud }: { cloud: DecidCloud }) {
         return { ...toRow(v), answer: v.result ? Object.values(v.result)[0]! : null, verifyMs: v.verifyMs, receipt: v.receipt ? { valid: v.receipt.valid, payload: v.receipt.payload as unknown as Record<string, unknown> } : null };
       }}
       receipts={cloud.receiptRows(merchant).map((r) => ({ seq: r.seq, hash: r.hash, prev: r.prev, outcome: r.body ? (r.body.outcome === "satisfied" ? "21 or older" : friendlyReason(r.body.failureCode)) : "Unreadable", signedAt: r.body?.iat ?? null }))}
-      integrity={{ tamperedSeq: tampered && tampered.merchantId === merchant ? tampered.seq : null, tamper: () => void cloud.tamper(merchant), undo: () => cloud.undoTamper() }}
+      integrity={{ tampered: tampered && tampered.merchantId === merchant ? { kind: tampered.kind, seq: tampered.seq } : null, tamper: (kind) => void cloud.tamper(merchant, kind), undo: () => cloud.undoTamper() }}
       simulate={
         merchant === "neonhall"
           ? {

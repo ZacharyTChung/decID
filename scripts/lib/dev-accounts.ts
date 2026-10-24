@@ -17,6 +17,7 @@ export const DEV_ROLES = {
   issuerOperator: 1, // signs in to the issuer console
   holder: 2,
   otherHolder: 3, // used as an attacker / second holder in tests and the demo
+  anchorer: 18, // anchors receipt-chain and audit-log heads on-chain (local chain only)
   gasSponsor: 19, // pays decID Pass holders' registration gas (local chain only)
 } as const;
 

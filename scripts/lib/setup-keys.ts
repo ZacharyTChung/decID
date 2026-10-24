@@ -53,6 +53,8 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
       `ISSUER_OPERATOR_ADDRESSES=${devWallet(DEV_ROLES.issuerOperator).address}`,
       `# decID Pass gas sponsor (Hardhat PUBLIC dev account #${DEV_ROLES.gasSponsor}; local chain only, refused on any other chain).`,
       `SPONSOR_PRIVATE_KEY=${devWallet(DEV_ROLES.gasSponsor).privateKey}`,
+      `# Anchors receipt and audit-log heads on the ReceiptAnchor contract (Hardhat PUBLIC dev account #${DEV_ROLES.anchorer}; local chain only).`,
+      `ANCHORER_PRIVATE_KEY=${devWallet(DEV_ROLES.anchorer).privateKey}`,
       ...Object.entries(opts.extraEnv ?? {}).map(([k, v]) => `${k}=${v}`),
       "",
     ];
@@ -67,6 +69,7 @@ export async function setupKeys(opts: SetupOptions): Promise<SetupResult> {
     const existing = parseEnvFile(opts.envFile);
     if (!existing.VERIFY_RECEIPT_PRIVATE_JWK) updateEnvFile(opts.envFile, { VERIFY_RECEIPT_PRIVATE_JWK: await receiptKeyJson() });
     if (!existing.SPONSOR_PRIVATE_KEY) updateEnvFile(opts.envFile, { SPONSOR_PRIVATE_KEY: devWallet(DEV_ROLES.gasSponsor).privateKey });
+    if (!existing.ANCHORER_PRIVATE_KEY) updateEnvFile(opts.envFile, { ANCHORER_PRIVATE_KEY: devWallet(DEV_ROLES.anchorer).privateKey });
   }
   const env = parseEnvFile(opts.envFile);
   const priv = JSON.parse(env.ISSUER_CREDENTIAL_PRIVATE_JWK!) as Ed25519PublicJwk & { d: string };

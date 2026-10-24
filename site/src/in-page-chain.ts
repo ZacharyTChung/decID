@@ -205,6 +205,24 @@ export class InPageChain {
     };
   }
 
+  /** Logs from stored receipts, filtered like a node does: address, block range and topics (null = any). */
+  private getLogs(f: { address?: string | string[]; topics?: (string | string[] | null)[]; fromBlock?: string; toBlock?: string }): Json[] {
+    const n = (b: string | undefined, d: number) => (b === undefined || b === "latest" || b === "pending" ? d : b === "earliest" ? 0 : Number(b));
+    const from = n(f.fromBlock, 0);
+    const to = n(f.toBlock, Number.MAX_SAFE_INTEGER);
+    const addrs = f.address === undefined ? null : (Array.isArray(f.address) ? f.address : [f.address]).map((a) => a.toLowerCase());
+    const out: Json[] = [];
+    for (const { blockNumber, receipt } of this.txs.values()) {
+      if (!receipt || blockNumber < from || blockNumber > to) continue;
+      for (const log of (receipt as unknown as { logs: { address: string; topics: string[] }[] }).logs) {
+        if (addrs && !addrs.includes(log.address.toLowerCase())) continue;
+        const topicsMatch = (f.topics ?? []).every((want, i) => want === null || want === undefined || (Array.isArray(want) ? want.map((w) => w.toLowerCase()) : [want.toLowerCase()]).includes((log.topics[i] ?? "").toLowerCase()));
+        if (topicsMatch) out.push(log as unknown as Json);
+      }
+    }
+    return out;
+  }
+
   request(args: { method: string; params?: unknown[] }): Promise<unknown> {
     const run = this.queue.then(async () => {
       try {
@@ -269,7 +287,7 @@ export class InPageChain {
       case "eth_getTransactionByHash":
         return this.txJson(params[0] as string);
       case "eth_getLogs":
-        return [];
+        return this.getLogs(params[0] as { address?: string | string[]; topics?: (string | string[] | null)[]; fromBlock?: string; toBlock?: string });
       case "evm_increaseTime":
         this.timeOffset += Number(params[0]);
         return hex(this.timeOffset);

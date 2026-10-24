@@ -5,7 +5,7 @@ import { useApp } from "@/components/providers";
 import { api, ClientApiError } from "@/lib/client/api";
 import { DecidWordmark } from "@/components/product/brand";
 import { HOPLINE, NEON_HALL, brandFor } from "@/components/product/merchant";
-import { VerifyDashboard, type CheckRow } from "@/components/product/verify-dashboard";
+import { VerifyDashboard, type AnchorView, type CheckRow } from "@/components/product/verify-dashboard";
 import type { CheckStatus } from "@/components/product/dashboard";
 
 /**
@@ -16,7 +16,7 @@ import type { CheckStatus } from "@/components/product/dashboard";
 interface Overview {
   merchant: { id: string; name: string; kind: "online" | "venue"; keyPrefix: string };
   stats: { total: number; verified: number; rejected: number; pending: number; expired: number; medianSecondsToAnswer: number | null; failures: Record<string, number> };
-  receipts: { ok: boolean; count: number; head: string; firstBrokenSeq?: number; problem?: string };
+  receipts: { ok: boolean; count: number; head: string; firstBrokenSeq?: number; problem?: string; anchor?: AnchorView | null };
   storedFields: string[];
   recent: { id: string; reference: string | null; status: CheckStatus; createdAt: number; completedAt: number | null; result: Record<string, boolean> | null; failureCode: string | null; matchCode: string | null; issuer: { name: string } | null }[];
 }

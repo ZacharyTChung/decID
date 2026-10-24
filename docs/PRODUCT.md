@@ -42,6 +42,7 @@ Businesses don't want this data. They want a defensible "yes, we checked."
 2. **Signed, tamper-evident compliance receipts.**
    - Every check is an Ed25519-signed receipt, hash-chained per business. The public key is published at `/api/v1/receipt-keys`.
    - A business can show a regulator that it checked, without holding the evidence that usually gets breached.
+   - Each receipt chain is checkpointed on a public blockchain, so not even decID can rewrite or trim a business's history after the fact.
 3. **The issuer can't track you.**
    - Validity and revocation come from a public registry on a blockchain, not from calling the issuer.
    - The DMV or bank that vouched for someone never learns where the Pass was used.

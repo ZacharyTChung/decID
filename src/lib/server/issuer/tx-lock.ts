@@ -21,40 +21,57 @@ const LEASE_MS = 120_000; // longer than any transaction wait we allow
 const ACQUIRE_TIMEOUT_MS = 30_000;
 const POLL_MS = 50;
 
-let queue: Promise<unknown> = Promise.resolve();
+/** One lease table per signing key that sends transactions (fixed names, never user input). */
+const LEASE = { issuer: "issuer_tx_lease", anchorer: "anchor_tx_lease" } as const;
+type LeaseTable = (typeof LEASE)[keyof typeof LEASE];
+const queues = new Map<LeaseTable, Promise<unknown>>();
 
-function tryAcquire(owner: string, now: number): boolean {
+function tryAcquire(owner: string, now: number, table: LeaseTable): boolean {
   const res = db()
     .prepare(
-      `INSERT INTO issuer_tx_lease (id, owner, expires_at_ms) VALUES (1, ?, ?)
+      `INSERT INTO ${table} (id, owner, expires_at_ms) VALUES (1, ?, ?)
        ON CONFLICT(id) DO UPDATE SET owner = excluded.owner, expires_at_ms = excluded.expires_at_ms
-       WHERE issuer_tx_lease.expires_at_ms < ?`,
+       WHERE ${table}.expires_at_ms < ?`,
     )
     .run(owner, now + LEASE_MS, now);
   return res.changes === 1;
 }
 
-function release(owner: string): void {
-  db().prepare("DELETE FROM issuer_tx_lease WHERE id = 1 AND owner = ?").run(owner);
+function release(owner: string, table: LeaseTable): void {
+  db().prepare(`DELETE FROM ${table} WHERE id = 1 AND owner = ?`).run(owner);
 }
 
-export async function withIssuerLease<T>(fn: () => Promise<T>): Promise<T> {
+async function withLease<T>(id: LeaseTable, fn: () => Promise<T>): Promise<T> {
   const owner = randomUUID();
   const deadline = Date.now() + ACQUIRE_TIMEOUT_MS;
-  while (!tryAcquire(owner, Date.now())) {
-    if (Date.now() > deadline) throw new ApiError(503, "ISSUER_BUSY", "another issuer transaction is still in progress; try again");
+  while (!tryAcquire(owner, Date.now(), id)) {
+    if (Date.now() > deadline) throw new ApiError(503, "ISSUER_BUSY", "another transaction from this key is still in progress; try again");
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
   try {
     return await fn();
   } finally {
-    release(owner);
+    release(owner, id);
   }
 }
 
-/** Runs `fn` while holding both the in-process turn and the cross-process lease. */
-export function withIssuerTxLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = queue.then(() => withIssuerLease(fn), () => withIssuerLease(fn));
-  queue = run.catch(() => undefined);
+export function withIssuerLease<T>(fn: () => Promise<T>): Promise<T> {
+  return withLease(LEASE.issuer, fn);
+}
+
+function withTxLock<T>(id: LeaseTable, fn: () => Promise<T>): Promise<T> {
+  const queue = queues.get(id) ?? Promise.resolve();
+  const run = queue.then(() => withLease(id, fn), () => withLease(id, fn));
+  queues.set(id, run.catch(() => undefined));
   return run;
+}
+
+/** Runs `fn` while holding both the in-process turn and the cross-process lease for the issuer key. */
+export function withIssuerTxLock<T>(fn: () => Promise<T>): Promise<T> {
+  return withTxLock(LEASE.issuer, fn);
+}
+
+/** The same, for the anchorer key (src/lib/server/anchor.ts). */
+export function withAnchorerTxLock<T>(fn: () => Promise<T>): Promise<T> {
+  return withTxLock(LEASE.anchorer, fn);
 }

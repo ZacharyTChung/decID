@@ -187,7 +187,14 @@ function IssuedList({ version }: { version: number }) {
 }
 
 interface AuditView {
-  verification: { ok: boolean; entries: number; head: string; firstBrokenSeq?: number; problem?: string };
+  verification: {
+    ok: boolean;
+    entries: number;
+    head: string;
+    firstBrokenSeq?: number;
+    problem?: string;
+    anchor: { ok: boolean; anchoredCount: number; unanchored: number; latestBlock?: number; problem?: string } | { unavailable: true } | null;
+  };
   entries: { seq: number; at: number; actor: string; action: string; subject: string; details: Record<string, unknown> }[];
 }
 
@@ -204,13 +211,20 @@ function AuditLog({ version }: { version: number }) {
   return (
     <Card
       title="Audit log"
-      subtitle="Every issue, rejection, revocation and recovery supersede is appended to a SHA-256 hash chain. Editing, reordering or deleting a past entry breaks the chain. Record the head hash elsewhere to also detect removal of the newest entries."
+      subtitle="Every issue, rejection, revocation and recovery supersede is appended to a SHA-256 hash chain. Editing, reordering or deleting a past entry breaks the chain, and the head is anchored on-chain (ReceiptAnchor), so removing the newest entries or re-hashing history is detected too."
     >
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <Badge tone={v.ok ? "green" : "red"}>{v.ok ? "Chain intact" : `Chain broken at #${v.firstBrokenSeq}`}</Badge>
         <span className="text-slate-600">{v.entries} entries · head</span>
         <Mono>{v.head.slice(0, 16)}…</Mono>
         {!v.ok && <span className="text-red-700">{v.problem}</span>}
+        {v.anchor && !("unavailable" in v.anchor) && (
+          <>
+            <Badge tone={v.anchor.ok ? "green" : "red"}>{v.anchor.ok ? `Anchored on-chain: ${v.anchor.anchoredCount}` : "On-chain anchor mismatch"}</Badge>
+            {v.anchor.ok && v.anchor.unanchored > 0 && <span className="text-slate-600">{v.anchor.unanchored} pending</span>}
+            {!v.anchor.ok && <span className="text-red-700">{v.anchor.problem}</span>}
+          </>
+        )}
       </div>
       {log.entries.length === 0 ? (
         <p className="text-sm text-slate-500">No issuer actions yet.</p>

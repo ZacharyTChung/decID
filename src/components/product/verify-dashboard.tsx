@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, FileCheck2, LayoutGrid, ListChecks, ScrollText, ShieldCheck } from "lucide-react";
+import { ChevronDown, FileCheck2, LayoutGrid, Link2, ListChecks, ScrollText, ShieldCheck } from "lucide-react";
 import { friendlyReason } from "../../lib/shared/policies";
 import { DecidWordmark } from "./brand";
 import { MerchantLogo, type MerchantBrand } from "./merchant";
@@ -36,7 +36,16 @@ export interface ChainStatus {
   head: string;
   firstBrokenSeq?: number;
   problem?: string;
+  /** The same log compared with its on-chain checkpoints (null: anchoring not deployed). */
+  anchor?: AnchorView | null;
 }
+export type AnchorView = { ok: boolean; anchoredCount: number; checkpoints: number; unanchored: number; latestBlock?: number; latestTx?: string; brokenAt?: number; problem?: string } | { unavailable: true };
+export type TamperKind = "insider" | "operator" | "truncate";
+const ATTACKS: { kind: TamperKind; label: string; did: (seq: number) => string; caughtBy: string }[] = [
+  { kind: "insider", label: "Edit a receipt as an insider", did: (n) => `Receipt ${n}’s outcome was flipped and its stored hash recomputed, without decID’s key.`, caughtBy: "Caught by the signature check." },
+  { kind: "operator", label: "Rewrite history as the operator", did: (n) => `Receipt ${n} was flipped and re-signed with decID’s real key, and every later receipt re-chained. Signatures and links all verify.`, caughtBy: "Only the on-chain checkpoints catch this." },
+  { kind: "truncate", label: "Delete the newest receipt", did: (n) => `Receipt ${n} was deleted. A shorter chain is still a valid chain.`, caughtBy: "Only the anchored count catches this." },
+];
 export interface ReceiptRow {
   seq: number;
   hash: string;
@@ -57,7 +66,7 @@ export interface VerifyDashboardProps {
   now: number;
   loadCheck: (id: string) => Promise<CheckDetail>;
   receipts?: ReceiptRow[];
-  integrity?: { tamperedSeq: number | null; tamper: () => void; undo: () => void };
+  integrity?: { tampered: { kind: TamperKind; seq: number } | null; tamper: (kind: TamperKind) => void; undo: () => void };
   simulate?: { label: string; description: string; run: () => void; progress: { done: number; total: number; lines: string[] } | null };
   receiptKeyId?: string;
   accountMenu?: ReactNode;
@@ -241,23 +250,33 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
 
           {page === "receipts" && (
             <>
-              <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-5 py-4 shadow-card", p.chain?.ok === false ? "bg-bad-soft" : "bg-white")} data-testid="chain-status">
-                <span className={cx("h-2 w-2 rounded-full", p.chain?.ok === false ? "bg-bad" : "bg-ok")} aria-hidden />
-                <span className="text-body font-medium">{p.chain ? (p.chain.ok ? `Chain intact · ${p.chain.count} signed receipt${p.chain.count === 1 ? "" : "s"}` : `Tampering detected at receipt ${p.chain.firstBrokenSeq}: ${p.chain.problem}`) : "Checking…"}</span>
-                {p.chain?.ok && p.chain.count > 0 && <span className="font-mono text-meta text-ink-10">head {p.chain.head.slice(0, 16)}…</span>}
+              <div className="overflow-hidden rounded-lg bg-white shadow-card">
+                <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4", p.chain?.ok === false && "bg-bad-soft")} data-testid="chain-status">
+                  <span className={cx("h-2 w-2 rounded-full", p.chain?.ok === false ? "bg-bad" : "bg-ok")} aria-hidden />
+                  <span className="text-body font-medium">{p.chain ? (p.chain.ok ? `Chain intact · ${p.chain.count} signed receipt${p.chain.count === 1 ? "" : "s"}` : `Tampering detected at receipt ${p.chain.firstBrokenSeq}: ${p.chain.problem}`) : "Checking…"}</span>
+                  <span className="text-meta text-ink-10">Signatures and links</span>
+                </div>
+                {p.chain?.anchor !== undefined && <AnchorRow anchor={p.chain.anchor} />}
               </div>
               {p.integrity && (
-                <Panel title="Integrity test" description="Every receipt is signed by decID and names the hash of the one before it, so a stored record can’t be edited without detection.">
-                  <div className="flex flex-wrap items-center gap-3">
-                    {p.integrity.tamperedSeq !== null ? (
-                      <Button onClick={p.integrity.undo}>Restore the original receipt</Button>
-                    ) : (
-                      <Button variant="danger" disabled={!p.chain?.count} onClick={p.integrity.tamper}>
-                        Edit a receipt as an insider
-                      </Button>
-                    )}
-                    <span className="text-ui text-ink-10">{p.integrity.tamperedSeq !== null ? `Receipt ${p.integrity.tamperedSeq}’s outcome was flipped and its hash recomputed. Only decID’s signature gives it away.` : p.chain?.count ? "Flips one receipt’s outcome without decID’s signing key." : "Run a check first."}</span>
-                  </div>
+                <Panel title="Integrity test" description="Try to falsify the record. Each attack is caught by a different layer: decID’s signature, or the checkpoints on the public chain that nobody, not even decID, can rewrite.">
+                  {p.integrity.tampered ? (
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <p className="max-w-xl text-ui text-ink-11">
+                        {ATTACKS.find((x) => x.kind === p.integrity!.tampered!.kind)!.did(p.integrity.tampered.seq)} <span className="font-medium text-ink-12">{ATTACKS.find((x) => x.kind === p.integrity!.tampered!.kind)!.caughtBy}</span>
+                      </p>
+                      <Button onClick={p.integrity.undo}>Restore the receipts</Button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {ATTACKS.map((x) => (
+                        <button key={x.kind} disabled={!p.chain?.count} onClick={() => p.integrity!.tamper(x.kind)} className="press rounded-md bg-ink-2 px-4 py-3 text-left transition-colors hover:bg-ink-3 disabled:opacity-50">
+                          <span className="block text-ui font-medium text-bad">{x.label}</span>
+                          <span className="mt-0.5 block text-meta text-ink-10">{x.caughtBy}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </Panel>
               )}
               {p.receipts ? (
@@ -279,7 +298,7 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
                           .slice()
                           .reverse()
                           .map((r) => (
-                            <tr key={r.seq} className={p.integrity?.tamperedSeq === r.seq ? "bg-bad-soft" : undefined}>
+                            <tr key={r.seq} className={p.integrity?.tampered?.seq === r.seq ? "bg-bad-soft" : undefined}>
                               <td className={cx(td, "num font-mono text-ink-10")}>{r.seq}</td>
                               <td className={td}>{r.outcome}</td>
                               <td className={cx(td, "num text-ink-10")}>{r.signedAt ? new Date(r.signedAt * 1000).toLocaleTimeString() : "–"}</td>
@@ -363,6 +382,28 @@ export function VerifyDashboard(p: VerifyDashboardProps) {
           )}
         </Drawer>
       )}
+    </div>
+  );
+}
+
+/** The second check: the stored chain against its checkpoints on the public chain. */
+function AnchorRow({ anchor }: { anchor: AnchorView | null }) {
+  if (anchor === null) {
+    return <div className="border-t border-ink-4 px-5 py-3 text-ui text-ink-10">On-chain anchoring is not deployed for this network.</div>;
+  }
+  if ("unavailable" in anchor) {
+    return <div className="border-t border-ink-4 px-5 py-3 text-ui text-ink-10">Couldn’t reach the chain to compare checkpoints.</div>;
+  }
+  return (
+    <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink-4 px-5 py-4", !anchor.ok && "bg-bad-soft")} data-testid="anchor-status">
+      <Link2 size={15} strokeWidth={1.75} className={anchor.ok ? "text-ok" : "text-bad"} aria-hidden />
+      <span className="text-body font-medium">
+        {anchor.ok ? `Anchored on-chain · ${anchor.anchoredCount} receipt${anchor.anchoredCount === 1 ? "" : "s"}${anchor.unanchored ? `, ${anchor.unanchored} pending` : ""}` : `Doesn’t match the chain: ${anchor.problem}`}
+      </span>
+      <span className="text-meta text-ink-10">
+        {anchor.checkpoints} checkpoint{anchor.checkpoints === 1 ? "" : "s"}
+        {anchor.latestBlock !== undefined ? ` · latest in block ${anchor.latestBlock}` : ""}
+      </span>
     </div>
   );
 }

@@ -145,6 +145,12 @@ CREATE TABLE IF NOT EXISTS issuer_tx_lease (
   owner          TEXT NOT NULL,
   expires_at_ms  INTEGER NOT NULL
 );
+-- The same for the anchorer's key (src/lib/server/anchor.ts).
+CREATE TABLE IF NOT EXISTS anchor_tx_lease (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  owner          TEXT NOT NULL,
+  expires_at_ms  INTEGER NOT NULL
+);
 `;
 
 let instance: { file: string; db: Database.Database } | undefined;

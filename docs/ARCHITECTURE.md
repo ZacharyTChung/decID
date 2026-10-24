@@ -124,6 +124,13 @@ A valid-looking registry entry never makes an invalid token acceptable: the veri
 
 **DemoGate**: `checkIn(commitment)` succeeds only if `registry.isCredentialValid(commitment, msg.sender, requiredSchema)`. Otherwise it reverts `AccessDenied(status, wrongHolderOrSchema)`.
 
+**ReceiptAnchor** (public checkpoints for the off-chain logs)
+- `ANCHORER_ROLE` (granted by the admin to the anchorer key, `ANCHORER_PRIVATE_KEY`): `anchor(stream, count, head)` records that a log had `count` entries and its newest entry hashed to `head`.
+- Counts must strictly increase (`CountNotIncreasing`), so a checkpoint can be extended but never replaced or rolled back; every checkpoint stays readable (`headAt`) and is emitted (`Anchored`).
+- Streams are `keccak256` of a label: `<namespace>:receipts:<merchant id>` for each business's decID Verify receipts, `<namespace>:issuer-audit` for the issuer audit log. The namespace (`ANCHOR_NAMESPACE`, default `decid`) lets one contract serve several deployments.
+- The server anchors in the background after each append (src/lib/server/anchor.ts); requests for the same log coalesce, so a burst of checks costs one or two transactions. Verification compares the stored log with every checkpoint (src/lib/shared/anchor-check.ts).
+- What it adds over the hash chains: an operator who re-signs and re-chains history, or deletes the newest entries, leaves a log that is internally consistent; the checkpoints are the only record it can't change. Shown live in the hosted prototype's Receipts page and tested by `anchor.test.ts` and red-team F1–F3.
+
 ## API responsibilities
 
 | Route | Auth | Purpose |
@@ -166,6 +173,7 @@ Every non-GET request must carry `Origin` equal to `APP_ORIGIN` and a JSON body 
 | Commitment, holder address, issuer address, schema id, validFrom, expiresAt, issuer epoch, registeredAt, revoked flag | `CredentialRegistry` storage + events | **Everyone with chain access** | **Permanent** (chain history) |
 | Registration, check-in and revocation transactions (sender, calldata, gas, time) | Chain | **Everyone** | **Permanent** |
 | Gate check-in counter per address | `DemoGate` storage | Everyone | Permanent |
+| Log checkpoints: hashed stream id, entry count, SHA-256 of the newest receipt or audit entry | `ReceiptAnchor` storage + events | Everyone | Permanent. No personal data; counts reveal how many checks a business ran |
 
 ### Public on-chain fields
 

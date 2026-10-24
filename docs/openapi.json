@@ -1792,12 +1792,84 @@
                         },
                         "problem": {
                           "type": "string"
+                        },
+                        "anchor": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "ok": {
+                                      "type": "boolean"
+                                    },
+                                    "anchoredCount": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "checkpoints": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "unanchored": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Entries newer than the latest checkpoint, waiting to be anchored"
+                                    },
+                                    "latestBlock": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "latestTx": {
+                                      "type": "string"
+                                    },
+                                    "brokenAt": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "problem": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "ok",
+                                    "anchoredCount",
+                                    "checkpoints",
+                                    "unanchored"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "unavailable": {
+                                      "type": "boolean",
+                                      "const": true
+                                    }
+                                  },
+                                  "required": [
+                                    "unavailable"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "ok",
                         "entries",
-                        "head"
+                        "head",
+                        "anchor"
                       ],
                       "additionalProperties": false
                     },
@@ -4216,12 +4288,84 @@
                         },
                         "problem": {
                           "type": "string"
+                        },
+                        "anchor": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "ok": {
+                                      "type": "boolean"
+                                    },
+                                    "anchoredCount": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "checkpoints": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "unanchored": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Entries newer than the latest checkpoint, waiting to be anchored"
+                                    },
+                                    "latestBlock": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "latestTx": {
+                                      "type": "string"
+                                    },
+                                    "brokenAt": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "problem": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "ok",
+                                    "anchoredCount",
+                                    "checkpoints",
+                                    "unanchored"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "unavailable": {
+                                      "type": "boolean",
+                                      "const": true
+                                    }
+                                  },
+                                  "required": [
+                                    "unavailable"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "ok",
                         "count",
-                        "head"
+                        "head",
+                        "anchor"
                       ],
                       "additionalProperties": false
                     },

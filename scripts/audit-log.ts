@@ -1,26 +1,31 @@
 /**
  * npm run audit-log -- <verify|head|list> [--json]
  *
- *   verify  recompute the issuer audit hash chain; exit 0 if intact, 2 if tampered
- *   head    print the current head hash and entry count. Record it somewhere the issuer
- *           database cannot reach (a ticket, a signed message, a public post): a later
- *           `verify` plus a matching earlier head proves nothing was edited, removed or
- *           truncated in between.
+ *   verify  recompute the issuer audit hash chain and compare it with its on-chain checkpoints
+ *           (ReceiptAnchor); exit 0 if both hold, 2 if tampered. The checkpoints catch what the
+ *           chain alone can't: the newest entries removed, or history re-hashed by an operator.
+ *   head    print the current head hash and entry count (for recording outside the system).
  *   list    print the newest entries
  *
- * Reads DATA_DIR (default .data). Needs no keys.
+ * Reads DATA_DIR (default .data), and the deployment and RPC_URL for the on-chain check. Needs no keys.
  */
 const [command = "verify", ...rest] = process.argv.slice(2);
 const asJson = rest.includes("--json");
 
 async function main(): Promise<number> {
-  const { listAudit, verifyAuditChain } = await import("../src/lib/server/issuer/audit");
+  const { listAudit, verifyAuditChain, verifyAuditChainAnchored } = await import("../src/lib/server/issuer/audit");
   const v = verifyAuditChain();
   if (command === "verify") {
-    if (asJson) console.log(JSON.stringify(v, null, 2));
-    else if (v.ok) console.log(`audit chain intact: ${v.entries} entries, head ${v.head}`);
-    else console.log(`AUDIT CHAIN BROKEN at entry ${v.firstBrokenSeq}: ${v.problem}`);
-    return v.ok ? 0 : 2;
+    const a = (await verifyAuditChainAnchored()).anchor;
+    const anchorOk = !a || "unavailable" in a || a.ok;
+    if (asJson) console.log(JSON.stringify({ ...v, anchor: a }, null, 2));
+    else {
+      console.log(v.ok ? `audit chain intact: ${v.entries} entries, head ${v.head}` : `AUDIT CHAIN BROKEN at entry ${v.firstBrokenSeq}: ${v.problem}`);
+      if (!a) console.log("on-chain anchor: not deployed for this network");
+      else if ("unavailable" in a) console.log("on-chain anchor: chain unreachable, not compared");
+      else console.log(a.ok ? `on-chain anchor: matches (${a.anchoredCount} anchored, ${a.unanchored} pending)` : `ON-CHAIN ANCHOR MISMATCH: ${a.problem}`);
+    }
+    return v.ok && anchorOk ? 0 : 2;
   }
   if (command === "head") {
     console.log(asJson ? JSON.stringify({ entries: v.entries, head: v.head, ok: v.ok }) : `${v.entries} ${v.head}`);

@@ -178,7 +178,7 @@ Every issuer action (issue, reject, revoke, recovery supersede) is appended to a
 
 ```bash
 npm run audit-log -- verify     # recompute the chain: exit 0 intact, 2 tampered (names the first broken entry)
-npm run audit-log -- head       # entry count + head hash: record it elsewhere to also detect truncation
+npm run audit-log -- head       # entry count + head hash (also checkpointed on-chain by ReceiptAnchor)
 npm run audit-log -- list 20    # newest entries
 ```
 

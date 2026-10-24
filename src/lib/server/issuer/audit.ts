@@ -2,6 +2,9 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { db, nowSeconds } from "../db";
+import { checkLogAnchors, requestAnchor } from "../anchor";
+import { auditStream } from "../../shared/anchor-check";
+import { anchorNamespace } from "../config";
 
 /**
  * Tamper-evident issuer audit log: an append-only hash chain in SQLite.
@@ -88,6 +91,27 @@ export function appendAudit(actor: string, action: AuditAction, subject: string,
     );
     return { ...entry, prevHash, hash };
   }).immediate();
+}
+
+/** Appends and then checkpoints the new head on-chain in the background (see ../anchor.ts). */
+export function appendAuditAnchored(actor: string, action: AuditAction, subject: string, details: AuditEntry["details"] = {}): AuditEntry {
+  const e = appendAudit(actor, action, subject, details);
+  requestAnchor(auditStream(anchorNamespace()), () => {
+    const last = db().prepare("SELECT seq, hash FROM issuer_audit ORDER BY seq DESC LIMIT 1").get() as { seq: number; hash: string } | undefined;
+    return last ? { count: last.seq, head: last.hash } : null;
+  });
+  return e;
+}
+
+/** The chain check plus the comparison with the on-chain checkpoints (null if anchoring isn't deployed). */
+export async function verifyAuditChainAnchored(d: Database.Database = db()) {
+  const chain = verifyAuditChain(d);
+  const all = rows(d).map((r) => ({ seq: r.seq, hash: r.hash }));
+  try {
+    return { ...chain, anchor: await checkLogAnchors(auditStream(anchorNamespace()), all) };
+  } catch {
+    return { ...chain, anchor: { unavailable: true as const } };
+  }
 }
 
 function rows(d: Database.Database): AuditEntry[] {

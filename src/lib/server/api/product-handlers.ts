@@ -22,7 +22,7 @@ import {
   requireBusiness,
   requireMerchant,
 } from "../verify-api/merchants";
-import { receiptJwks, verifyReceiptChain } from "../verify-api/receipts";
+import { receiptJwks, verifyReceiptChainAnchored } from "../verify-api/receipts";
 import { createSession, getSessionForMerchant, listSessions, merchantStats, storedFields, submitPresentation, walletRequest } from "../verify-api/sessions";
 import { DecidVerify } from "../../../sdk/decid-verify";
 import { friendlyReason } from "../../shared/policies";
@@ -110,7 +110,7 @@ export const getBusinessOverview = route(async (req) => {
   return json({
     merchant: { id: merchant.id, name: merchant.name, kind: merchant.kind, keyPrefix: merchant.keyPrefix },
     stats: merchantStats(merchant),
-    receipts: await verifyReceiptChain(merchant.id),
+    receipts: await verifyReceiptChainAnchored(merchant.id),
     storedFields: storedFields(),
     recent: listSessions(merchant, 25).map(({ receipt: _r, walletUrl: _w, ...v }) => v),
   });

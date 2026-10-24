@@ -14,7 +14,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CompactSign, SignJWT, exportJWK, generateKeyPair, importJWK } from "jose";
 import { Contract, ContractFactory, hexlify, randomBytes, toUtf8Bytes, type HDNodeWallet, type InterfaceAbi } from "ethers";
-import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI } from "../src/generated/contracts";
+import { CREDENTIAL_REGISTRY_ABI, DEMO_GATE_ABI, RECEIPT_ANCHOR_ABI } from "../src/generated/contracts";
+import Database from "better-sqlite3";
+import { AUDIT_STREAM, streamId } from "../src/lib/shared/anchor-check";
+import { createHash } from "node:crypto";
 import { commitmentFor } from "../src/lib/shared/commitment";
 import { buildIdentityCredential } from "../src/lib/shared/credential-profile";
 import { deriveHolderDid } from "../src/lib/shared/did-pkh";
@@ -590,6 +593,54 @@ async function main() {
         const found = needles.filter((v) => hay.includes(v.toLowerCase()) || hay.includes(hexlify(toUtf8Bytes(v)).slice(2).toLowerCase())).length;
         const salts = [A.salt, B.salt].filter((s) => hay.includes(s.slice(2).toLowerCase())).length;
         return { ok: found === 0 && salts === 0, observed: `${latest + 1} blocks scanned; ${found + salts} private value(s) found` };
+      },
+    },
+
+    // ---------------------------------------------------------------- F: audit trail & on-chain anchors
+    {
+      id: "F1", category: "Audit trail & anchoring", attack: "Outsider writes a forged checkpoint for the issuer audit log", expected: "revert AccessControlUnauthorizedAccount",
+      run: async () => {
+        const anchor = new Contract(stack.deployment.anchor!, RECEIPT_ANCHOR_ABI, attacker.wallet);
+        return expectRevert(anchor.getFunction("anchor").staticCall(streamId(AUDIT_STREAM), 1_000_000, hexlify(randomBytes(32))), "AccessControlUnauthorizedAccount", anchor);
+      },
+    },
+    {
+      id: "F2", category: "Audit trail & anchoring", attack: "Stolen anchorer key rolls the audit-log checkpoint back to fewer entries", expected: "revert CountNotIncreasing",
+      run: async () => {
+        const anchor = new Contract(stack.deployment.anchor!, RECEIPT_ANCHOR_ABI, devWallet(DEV_ROLES.anchorer, stack.provider));
+        const latest = (await anchor.getFunction("latest")(streamId(AUDIT_STREAM))) as { count: bigint };
+        if (latest.count === 0n) return { ok: false, observed: "audit log was never anchored" };
+        return expectRevert(anchor.getFunction("anchor").staticCall(streamId(AUDIT_STREAM), latest.count - 1n, hexlify(randomBytes(32))), "CountNotIncreasing", anchor);
+      },
+    },
+    {
+      id: "F3", category: "Audit trail & anchoring", attack: "Operator rewrites the issuer audit log in the database and re-hashes the whole chain", expected: "hash chain passes, on-chain anchor mismatch",
+      run: async () => {
+        // Make sure the issuances above are anchored before the operator strikes.
+        for (let i = 0; i < 50; i++) {
+          const v = (await issuer.call("GET", "/api/issuer/audit")).body.verification;
+          if (v.anchor?.ok && v.anchor.unanchored === 0 && v.anchor.anchoredCount > 0) break;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        const dbFile = path.join(DIR, "data", "app.sqlite");
+        const d = new Database(dbFile);
+        try {
+          const rows = d.prepare("SELECT * FROM issuer_audit ORDER BY seq").all() as { seq: number; at: number; actor: string; action: string; subject: string; details: string; prev_hash: string; hash: string }[];
+          // Erase the first entry's subject and recompute every hash so the chain is consistent again.
+          let prev = "0".repeat(64);
+          for (const r of rows) {
+            const subject = r.seq === 1 ? "0x" + "0".repeat(64) : r.subject;
+            // The same hash as src/lib/server/issuer/audit.ts entryHash (details are stored as canonical JSON).
+            const body = `{"action":${JSON.stringify(r.action)},"actor":${JSON.stringify(r.actor)},"at":${r.at},"details":${r.details},"seq":${r.seq},"subject":${JSON.stringify(subject)}}`;
+            const hash = createHash("sha256").update(prev).update(body).digest("hex");
+            d.prepare("UPDATE issuer_audit SET subject = ?, prev_hash = ?, hash = ? WHERE seq = ?").run(subject, prev, hash, r.seq);
+            prev = hash;
+          }
+        } finally {
+          d.close();
+        }
+        const v = (await issuer.call("GET", "/api/issuer/audit")).body.verification;
+        return { ok: v.ok === true && v.anchor?.ok === false, observed: `chain ${v.ok ? "passes" : "fails"}; anchor: ${v.anchor?.problem ?? JSON.stringify(v.anchor)}` };
       },
     },
   ];

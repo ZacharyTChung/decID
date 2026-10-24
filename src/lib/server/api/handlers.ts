@@ -23,7 +23,7 @@ import {
 } from "../auth/session";
 import * as issuer from "../issuer/service";
 import * as verifier from "../verifier/service";
-import { listAudit, verifyAuditChain } from "../issuer/audit";
+import { listAudit, verifyAuditChainAnchored } from "../issuer/audit";
 import { loadTrustedIssuers } from "../trust";
 
 /**
@@ -176,7 +176,7 @@ export const getVerifierHistory = route(async () => json({ entries: verifier.rec
 
 export const getIssuerAudit = route(async (req) => {
   requireSession(req, "issuer");
-  return json({ verification: verifyAuditChain(), entries: listAudit(50) });
+  return json({ verification: await verifyAuditChainAnchored(), entries: listAudit(50) });
 });
 
 export * from "./product-handlers";

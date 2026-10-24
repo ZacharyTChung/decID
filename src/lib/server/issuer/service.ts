@@ -11,7 +11,7 @@ import { db, nowSeconds } from "../db";
 import { ApiError } from "../http";
 import { deriveDidKeyFromJwk } from "../did/did-key";
 import { loadTrustedIssuers } from "../trust";
-import { appendAudit } from "./audit";
+import { appendAuditAnchored } from "./audit";
 import { issueCredential } from "./issue";
 import { withIssuerTxLock } from "./tx-lock";
 import type { Session } from "../auth/session";
@@ -186,7 +186,7 @@ async function supersedeCredentials(actor: string, previousHolder: string, reque
            WHERE commitment = ?`,
         )
         .run(nowSeconds(), requestId, txHash, nowSeconds(), txHash, row.commitment);
-      appendAudit(actor, "credential.superseded", row.commitment, {
+      appendAuditAnchored(actor, "credential.superseded", row.commitment, {
         byRequest: requestId,
         previousHolder,
         method: rec.exists ? (rec.revoked ? "already-revoked" : "revoked") : "authorization-cancelled",
@@ -205,7 +205,7 @@ export function rejectRequest(issuer: Session, requestId: string, reason: string
     )
     .run(reason, nowSeconds(), issuer.address, requestId);
   if (res.changes !== 1) throw new ApiError(409, "NOT_PENDING", "request is not pending");
-  appendAudit(issuer.address, "request.rejected", requestId, { reason });
+  appendAuditAnchored(issuer.address, "request.rejected", requestId, { reason });
 }
 
 export interface IssuanceResult {
@@ -270,7 +270,7 @@ export async function approveRequest(issuer: Session, requestId: string): Promis
       ).run(requestId, holderAddress, JSON.stringify(bundle), now, now + BUNDLE_PICKUP_TTL);
     })();
 
-    appendAudit(issuer.address, "credential.issued", commitment, {
+    appendAuditAnchored(issuer.address, "credential.issued", commitment, {
       requestId,
       credentialId,
       holderDid,
@@ -369,7 +369,7 @@ async function revokeCredentialLocked(issuer: Session, commitment: string): Prom
   db()
     .prepare("UPDATE issuer_credentials SET revoked_at = ?, revoke_tx = ? WHERE commitment = ?")
     .run(nowSeconds(), receipt.hash, commitment);
-  appendAudit(issuer.address, "credential.revoked", commitment, { txHash: receipt.hash, signer: signer.address });
+  appendAuditAnchored(issuer.address, "credential.revoked", commitment, { txHash: receipt.hash, signer: signer.address });
   console.info(`[issuer] revoked credential ${commitment.slice(0, 10)}… by operator ${issuer.address}`);
   return { txHash: receipt.hash };
 }

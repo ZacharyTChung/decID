@@ -3,6 +3,9 @@ import { calculateJwkThumbprint, importJWK } from "jose";
 import { checkReceiptChain, GENESIS, sha256Hex, signReceipt, type ChainCheck, type Receipt, type ReceiptBody } from "../../shared/receipt-chain";
 import { verifyReceiptKey } from "../config";
 import { db, nowSeconds } from "../db";
+import { checkLogAnchors, requestAnchor } from "../anchor";
+import { anchorNamespace } from "../config";
+import { receiptStream, type AnchorCheck } from "../../shared/anchor-check";
 
 /**
  * Compliance receipts. For every completed verification, decID Verify signs a receipt for the
@@ -39,6 +42,8 @@ export async function appendReceipt(merchantId: string, body: ReceiptBody): Prom
       db()
         .prepare("INSERT INTO verify_receipts (merchant_id, seq, session_id, jws, hash, prev_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run(merchantId, receipt.seq, body.sid, jws, sha256Hex(jws), receipt.prev, receipt.iat);
+      // Checkpoint the new head on-chain in the background (see ../anchor.ts).
+      requestAnchor(receiptStream(merchantId, anchorNamespace()), () => receiptHead(merchantId));
       return { seq: receipt.seq, jws };
     } catch (e) {
       if (!/UNIQUE|PRIMARY KEY/.test(String((e as Error).message))) throw e;
@@ -46,6 +51,25 @@ export async function appendReceipt(merchantId: string, body: ReceiptBody): Prom
     }
   }
   throw new Error("could not append receipt");
+}
+
+function receiptHead(merchantId: string): { count: number; head: string } | null {
+  const r = db().prepare("SELECT seq, hash FROM verify_receipts WHERE merchant_id = ? ORDER BY seq DESC LIMIT 1").get(merchantId) as { seq: number; hash: string } | undefined;
+  return r ? { count: r.seq, head: r.hash } : null;
+}
+
+/**
+ * The chain check plus the on-chain comparison. `anchor` is null when the deployment has no
+ * anchor contract, and reports `unavailable` when the chain can't be read right now.
+ */
+export async function verifyReceiptChainAnchored(merchantId: string): Promise<ChainCheck & { anchor: (AnchorCheck & { unavailable?: false }) | { unavailable: true } | null }> {
+  const chain = await verifyReceiptChain(merchantId);
+  const rows = db().prepare("SELECT seq, hash FROM verify_receipts WHERE merchant_id = ? ORDER BY seq").all(merchantId) as { seq: number; hash: string }[];
+  try {
+    return { ...chain, anchor: await checkLogAnchors(receiptStream(merchantId, anchorNamespace()), rows) };
+  } catch {
+    return { ...chain, anchor: { unavailable: true } };
+  }
 }
 
 /** Re-verifies every signature and link in a merchant's receipt chain. */

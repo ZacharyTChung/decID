@@ -1,8 +1,8 @@
 # Red-team report
 
-Run: 2026-10-23T03:32:36.106Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
+Run: 2026-10-24T02:12:54.984Z against a fresh local stack (`npm run redteam`). Synthetic data, local chain only.
 
-**53 of 53 defenses held.**
+**56 of 56 defenses held.**
 
 | ID | Category | Attack | Expected defense | Observed | Result |
 | --- | --- | --- | --- | --- | --- |
@@ -58,36 +58,10 @@ Run: 2026-10-23T03:32:36.106Z against a fresh local stack (`npm run redteam`). S
 | E3 | Privacy probes | Inspect a successful verification response for application data | only identityVerified + DIDs + dates | verified=true; 0 private value(s) in response | held |
 | E4 | Privacy probes | Check the page CSP an XSS payload would face | per-request nonce, no 'unsafe-inline' | fresh nonce per response, no unsafe-inline | held |
 | E5 | Privacy probes | Malformed JSON to provoke a stack trace | stable error code, no internals | HTTP 400 INVALID_JSON | held |
-| E6 | Privacy probes | Scan every transaction and event on the chain for identity data, tokens and salts | nothing private on-chain | 10 blocks scanned; 0 private value(s) found | held |
-
-Not covered here (needs clock control): expiry, not-yet-valid and registration-deadline boundaries; these are
-covered by the contract tests and the Solidity fuzz/invariant suite (`npm run test:fuzz`).
-
-## How trustworthy is this scorecard?
-
-The harness was mutation-tested: with the verifier's holder-binding check and commitment comparison disabled, exactly the
-scenarios that depend on them (B1, C1, C2) failed. Even then, the attacks were still rejected one layer deeper (the live
-registry check caught the mismatched holder or commitment), which is the intended defense in depth. The scorecard
-requires the *specific* defense to fire, so a missing layer shows up even when a later one would catch it.
-
-The selective-disclosure scenarios (S0–S9, added with SD-JWT) were checked the same way: with the
-"digest must be referenced by the signed credential" check disabled, the tamper tests in
-`test/unit/credential.test.ts` fail. S3 and S4 are the attacks that check stops: an under-18 holder
-flipping their own disclosure, or borrowing an adult's genuine one.
-
-## Findings fixed during the campaign
-
-- **Rate-limit bypass via spoofed `X-Forwarded-For` (fixed).** The limiter keyed clients by a header any client can set,
-  so rotating it bypassed every limit (confirmed: 10 of 10 spoofed requests passed a limit of 5). It is now trusted only
-  when `TRUST_PROXY=1` (app behind a proxy that sets it); otherwise all requests share one bucket.
-  Regression test: `test/unit/rate-limit.test.ts`. The campaign itself runs with `TRUST_PROXY=1` to give each simulated
-  client its own bucket (scenario D9).
-
-## Accepted risk
-
-- **D10, recovery hijack:** anyone can *file* a recovery request naming another wallet. It only queues a request with a
-  visible recovery warning; nothing is revoked until an issuer operator re-verifies the person and approves. In this
-  prototype that review is a simulated operator decision.
+| E6 | Privacy probes | Scan every transaction and event on the chain for identity data, tokens and salts | nothing private on-chain | 17 blocks scanned; 0 private value(s) found | held |
+| F1 | Audit trail & anchoring | Outsider writes a forged checkpoint for the issuer audit log | revert AccessControlUnauthorizedAccount | AccessControlUnauthorizedAccount | held |
+| F2 | Audit trail & anchoring | Stolen anchorer key rolls the audit-log checkpoint back to fewer entries | revert CountNotIncreasing | CountNotIncreasing | held |
+| F3 | Audit trail & anchoring | Operator rewrites the issuer audit log in the database and re-hashes the whole chain | hash chain passes, on-chain anchor mismatch | chain passes; anchor: entry 1 differs from the hash anchored on-chain in block 7 | held |
 
 Not covered here (needs clock control): expiry, not-yet-valid and registration-deadline boundaries; these are
 covered by the contract tests and the Solidity fuzz/invariant suite (`npm run test:fuzz`).

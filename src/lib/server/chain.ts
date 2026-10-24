@@ -18,6 +18,9 @@ export const DeploymentSchema = z.strictObject({
   deploymentId: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
   admin: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   issuerSigner: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+  /** ReceiptAnchor contract and the account allowed to anchor (absent in deployments that predate anchoring). */
+  anchor: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  anchorer: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
   schemaId: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
   deployedAtBlock: z.number().int().nonnegative(),
   deployedAt: z.string(),

@@ -166,6 +166,8 @@ try {
   await biz.getByRole("button", { name: "Receipts" }).click();
   await biz.getByTestId("chain-status").getByText("Chain intact · 2 signed receipts").waitFor({ timeout: 10_000 });
   check(true, "dashboard: an intact chain of 2 signed receipts");
+  await biz.getByTestId("anchor-status").getByText("Anchored on-chain · 2 receipts").waitFor({ timeout: 20_000 });
+  check(true, "dashboard: both receipts anchored on-chain by the ReceiptAnchor contract");
   await biz.getByRole("button", { name: "Data & privacy" }).click();
   const fields = await biz.locator("tbody code").allInnerTexts();
   check(fields.length > 5 && !fields.some((f) => /holder|wallet|did|name$|birth|address|credential|salt|disclosure|photo/i.test(f) && f !== "issuer_name"), `dashboard: none of the ${fields.length} stored fields can hold personal data`);

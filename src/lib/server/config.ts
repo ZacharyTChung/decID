@@ -90,6 +90,19 @@ export function sponsorPrivateKey(): string | undefined {
   return env("SPONSOR_PRIVATE_KEY");
 }
 
+/**
+ * Anchorer: writes the heads of the receipt chains and the issuer audit log to the ReceiptAnchor
+ * contract. Local chain only (a Hardhat development account). Undefined means anchoring is off.
+ */
+export function anchorerPrivateKey(): string | undefined {
+  return env("ANCHORER_PRIVATE_KEY");
+}
+
+/** Namespace of this deployment's streams on the anchor contract (see shared/anchor-check.ts). */
+export function anchorNamespace(): string {
+  return env("ANCHOR_NAMESPACE") ?? "decid";
+}
+
 /** Demo conveniences (one-click business sign-in, auto-approving issuer). Off unless set. */
 export function demoMode(): boolean {
   return env("DEMO_MODE") === "1";
