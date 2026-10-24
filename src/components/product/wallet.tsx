@@ -95,14 +95,14 @@ export function WalletHome({
         title="decID Pass"
         trailing={
           <label className="relative inline-flex items-center">
-            <span className="sr-only">Person on this phone</span>
+            <span className="sr-only">Demo person on this phone</span>
             <select id="pass-person" value={activeId} onChange={(e) => (e.target.value === "__new" ? onAdd() : onSwitch(e.target.value))} className="h-8 appearance-none rounded-full border border-ink-6 bg-white pl-3 pr-7 text-ui font-medium text-ink-12">
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
               ))}
-              <option value="__new">Add another person…</option>
+              <option value="__new">Add a demo person…</option>
             </select>
             <ChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-2.5 text-ink-10" aria-hidden />
           </label>
@@ -180,7 +180,7 @@ export function WalletHome({
       </Group>
 
       <Group className="mt-6">
-        <Row icon={<UserPlus size={18} strokeWidth={1.75} />} label="Add another person" onClick={onAdd} />
+        <Row icon={<UserPlus size={18} strokeWidth={1.75} />} label="Add a demo person" detail="Demo only: one phone can play several people. A real Pass belongs to one person." onClick={onAdd} />
         {ok &&
           onRevoke &&
           (confirmLost ? (
@@ -309,7 +309,7 @@ export function AddIdFlow({
             {realWallet && (
               <Row icon={<Wallet size={18} strokeWidth={1.75} />} label="Driver’s licence in your wallet" detail="Apple Wallet, Google Wallet or your state’s app" chevron onClick={() => gov.onUseWallet("Me")} />
             )}
-            {gov.testIds && <Row icon={<FlaskConical size={18} strokeWidth={1.75} />} label="Test wallet" detail="A synthetic licence, signed by a test DMV" chevron onClick={() => setStage("test-wallet")} />}
+            {gov.testIds && <Row icon={<FlaskConical size={18} strokeWidth={1.75} />} label="Demo driver’s licence" detail="Pretend your phone’s wallet already holds a licence" chevron onClick={() => setStage("test-wallet")} />}
           </Group>
         )}
         <Group title={gov && (realWallet || gov.testIds) ? "Or verify with an issuer" : "ID issuers"} footer="In a real deployment: your DMV, bank or mobile carrier, which already checked your ID.">
@@ -328,8 +328,8 @@ export function AddIdFlow({
     const l = TEST_LICENCES[licence];
     return (
       <div className="pb-10">
-        <LargeTitle title="Test wallet" subtitle="Stands in for the ID in Apple Wallet or Google Wallet." leading={back} />
-        <Group title="Licence in this wallet" footer="Synthetic licences signed by a test DMV. A real deployment accepts only real issuing authorities.">
+        <LargeTitle title="Demo licence" subtitle="Pick whose licence is on this phone. Next, a sheet like Apple Wallet’s asks you to share only “over 18” and “over 21”." leading={back} />
+        <Group title="Sample licences" footer="Fake people, signed by a test DMV made for this demo. On a real phone this step is your actual wallet, and only real DMVs are accepted.">
           {(Object.keys(TEST_LICENCES) as TestLicenceKey[]).map((k) => (
             <Row
               key={k}
@@ -343,7 +343,7 @@ export function AddIdFlow({
         </Group>
         <div className="px-4 pt-6">
           <PhoneButton onClick={() => setWalletSheet(true)} testId="use-test-licence">
-            Continue
+            Continue with {TEST_LICENCES[licence].label}’s licence
           </PhoneButton>
           {error && (
             <p className="mt-2 text-center text-ui text-bad" role="alert">

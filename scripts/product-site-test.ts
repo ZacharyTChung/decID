@@ -130,7 +130,7 @@ try {
   // Jo (19) uses the licence in the phone's wallet (test wallet, test DMV)
   await phone.getByRole("button", { name: "Back to Neon Hall" }).click();
   await phone.locator("#pass-person").selectOption("__new");
-  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Demo driver’s licence/ }).click();
   await phone.getByRole("button", { name: /Jo Sample/ }).click();
   await phone.getByTestId("use-test-licence").click();
   check(await phone.getByText(/Not shared: name, birth date, photo, address, licence number/).isVisible(), "the wallet sheet asks only for “Over 18” and “Over 21”");
@@ -141,7 +141,7 @@ try {
   check(await phone.getByTestId("pass-status").getByText(/^Active/).isVisible(), "Jo's Pass comes from the (test) licence: 18+, not 21+, active");
   // The same licence used again for another Pass: the first one is revoked (one licence, one Pass).
   await phone.locator("#pass-person").selectOption("__new");
-  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Demo driver’s licence/ }).click();
   await phone.getByRole("button", { name: /Jo Sample/ }).click();
   await phone.getByTestId("use-test-licence").click();
   await phone.getByTestId("wallet-share").click();

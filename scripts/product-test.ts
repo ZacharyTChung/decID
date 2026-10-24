@@ -177,7 +177,7 @@ try {
   // the demo's test DMV. The server checks the state's and the phone's signatures.
   await phone.goto(`${base}/pass`);
   await phone.locator("#pass-person").selectOption("__new");
-  await phone.getByRole("button", { name: /Test wallet/ }).click();
+  await phone.getByRole("button", { name: /Demo driver’s licence/ }).click();
   await phone.getByRole("button", { name: /Jo Sample/ }).click();
   await phone.screenshot({ path: path.join(SHOTS, "10a-pass-test-wallet.png") });
   await audit(phone, "Pass: test wallet");
