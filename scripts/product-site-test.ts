@@ -117,6 +117,7 @@ try {
   await phone.getByTestId("add-health").click();
   await phone.getByRole("dialog").getByText("Measles (MMR) immunity").waitFor();
   check(await phone.getByText(/Your health record, other vaccinations/).isVisible(), "health: the sheet asks for one fact and lists what is not shared");
+  await page.waitForTimeout(500); // let the sheet finish sliding in
   await page.screenshot({ path: path.join(SHOTS, "07a-health-consent.png") });
   await audit(page, "health: consent");
   await phone.getByTestId("share").click();
